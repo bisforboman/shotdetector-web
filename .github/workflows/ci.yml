@@ -87,6 +87,30 @@ jobs:
       - name: WebAssembly check, AOT
         run: tools/check.sh wasm aot
 
+      # TEMPORARY (the page row's PR; reverted before it merges): the page's Done-when in Chromium and Firefox on every
+      # sample, Sintel's trailer included, which the session's container can't reach. On the AOT publish the step above
+      # leaves; screenshots go to the results artifact.
+      - name: TEMPORARY - the page in Chromium and Firefox
+        timeout-minutes: 45
+        env:
+          FF: ${{ steps.ffmpeg.outputs.bin }}
+          LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
+        run: |
+          x=$RUNNER_TEMP/page-extra
+          mkdir -p "$x" out/page-screenshots
+          "$FF/ffmpeg" -hide_banner -loglevel error -f lavfi -i testsrc2=s=1280x720:r=25:d=40 -c:v libx264 -preset veryfast -pix_fmt yuv420p "$x/long-1280x720-40s.mp4"
+          head -c 30000 samples/cuts-854x480-25.mp4 > "$x/truncated.mp4"
+          python3 -c "import sys; d=bytearray(open(sys.argv[1],'rb').read()); i=d.find(b'mdat'); d[i+200:i+4000]=bytes(3800); open(sys.argv[2],'wb').write(d)" samples/fades-320x240-25.mp4 "$x/garbled.mp4"
+          truncate -s 600M "$x/big-600mb.mp4"
+          pw=$RUNNER_TEMP/pw
+          mkdir -p "$pw"
+          (cd "$pw" && npm init -y > /dev/null && npm install --no-save playwright@1.63.0 && npx playwright install --with-deps chromium firefox)
+          status=0
+          for b in chromium firefox; do
+            NODE_PATH=$pw/node_modules node tools/page-check-temporary.cjs src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot . out/page-screenshots "$x" $b | tee "out/page-$b.txt" || status=1
+          done
+          exit $status
+
       - name: Results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
