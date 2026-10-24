@@ -78,7 +78,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
   - Not: no second decode in .NET, no image export.
   - Status: Open
 
-The four rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
+The five rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Each touches `app.js` and `index.html`,
 as thumbnails does, so they run one at a time, in this order. Whatever the page derives for display is labelled as
 the page's own; the CSVs stay the only output the exactness check speaks for.
@@ -127,6 +127,28 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
   - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
     languages is how results drift).
+  - Status: Open
+
+- A waveform from ManagedCodecs' AAC
+  - Why: a waveform under the player shows where the sound changes against the cuts. The owner chose (2026-10-24) to
+    decode it with ManagedCodecs' `AacDecoder` (AAC LC and HE-AAC, within 3e-7 of FFmpeg's float output) rather than
+    the browser's Web Audio, so every decoder on the page is managed code. Unlike "Pictures of shots", which uses the
+    browser's decode, this is on purpose.
+  - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
+    into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
+    holding the decoded audio. `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
+    gotcha on priming and `SkipSamples`, and apply the edit list. The App: its own `[JSExport]` (not part of `Detect`,
+    so detection's time and results stay as they are), called by `worker.js` after `Detect`. `app.js` draws it on the
+    shots strip from "Shot statistics and a timeline" (depends on that row). A file without an audio track draws
+    nothing and says nothing. A track that isn't AAC, or that `AacDecoder` refuses (HE-AAC v2 with 34-band parametric
+    stereo, for example), gets one line saying why there's no waveform, not an error. A sample in
+    `tools/make-samples.sh` with a tone, a second of silence, then the tone again (`sine`, `anullsrc`), plus a check in
+    `tools/app-check.mjs` that the envelope is loud, silent, loud at those times, within a video frame.
+  - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
+    Chromium and Firefox (screenshots in the PR). The PR gives how much the bundle grew and how much time the decode
+    adds on the trailer.
+  - Not: no Web Audio; no change to playback (the `<video>` still plays the sound); no audio-based cut detection
+    (ShotDetector has none); no exactness check against FFmpeg's audio, since a waveform has nothing to be exact about.
   - Status: Open
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
