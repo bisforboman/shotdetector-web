@@ -65,4 +65,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     files. The repository's Pages source is "GitHub Actions" (the owner, 2026-10-24). Before the merge, the workflow's
     own steps run here on an AOT publish, served under `/shotdetector-web/`: in headless Chromium the cuts sample and
     Sintel's trailer gave the native check's scenes and stats CSVs, the two LGPL files served; the check fails
-    without them. Live: https://bisforboman.github.io/shotdetector-web/)
+    without them. Live (https://bisforboman.github.io/shotdetector-web/), first deployed by Pages run 40108764388
+    from `4f964cf` (its check found both LGPL files in the uploaded archive): in headless Chromium the live page ran
+    every sample with the adaptive detector, and the cuts sample and Sintel's trailer with the other four, 36 of 36
+    downloaded scenes and stats CSVs identical to the native check's (Sintel's trailer in about 20 s, 60 frames per
+    second); `licenses/ShotDetector.FastYuv/COPYING.LGPL` is served, the package's own file byte for byte, and
+    `_framework/ShotDetector.FastYuv.wasm` as `application/wasm`)
