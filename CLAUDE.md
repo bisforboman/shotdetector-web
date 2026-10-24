@@ -32,6 +32,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - Work is a row of `docs/backlog.md`: one row, one cloud session (the owner's choice, 2026-10-24: not on their
   machine), one pull request against `main`, CI green. Set its status to In progress when starting (with the date),
   move it to `docs/backlog-done.md` when it lands, and add a row when a gap turns up. A design question that the row doesn't settle goes to `docs/decisions/` before the code.
+- `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
+  with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
+  earlier, or a green run merges half a row.
 - Scope so far: 8-bit 4:2:0 progressive H.264 in non-fragmented MP4, constant frame rate, not rotated; anything else
   is refused in `Mp4Input`'s constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it.
