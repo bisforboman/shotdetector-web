@@ -72,6 +72,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - The App's `_framework/` keeps unhashed names (`WasmFingerprintAssets` false: `ShotDetector.FastYuv.wasm`), and
   `dotnet publish` adds to an existing publish folder: `tools/check.sh` deletes it first so its listing check means
   something.
+- An interpreted publish after an AOT one (`tools/check.sh wasm aot`, then `tools/check.sh wasm`) can reuse the App's
+  `obj/` from the AOT build, whose IL is stripped: the runtime aborts at start (`NIY encountered in method
+  System.OutOfMemoryException:.ctor`, seen 2026-10-24). Delete `src/ShotDetectorWeb.App/obj` between them; CI runs
+  interpreted first.
 - The published bundle is trimmed with `UseSystemResourceKeys`: the framework's exception messages come out as resource
   keys (`DeserializeUnableToConvertValue, ...`), the libraries' own (ManagedCodecs, `UnsupportedVideoException`) whole.
 - Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen
