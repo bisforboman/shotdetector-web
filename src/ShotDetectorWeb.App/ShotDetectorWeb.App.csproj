@@ -14,6 +14,9 @@
     <!-- _framework/ keeps the assemblies' own names (ShotDetector.FastYuv.wasm, LGPL-2.1: its own, replaceable file),
          not names with a content hash in them. -->
     <WasmFingerprintAssets>false</WasmFingerprintAssets>
+    <!-- No ICU data in the bundle (icudt_*.dat, about 200 KB of the first load): the CSVs and the options are
+         culture-invariant already, which tools/check.sh wasm proves against the native run. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
