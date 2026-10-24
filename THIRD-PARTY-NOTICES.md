@@ -20,3 +20,11 @@ in every output and publish folder.
 FFmpeg.AutoGen (MIT, Ruslan Balanukhin; LICENSE.txt in its package) comes in because
 ShotDetector's package references it; the trimmer keeps its assembly in the WebAssembly bundle, but nothing on this
 path uses it (tools/app-check.mjs checks that the interpreted runtime never loads it).
+
+## Sintel's trailer
+
+The checks run on, and the page's demo will play, a re-encode of the trailer of *Sintel*: © copyright Blender
+Foundation | [durian.blender.org](https://durian.blender.org), licensed under
+[Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Changes: scaled to 854x480 and
+re-encoded to H.264 and AAC (`tools/make-samples.sh`, from `sintel_trailer-1080p.mp4` on download.blender.org).
+Neither the original nor the re-encode is in this repository.

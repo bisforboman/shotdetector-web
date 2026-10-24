@@ -4,10 +4,13 @@
 #
 # Usage: tools/make-samples.sh
 #   FFMPEG: the ffmpeg to use (default: ffmpeg on PATH); it needs libx264. Python 3 for the edit list rewrite.
-#   Also copies a real trailer (Sintel, 640x360) when SINTEL points at one.
+#   FFPROBE: the ffprobe to verify with (default: the one beside FFMPEG).
+#   SINTEL: Sintel's trailer as Blender publishes it (sintel_trailer-1080p.mp4, the one ci.yml downloads): re-encoded
+#   to samples/sintel_trailer-480p.mp4 (854x480, 24 fps, about 10 MB), the real trailer the checks and the demo run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ff=${FFMPEG:-ffmpeg}
+if [[ $ff == */* ]]; then fp=${FFPROBE:-$(dirname "$ff")/ffprobe}; else fp=${FFPROBE:-ffprobe}; fi
 out=samples
 mkdir -p "$out" "$out/reject"
 
@@ -55,7 +58,51 @@ enc -filter_complex "$(three 1280x720 25 1),$untagged" -c:v libx264 -preset very
 # With an AAC track that runs on 0.45 s past the video: the format's duration (DetectedVideo.Duration) spans both.
 enc -filter_complex "$(three 320x240 25 1)" -f lavfi -i sine=d=3.45 -c:v libx264 -pix_fmt yuv420p -c:a aac "$out/with-audio-320x240-25.mp4"
 
-if [[ -n ${SINTEL:-} && -f $SINTEL ]]; then cp "$SINTEL" "$out/sintel_trailer-480p.mp4"; fi
+# Sintel's trailer (Blender Foundation, CC-BY 3.0; 1920x1080, 24 fps, 52 s, untagged), re-encoded to what the library
+# takes: 8-bit 4:2:0 progressive H.264 (libx264's High) at a constant 24 fps in a non-fragmented MP4, 854x480, two-pass
+# at 1400 kb/s with AAC at 128 kb/s, about 10 MB. Tagged BT.709, as the HD original is (untagged at 480p it would read
+# as BT.601). The demo on the page is this same file.
+if [[ -n ${SINTEL:-} ]]; then
+  [[ -f $SINTEL ]] || { echo "SINTEL=$SINTEL: no such file." >&2; exit 1; }
+  s="$out/sintel_trailer-480p.mp4"
+  log=$(mktemp -d)
+  x264=(-map 0:v:0 -vf scale=854:480,setsar=1,fps=24,setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv
+    -c:v libx264 -preset slow -b:v 1400k -pix_fmt yuv420p -passlogfile "$log/x264")
+  enc -i "$SINTEL" "${x264[@]}" -pass 1 -an -f mp4 /dev/null
+  enc -i "$SINTEL" "${x264[@]}" -pass 2 -map 0:a:0 -c:a aac -b:a 128k -map_metadata -1 "$s"
+  rm -rf "$log"
+
+  # What it must be, from ffprobe: one H.264 and one AAC stream, the video as above, every frame lasting one 24th of a
+  # second, no 'moof' box, each SPS frame_mbs_only (progressive), and about 10 MB.
+  probe() { "$fp" -v error -select_streams "$1" -show_entries "$2" -of default=nw=1 "$s"; }
+  want="codec_name=h264
+profile=High
+width=854
+height=480
+pix_fmt=yuv420p
+color_range=tv
+color_space=bt709
+color_transfer=bt709
+color_primaries=bt709
+field_order=progressive
+r_frame_rate=24/1
+avg_frame_rate=24/1"
+  got=$(probe v:0 stream=codec_name,profile,width,height,pix_fmt,field_order,color_range,color_space,color_transfer,color_primaries,r_frame_rate,avg_frame_rate)
+  bad=()
+  [[ $got == "$want" ]] || bad+=("the video stream is
+$got")
+  [[ $(probe a stream=codec_name) == codec_name=aac ]] || bad+=("the audio isn't one AAC stream")
+  [[ $("$fp" -v error -show_entries stream=index -of csv=p=0 "$s" | wc -l) == 2 ]] || bad+=("not two streams")
+  durations=$(probe v:0 packet=duration_time | sort | uniq -c | tr -s ' \n' ' ')
+  [[ $durations == ' '*' duration_time=0.041667 ' ]] || bad+=("frame durations:$durations")
+  if "$fp" -v trace "$s" 2>&1 | grep -q "type:'moof'"; then bad+=("fragmented ('moof')"); fi
+  mbs=$("$ff" -hide_banner -i "$s" -map 0:v:0 -c copy -bsf:v trace_headers -f null - 2>&1 | awk '/frame_mbs_only_flag/ {print $NF}' | sort -u)
+  [[ $mbs == 1 ]] || bad+=("frame_mbs_only_flag: ${mbs:-none found}")
+  size=$(stat -c %s "$s")
+  (( size > 8000000 && size < 12000000 )) || bad+=("$size bytes")
+  if (( ${#bad[@]} )); then printf '%s is not what the recipe makes:\n' "$s" >&2; printf '  %s\n' "${bad[@]}" >&2; exit 1; fi
+  echo "$s: $(probe v:0 stream=nb_frames | cut -d= -f2) frames at 24 fps, 854x480, $size bytes."
+fi
 
 # Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2, a variable frame rate, an AVI, rotation.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/reject/yuv422p.mp4"

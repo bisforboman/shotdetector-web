@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 60
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      # Sintel's trailer, the original's SHA-256 (the step "Download Sintel's trailer"); quoted, so YAML never reads a
+      # hash of digits as a number.
+      SINTEL_SHA256: '34bbd52a4b89fdf63c8ace50b268da26653a59508288100cd3c23de276db7931'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -40,10 +43,37 @@ jobs:
       - name: Install the wasm-tools workload
         run: dotnet workload install wasm-tools
 
+      # Sintel's trailer (Blender Foundation, CC-BY 3.0), the real trailer the checks run and the page's demo is made
+      # from: sintel_trailer-1080p.mp4, the largest of Blender's H.264 MP4s of it (1920x1080, 24 fps, 52 s, 14.6 MB), so
+      # the 480p re-encode is scaled down from the best source. Pinned by SHA-256 (Blender publishes none: recorded from
+      # this workflow's first download, 2026-10-24), checked after a cache restore too.
+      - name: Cache Sintel's trailer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sintel
+          key: sintel-${{ env.SINTEL_SHA256 }}
+
+      - name: Download Sintel's trailer
+        id: sintel
+        env:
+          URL: https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4
+        run: |
+          f=$RUNNER_TEMP/sintel/sintel_trailer-1080p.mp4
+          if [ ! -f "$f" ]; then
+            mkdir -p "$(dirname "$f")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 30 -o "$f" "$URL" \
+              || { echo "::error::$URL didn't download"; exit 1; }
+          fi
+          got=$(sha256sum < "$f" | cut -d' ' -f1)
+          [ "$got" = "$SINTEL_SHA256" ] || { rm -f "$f"; echo "::error::$URL has SHA-256 $got, not the pinned $SINTEL_SHA256"; exit 1; }
+          echo "$(stat -c %s "$f") bytes, SHA-256 $got"
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+
       - name: Make the samples
         env:
           FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
           LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
+          SINTEL: ${{ steps.sintel.outputs.file }}
         run: tools/make-samples.sh
 
       - name: Native check (ManagedCodecs + FastYuv against FFmpeg)
