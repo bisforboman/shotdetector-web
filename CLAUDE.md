@@ -49,3 +49,6 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   format duration is pts + skip (in the stream's time base).
 - On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; files come in and go out through `[JSImport]`
   (main.mjs), Emscripten's file system doesn't see the host's.
+- Under wasm AOT the runtime loads every bundled assembly before `Main` (FFmpeg.AutoGen included: ShotDetector
+  references it, the trimmer keeps it); interpreted, assemblies load on first use. WasmCheck's "nothing of FFmpeg"
+  check is strict interpreted, "nothing loaded by the runs" under AOT.

@@ -7,7 +7,7 @@ which license:
 | --- | --- | --- |
 | ShotDetector, FrameReader | NuGet (`ShotDetector`, `FrameReader`), [bisforboman/shotdetector](https://github.com/bisforboman/shotdetector) | MIT |
 | ShotDetector.FastYuv | NuGet (`ShotDetector.FastYuv`), same repository | **LGPL-2.1-or-later** (a port of FFmpeg's libswscale conversion) |
-| FFmpeg.AutoGen | NuGet, a dependency of ShotDetector (bindings only; never loaded here, and no FFmpeg library ships) | MIT |
+| FFmpeg.AutoGen | NuGet, a dependency of ShotDetector (bindings only; unused here, and no FFmpeg library ships) | MIT |
 | ManagedCodecs (Core, Containers, H264) | [bisforboman/ManagedCodecs](https://github.com/bisforboman/ManagedCodecs), submodule `external/ManagedCodecs` | not yet declared upstream (no LICENSE file at the pinned commit) |
 | .NET runtime and libraries | Microsoft | MIT |
 
@@ -19,4 +19,4 @@ in every output and publish folder.
 
 FFmpeg.AutoGen (MIT, Ruslan Balanukhin; LICENSE.txt in its package) comes in because
 ShotDetector's package references it; the trimmer keeps its assembly in the WebAssembly bundle, but nothing on this
-path loads it (tools/WasmCheck checks that).
+path uses it (tools/WasmCheck checks that the interpreted runtime never loads it).

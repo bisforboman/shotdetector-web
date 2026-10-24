@@ -49,7 +49,10 @@ if [[ $wasm == true ]]; then
   # The runtime's own notes (under Node, that it can't load its symbol file) come on stdout, starting MONO_WASM.
   node "$bundle/main.mjs" "$PWD/out/wasm" "${abs[@]}" 2> out/wasm-stderr.txt | grep -v '^MONO_WASM:' || true
   cat out/wasm-stderr.txt
-  if ! grep -q '^No FFmpeg assembly loaded.$' out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
+  # Interpreted, FFmpeg.AutoGen must not be loaded at all; AOT loads every bundled assembly before Main, so there only
+  # the runs must not load it.
+  if [[ $aot == true ]]; then expect='^No FFmpeg assembly loaded'; else expect='^No FFmpeg assembly loaded at all\.$'; fi
+  if ! grep -qE "$expect" out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
 
   files=0 differ=0
   for n in out/native/*.csv; do
