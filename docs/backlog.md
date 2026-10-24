@@ -39,7 +39,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     `samples/reject/` shows its message. A short screen recording or screenshots in the PR. Safari is the owner's to
     try (before the demo clip row); the PR says it wasn't.
   - Not: no demo clip (its own row), no thumbnails, no streaming of large files, no options beyond the three above.
-  - Status: Open
+  - Status: In progress (2026-10-24)
 
 - FastYuv under AOT: is it still its own, replaceable library?
   - Why: the deploy publishes ahead of time, and an AOT publish compiles every assembly's code into
