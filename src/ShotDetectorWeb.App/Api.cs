@@ -13,6 +13,12 @@ namespace ShotDetectorWeb.App;
 [SupportedOSPlatform("browser")]
 public static partial class Api
 {
+    /// <summary>
+    /// What a damaged file's message (ManagedCodecs' <see cref="InvalidDataException"/>) starts with: the type doesn't
+    /// cross to JavaScript, only the message (docs/decisions/2026-10-24-the-page.md, "Which errors are the file's fault").
+    /// </summary>
+    const string Damaged = "The file is damaged or not an MP4 this page can read: ";
+
     static Mp4Input? _input;
 
     /// <summary>Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON, or the library's exception.</summary>
@@ -20,7 +26,7 @@ public static partial class Api
     public static string Open(byte[] file)
     {
         _input = null;
-        var input = Mp4Input.Open(file);
+        var input = Reading(() => Mp4Input.Open(file));
         _input = input;
         return JsonSerializer.Serialize(input.Video, ApiJson.Default.YuvVideo);
     }
@@ -36,7 +42,7 @@ public static partial class Api
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
-        var result = input.Detect(request.ToOptions(new JsProgress()));
+        var result = Reading(() => input.Detect(request.ToOptions(new JsProgress())));
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
             new DetectResponse(
@@ -53,6 +59,19 @@ public static partial class Api
     [JSExport]
     public static string[] LoadedAssemblies() =>
         AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name ?? "").Order(StringComparer.Ordinal).ToArray();
+
+    /// <summary>Runs <paramref name="read"/>, a damaged file's exception given the <see cref="Damaged"/> prefix.</summary>
+    static T Reading<T>(Func<T> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (InvalidDataException e)
+        {
+            throw new InvalidDataException(Damaged + e.Message, e);
+        }
+    }
 
     /// <summary>Frames done and expected (0 when unknown), about ten times a second while <see cref="Detect"/> runs.</summary>
     [JSImport("progress", "host")]
