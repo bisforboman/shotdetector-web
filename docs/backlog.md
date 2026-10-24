@@ -20,18 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- Packages from nuget.org
-  - Why: ShotDetector and ShotDetector.FastYuv 3.14.0 are on nuget.org (released 2026-10-24), so the local feed the
-    README, Directory.Build.props and CI describe is a workaround for a problem that is gone, and a lie to the next
-    reader.
-  - Where: `Directory.Build.props` (drop the `local-feed` condition), `.github/workflows/ci.yml` (drop the
-    "ShotDetector packages" step and `SHOTDETECTOR_REF`), README "Packages" (versions are central in
-    Directory.Packages.props; ManagedCodecs stays a submodule), CLAUDE.md (the Packages bullet), `.gitignore` if it
-    lists `local-feed/`.
-  - Done when: a clean clone restores from nuget.org alone and CI is green.
-  - Not: no version bumps, no change to what the checks compare.
-  - Status: Open
-
 - The app project: one browser-wasm project with the page's exports, replacing WasmCheck
   - Why: the page needs a browser-wasm project with `[JSExport]`; the check already has one (tools/WasmCheck). One
     project means the exactness check runs the page's own entry points (decision "One wasm project").

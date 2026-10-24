@@ -88,19 +88,8 @@ the video; fades for detect-threshold; and six files to refuse.
 
 ## Packages
 
-ShotDetector 3.14.0, the first with `Detect(YuvVideo, ...)`, isn't on nuget.org yet. Until it is, pack ShotDetector and
-ShotDetector.FastYuv from shotdetector's main into `local-feed/` (ignored), which Directory.Build.props adds as a
-package source when the folder exists:
-
-```
-dotnet pack <shotdetector>/src/ShotDetector -c Release -o local-feed -p:ShotDetectorVersion=3.14.0 -p:FrameReaderVersion=2.10.0
-dotnet pack <shotdetector>/src/ShotDetector.FastYuv -c Release -o local-feed -p:ShotDetectorVersion=3.14.0 -p:FrameReaderVersion=2.10.0
-```
-
-(never `-p:Version`, which would reach FrameReader too). FrameReader 2.10.0, which ShotDetector 3.14.0 depends on,
-comes from nuget.org. Once 3.14.0 is published: delete `local-feed/` and the locally packed copies in the global
-packages folder (`~/.nuget/packages/shotdetector/3.14.0`, `~/.nuget/packages/shotdetector.fastyuv/3.14.0`), which
-would otherwise keep being used. Versions are central, in Directory.Packages.props.
+ShotDetector and ShotDetector.FastYuv (3.14.0, the first with `Detect(YuvVideo, ...)`) and what they depend on come
+from nuget.org. Versions are central, in Directory.Packages.props.
 
 ManagedCodecs isn't on NuGet: it is a git submodule, `external/ManagedCodecs` (`git clone --recursive`, or
 `git submodule update --init`), referenced by project.
