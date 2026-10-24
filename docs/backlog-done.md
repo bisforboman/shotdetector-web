@@ -36,3 +36,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     re-encoded by `tools/make-samples.sh` to 854x480 at 24 fps, 10.1 MB, ffprobe-verified; native and both wasm checks
     equal on it, 120 of 120 CSVs. CI 26m15s, the interpreted wasm step 18m19s of it, the trailer's six runs about
     two minutes each there)
+
+- The page: index.html, app.js, style.css
+  - Why: the showcase is the page; everything else is around it.
+  - Status: Done (2026-10-24: plain HTML, JavaScript and CSS, `worker.js` unchanged; `Api` prefixes ManagedCodecs'
+    `InvalidDataException` with "The file is damaged or not an MP4 this page can read:" because the type doesn't
+    cross to JavaScript (decision "Which errors are the file's fault"). Driven headless in Chromium 153 (Playwright)
+    and Firefox 136 (Puppeteer, WebDriver BiDi): every sample and Sintel's trailer give the native check's scenes and
+    stats CSVs byte for byte, progress moves, Cancel mid-run and a second run after it work, every file in
+    `samples/reject/` shows its message, a 600 MB file is refused when picked. About 6 to 9 frames a second at 480p,
+    interpreted, on a 4-core cloud box. Safari not tried: the owner's, before the demo clip row)
