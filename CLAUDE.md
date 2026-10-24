@@ -19,9 +19,14 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose), `SpsInfo` (the SPS's format and VUI colour
   fields), `UnsupportedVideoException`.
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/WasmCheck`: the core on browser-wasm under
-  Node (outside any solution: needs the wasm-tools workload); `tools/Shared/Runs.cs`: the runs both make;
-  `tools/check.sh`: both checks; `tools/make-samples.sh`: the samples.
+- `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
+  side, `Api`'s `[JSExport]`s `Open(byte[])` (the `YuvVideo` as JSON), `Detect(string optionsJson)` (shots, scene and
+  stats CSVs, frame count, rate, duration as JSON), `LoadedAssemblies()`, and `[JSImport] progress(done, expected)`;
+  `wwwroot/worker.js` owns the runtime and answers the page's `open` and `detect` messages.
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/app-check.mjs`: the App's published
+  bundle under Node through the same exports; `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
+  holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks; `tools/make-samples.sh`: the
+  samples.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`.
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
@@ -53,8 +58,13 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `TimeSpan.FromSeconds(double)`, which truncates (4.56 s comes out 4.5599999): `Mp4Input` does the same.
 - ManagedCodecs' audio packets start at negative pts (priming) with `SkipSamples`: a stream's start for FFmpeg's
   format duration is pts + skip (in the stream's time base).
-- On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; files come in and go out through `[JSImport]`
-  (main.mjs), Emscripten's file system doesn't see the host's.
+- On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; Emscripten's file system doesn't see the host's,
+  so files come in as bytes through `Open(byte[])` and results go out as JSON strings (app-check.mjs writes them).
+- The App's `_framework/` keeps unhashed names (`WasmFingerprintAssets` false: `ShotDetector.FastYuv.wasm`), and
+  `dotnet publish` adds to an existing publish folder: `tools/check.sh` deletes it first so its listing check means
+  something.
+- The published bundle is trimmed with `UseSystemResourceKeys`: the framework's exception messages come out as resource
+  keys (`DeserializeUnableToConvertValue, ...`), the libraries' own (ManagedCodecs, `UnsupportedVideoException`) whole.
 - Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen
-  among them (ShotDetector references it, the trimmer keeps it); interpreted, assemblies load on first use. WasmCheck's "nothing of FFmpeg"
-  check is strict interpreted, "nothing loaded by the runs" under AOT.
+  among them (ShotDetector references it, the trimmer keeps it); interpreted, assemblies load on first use. The wasm check's "nothing of
+  FFmpeg" (app-check.mjs, `LoadedAssemblies()`) is strict interpreted, "nothing loaded by the runs" under AOT.

@@ -19,4 +19,4 @@ in every output and publish folder.
 
 FFmpeg.AutoGen (MIT, Ruslan Balanukhin; LICENSE.txt in its package) comes in because
 ShotDetector's package references it; the trimmer keeps its assembly in the WebAssembly bundle, but nothing on this
-path uses it (tools/WasmCheck checks that the interpreted runtime never loads it).
+path uses it (tools/app-check.mjs checks that the interpreted runtime never loads it).
