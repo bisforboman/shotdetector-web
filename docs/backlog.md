@@ -31,7 +31,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
   - Done when: first load at most 8 MB transferred, measured from the live site and written in the README; checks
     green.
   - Not: no change of what is bundled (that is the trimming row); no brotli library.
-  - Status: Open
+  - Status: In progress (2026-10-24)
 
 - The demo clip
   - Why: the owner wants a visitor to try it without a file of their own (2026-10-24). Decision "The demo clip".
