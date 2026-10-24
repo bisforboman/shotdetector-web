@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!--
+    The page's .NET side on browser-wasm: Api's [JSExport]s, called from wwwroot/worker.js, and under Node by
+    tools/app-check.mjs, which checks their CSVs against the native check's (README, Checks). Needs the wasm-tools
+    workload (dotnet workload install wasm-tools); publish it on its own (dotnet publish src/ShotDetectorWeb.App), not
+    as part of a solution.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ShotDetectorWeb.App</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- _framework/ keeps the assemblies' own names (ShotDetector.FastYuv.wasm, LGPL-2.1: its own, replaceable file),
+         not names with a content hash in them. -->
+    <WasmFingerprintAssets>false</WasmFingerprintAssets>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShotDetectorWeb.Core\ShotDetectorWeb.Core.csproj" />
+  </ItemGroup>
+
+</Project>
