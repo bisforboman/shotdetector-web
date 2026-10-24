@@ -28,7 +28,7 @@ Anything else is refused when the file is opened, with an `UnsupportedVideoExcep
 codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame rate). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
-Next: the bundle's size, then the demo clip. How the page is built is decided in
+Next: the demo clip. How the page is built is decided in
 [docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work, row by row, is in
 [docs/backlog.md](docs/backlog.md).
 
@@ -47,6 +47,25 @@ table whose rows seek the player, and the scenes and stats CSVs (`<file>.scenes.
 file's name without its extension) are the ones scenedetect writes. Files above 512 MB are refused before they are
 read (`MAX_FILE_BYTES` at the top of `app.js`); Cancel stops the worker and starts a new one. Errors are the
 library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this page can read:".
+
+## Size
+
+A first visit downloads the page and every file in `_framework/` that `dotnet.js` names. GitHub Pages gzips every
+response itself (`.wasm` and `.dat` too), so the site holds the published files as they are, with no resource loader,
+and the publish makes no `.br`/`.gz` copies (`CompressionEnabled` false: Pages would never serve them; the site is
+17 MB, not 32) ([decision](docs/decisions/2026-10-24-the-page.md), "Delivery"). Measured 2026-10-24 in Chromium, first
+load, empty cache:
+
+| Bundle | Transferred | Decoded |
+| --- | --- | --- |
+| Live, `main` at `4f964cf` (with ICU data) | 5.98 MB | 19.13 MB |
+| `InvariantGlobalization` (no `icudt_*.dat`), this repository's publish | about 5.1 MB | 16.96 MB |
+
+The second row's transfer is the publish's files through `gzip -6`, which comes within 0.2% of what Pages sends for
+the files that didn't change. `dotnet.native.wasm` is most of it: 4.0 MB transferred, 13.3 MB raw (the runtime and
+every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path runs (backlog, the trimming row), costs
+103 KB transferred (447 KB raw); FrameReader 26 KB (80 KB). Pages answers with `cache-control: max-age=600` and an
+ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
 ## Using the library
 
