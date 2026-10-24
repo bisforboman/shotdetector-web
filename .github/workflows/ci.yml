@@ -44,7 +44,7 @@ jobs:
         run: dotnet workload install wasm-tools
 
       # Sintel's trailer (Blender Foundation, CC-BY 3.0), the real trailer the checks run and the page's demo is made
-      # from: sintel_trailer-1080p.mp4, the largest of Blender's H.264 MP4s of it (1920x1080, 24 fps, 52 s, 14 MB), so
+      # from: sintel_trailer-1080p.mp4, the largest of Blender's H.264 MP4s of it (1920x1080, 24 fps, 52 s, 14.6 MB), so
       # the 480p re-encode is scaled down from the best source. Pinned by SHA-256 (Blender publishes none: recorded from
       # this workflow's first download, 2026-10-24), checked after a cache restore too.
       - name: Cache Sintel's trailer
