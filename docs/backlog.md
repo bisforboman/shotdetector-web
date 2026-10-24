@@ -49,7 +49,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
   - Done when: https://bisforboman.github.io/shotdetector-web runs a sample end to end; the two files are in the live
     site; the repository's Pages setting is "GitHub Actions" (the owner sets it; say so in the PR).
   - Not: no compression or size work (next row), no demo clip.
-  - Status: Open
+  - Status: In progress (2026-10-24)
 
 - Bundle size
   - Why: a .NET browser-wasm publish is tens of megabytes raw; a visitor on a phone gives up. Decision "Delivery".
