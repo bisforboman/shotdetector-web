@@ -30,7 +30,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     lists `local-feed/`.
   - Done when: a clean clone restores from nuget.org alone and CI is green.
   - Not: no version bumps, no change to what the checks compare.
-  - Status: Open
+  - Status: In progress (2026-10-24)
 
 - The app project: one browser-wasm project with the page's exports, replacing WasmCheck
   - Why: the page needs a browser-wasm project with `[JSExport]`; the check already has one (tools/WasmCheck). One
