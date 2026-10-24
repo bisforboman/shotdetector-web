@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The exactness check: for each sample, shots, scene CSV and stats CSV from ShotDetectorWeb.Core (ManagedCodecs +
+    FastYuv, no FFmpeg) against ShotDetector's own Detect(path) with FFmpeg in-process and the same converter, byte for
+    byte, every detector. Needs FFmpeg 8.1's shared libraries (SHOTDETECTOR_FFMPEG_LIBS). README, "Checks".
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ShotDetectorWeb.Checks</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Runs.cs" Link="Runs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ShotDetectorWeb.Core\ShotDetectorWeb.Core.csproj" />
+  </ItemGroup>
+
+</Project>

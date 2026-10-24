@@ -1,0 +1,3 @@
+[submodule "external/ManagedCodecs"]
+	path = external/ManagedCodecs
+	url = https://github.com/bisforboman/ManagedCodecs

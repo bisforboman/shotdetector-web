@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shot detection without FFmpeg: ManagedCodecs demuxes and decodes the MP4, ShotDetector.FastYuv converts, ShotDetector
+    detects. Runs natively and on browser-wasm. ShotDetector.FastYuv is LGPL-2.1 and stays its own DLL (README, Licensing).
+  -->
+  <PropertyGroup>
+    <RootNamespace>ShotDetectorWeb</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ShotDetector" />
+    <PackageReference Include="ShotDetector.FastYuv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.Containers\ManagedCodecs.Containers.csproj" />
+    <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.H264\ManagedCodecs.H264.csproj" />
+  </ItemGroup>
+
+</Project>

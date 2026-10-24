@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Authors>Jakob Boman</Authors>
+    <Copyright>Copyright (c) Jakob Boman</Copyright>
+  </PropertyGroup>
+
+  <!-- ShotDetector 3.14.0 (the first with ShotDetection.Detect(YuvVideo, ...)) packed locally from shotdetector's main
+       into local-feed/ until it is on nuget.org (README, "Packages"). Without the folder, restore uses nuget.org alone,
+       so moving to nuget.org is deleting the folder (and the local copies in the global packages folder). -->
+  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)local-feed')">
+    <RestoreAdditionalProjectSources>$(MSBuildThisFileDirectory)local-feed</RestoreAdditionalProjectSources>
+  </PropertyGroup>
+</Project>

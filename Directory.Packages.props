@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="ShotDetector" Version="3.14.0" />
+    <PackageVersion Include="ShotDetector.FastYuv" Version="3.14.0" />
+  </ItemGroup>
+</Project>
