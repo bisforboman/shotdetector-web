@@ -59,7 +59,7 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 ## Checks
 
 ```
-tools/make-samples.sh        # once: samples/ (FFMPEG=<an ffmpeg with libx264>; SINTEL=<a trailer> to add a real one)
+tools/make-samples.sh        # once: samples/ (FFMPEG=<an ffmpeg with libx264>; SINTEL=<Sintel's 1080p trailer MP4>)
 export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # also put on LD_LIBRARY_PATH by the script
 tools/check.sh               # native, then wasm (interpreted); tools/check.sh wasm aot for the AOT build
 ```
