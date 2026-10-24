@@ -17,19 +17,35 @@ scope) are in shotdetector's
 
 ## Status
 
-First stage: exactness, no UI yet. `src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its
-scene and stats CSVs equal ShotDetector's FFmpeg path's on every sample, all five detectors, natively and on
-browser-wasm (interpreted and AOT), the latter through the page's own exports (`src/ShotDetectorWeb.App`, with the
-worker the page will talk to).
+The page runs locally ("Running the page"), not yet on GitHub Pages. `src/ShotDetectorWeb.Core` opens an MP4 and
+detects; the checks show that its scene and stats CSVs equal ShotDetector's FFmpeg path's on every sample, all five
+detectors, natively and on browser-wasm (interpreted and AOT), the latter through the page's own exports
+(`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
 Supported so far: **8-bit 4:2:0 H.264 (progressive) in a non-fragmented MP4, at a constant frame rate, not rotated.**
 Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
 codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame rate). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
-Next: the page (plain HTML, .NET on browser-wasm with `[JSExport]`, decoding in a web worker), then GitHub Pages.
-How it is built is decided in [docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work,
-row by row, is in [docs/backlog.md](docs/backlog.md).
+Next: GitHub Pages. How the page is built is decided in
+[docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work, row by row, is in
+[docs/backlog.md](docs/backlog.md).
+
+## Running the page
+
+```
+dotnet publish src/ShotDetectorWeb.App -c Release            # -p:RunAOTCompilation=true for the build Pages will get
+python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot 8000
+```
+
+Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does).
+The page is `wwwroot/index.html`, `app.js` and `style.css`, no build step and no dependencies; `worker.js` owns the
+.NET runtime and answers the page's `open` and `detect` messages. Pick an MP4 (or drop one), choose the detector, its
+threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect: the shots come as a
+table whose rows seek the player, and the scenes and stats CSVs (`<file>.scenes.csv`, `<file>.stats.csv`, the
+file's name without its extension) are the ones scenedetect writes. Files above 512 MB are refused before they are
+read (`MAX_FILE_BYTES` at the top of `app.js`); Cancel stops the worker and starts a new one. Errors are the
+library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this page can read:".
 
 ## Using the library
 

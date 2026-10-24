@@ -36,3 +36,12 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     re-encoded by `tools/make-samples.sh` to 854x480 at 24 fps, 10.1 MB, ffprobe-verified; native and both wasm checks
     equal on it, 120 of 120 CSVs. CI 26m15s, the interpreted wasm step 18m19s of it, the trailer's six runs about
     two minutes each there)
+
+- The page: pick an MP4, detect, see and download the shots
+  - Why: the showcase is the page; everything else is around it.
+  - Status: Done (2026-10-24: `wwwroot/index.html`, `app.js`, `style.css`; `Api` prefixes a damaged file's message
+    (decision "A damaged file's message"). Checked in Chromium here (interpreted) and, through a one-off CI step since
+    reverted, in Chromium and Firefox on the AOT publish: every sample with all five detectors gives the native
+    check's scenes and stats CSVs, Sintel's trailer included (60 to 77 frames per second); progress moves; cancel
+    mid-run, then a second run; each file in `samples/reject/`, a damaged and a 600 MB file show their messages.
+    Safari not tried: the owner's, before the demo clip row)
