@@ -30,7 +30,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
   holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks; `tools/make-samples.sh`: the
   samples.
-- `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`.
+- `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`;
+  `.github/workflows/pages.yml`: after CI on a push to `main`, the AOT publish's `wwwroot/` plus FastYuv's license and
+  `.nojekyll`, checked for the two LGPL files, deployed to https://bisforboman.github.io/shotdetector-web/.
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
   (`2026-10-24-the-page.md`: how the page is built).
@@ -70,6 +72,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - The App's `_framework/` keeps unhashed names (`WasmFingerprintAssets` false: `ShotDetector.FastYuv.wasm`), and
   `dotnet publish` adds to an existing publish folder: `tools/check.sh` deletes it first so its listing check means
   something.
+- An interpreted publish after an AOT one (`tools/check.sh wasm aot`, then `tools/check.sh wasm`) can reuse the App's
+  `obj/` from the AOT build, whose IL is stripped: the runtime aborts at start (`NIY encountered in method
+  System.OutOfMemoryException:.ctor`, seen 2026-10-24). Delete `src/ShotDetectorWeb.App/obj` between them; CI runs
+  interpreted first.
 - The published bundle is trimmed with `UseSystemResourceKeys`: the framework's exception messages come out as resource
   keys (`DeserializeUnableToConvertValue, ...`), the libraries' own (ManagedCodecs, `UnsupportedVideoException`) whole.
 - Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen

@@ -20,37 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- FastYuv under AOT: is it still its own, replaceable library?
-  - Why: the deploy publishes ahead of time, and an AOT publish compiles every assembly's code into
-    `_framework/dotnet.native.wasm` (it holds `mono_aot_ShotDetector_FastYuv_*`, seen 2026-10-24 in the app project's
-    `tools/check.sh wasm aot` publish); `ShotDetector.FastYuv.wasm` stays its own file, but whether the runtime runs a
-    replaced one (or its IL at all: `WasmStripILAfterAOT`) is not known. `dotnet.js` also pins every assembly's sha256 (its inlined
-    boot config). README "Licensing" and THIRD-PARTY-NOTICES.md say a visitor can swap the file for a build of its
-    source: under AOT that is unproven, and LGPL-2.1 (section 6) asks for it.
-  - Where: a decision in `docs/decisions/` first (the owner's: interpreted for FastYuv only, if the runtime allows a
-    mixed build; a documented recipe for replacing it, boot config hash included; or ship interpreted); then the
-    build, the checks and the two documents. Try it: swap in a FastYuv built from source with a visible change and
-    see whether the page uses it, interpreted and AOT.
-  - Done when: the decision is written, the published bundle does what it says, and README "Licensing" and
-    THIRD-PARTY-NOTICES.md say exactly how to replace FastYuv. Blocks the deploy row.
-  - Not: no change to FastYuv itself.
-  - Status: In progress (2026-10-24)
-
-- GitHub Pages deploy
-  - Why: the page is for visitors.
-  - Where: `.github/workflows/pages.yml`: on push to `main` (after CI, `workflow_run` or a job needing the check job),
-    publish the App ahead of time (`-p:RunAOTCompilation=true`), add `.nojekyll`, upload the bundle folder as the
-    Pages artifact (look at where `dotnet publish` puts it: `AppBundle` in `tools/check.sh` today, `wwwroot` in newer
-    layouts; don't assume), deploy with `actions/deploy-pages`; pin actions by commit SHA with the tag in a comment,
-    as `ci.yml`. The core csproj copies `licenses/ShotDetector.FastYuv/COPYING.LGPL` to the publish root, which is
-    probably outside the bundle folder: copy it in (the csproj or the workflow). A step that fails the deploy unless
-    the published listing has `_framework/ShotDetector.FastYuv.wasm` as its own file and
-    `licenses/ShotDetector.FastYuv/COPYING.LGPL`. README: the URL, "Status". Depends on the page row.
-  - Done when: https://bisforboman.github.io/shotdetector-web runs a sample end to end; the two files are in the live
-    site; the repository's Pages setting is "GitHub Actions" (the owner sets it; say so in the PR).
-  - Not: no compression or size work (next row), no demo clip.
-  - Status: Open
-
 - Bundle size
   - Why: a .NET browser-wasm publish is tens of megabytes raw; a visitor on a phone gives up. Decision "Delivery".
   - Where: measure the published `_framework/` (raw, and transferred from the live site: does Pages gzip
