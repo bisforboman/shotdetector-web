@@ -39,8 +39,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - Before pushing: `tools/make-samples.sh` (once) and `tools/check.sh` (native + wasm interpreted, a few minutes),
   `tools/check.sh wasm aot` for anything that could differ under AOT.
-- Packages: ShotDetector/FastYuv 3.14.0 from `local-feed/` (packed from shotdetector's main) until on nuget.org, then
-  nuget.org; never pack with `-p:Version` (`-p:ShotDetectorVersion`, `-p:FrameReaderVersion`). README, "Packages".
+- Packages: ShotDetector/FastYuv 3.14.0 from nuget.org, versions central in `Directory.Packages.props`; ManagedCodecs
+  is the submodule, referenced by project. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file or merged AOT output), and its COPYING.LGPL is copied
   into every output (the core csproj). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.
 - Commit messages: what and why. Small commits.
