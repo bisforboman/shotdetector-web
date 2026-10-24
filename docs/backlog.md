@@ -20,20 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- The Sintel trailer sample: a real trailer in the checks, re-encoded as the demo will be
-  - Why: the synthetic samples each isolate one thing; a real trailer (Sintel's, Blender Foundation, CC-BY 3.0) has
-    them together, with real cuts, fades and audio. The page row checks against it, and the demo clip is this same
-    re-encoded file, so the exactness check covers what visitors run (decision "The demo clip").
-  - Where: `tools/make-samples.sh`: given `SINTEL=<the original trailer>`, a recipe re-encoding it with libx264 to
-    8-bit 4:2:0 progressive H.264 at a constant frame rate in a non-fragmented MP4, 854x480, around 10 MB, as
-    `samples/sintel_trailer-480p.mp4`, verified in the script with ffprobe; `.github/workflows/ci.yml`: downloads the
-    original from download.blender.org pinned by SHA-256 (failing on a mismatch) and runs the recipe in "Make the
-    samples"; THIRD-PARTY-NOTICES.md: the clip; README "Checks": the SINTEL line.
-  - Done when: CI's native check and both wasm checks pass on the trailer (`tools/check.sh` runs every
-    `samples/*.mp4`), the run's step timings are in the PR.
-  - Not: no `pages.yml`, no page (the demo clip row); no change to `tools/check.sh`.
-  - Status: In progress (2026-10-24)
-
 - The page
   - Why: the showcase is the page; everything else is around it.
   - Where: `src/ShotDetectorWeb.App/wwwroot/index.html`, `app.js`, `style.css`, nothing else (no build step, no

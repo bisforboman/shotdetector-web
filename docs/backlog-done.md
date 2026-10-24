@@ -28,3 +28,11 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-24: `src/ShotDetectorWeb.App` with `Open`, `Detect`, `LoadedAssemblies` and `progress`,
     `wwwroot/worker.js`; `tools/app-check.mjs` under Node, 108 of 108 CSVs identical interpreted and AOT; FastYuv's
     `.wasm` and license checked in the publish output; tools/WasmCheck deleted)
+
+- The Sintel trailer sample: a real trailer in the checks, re-encoded as the demo will be
+  - Why: a real trailer has what the synthetic samples isolate, together; the page row checks against it, and the
+    demo clip is this same re-encoded file, so the exactness check covers what visitors run.
+  - Status: Done (2026-10-24: `sintel_trailer-1080p.mp4` from download.blender.org, pinned by SHA-256 in `ci.yml`,
+    re-encoded by `tools/make-samples.sh` to 854x480 at 24 fps, 10.1 MB, ffprobe-verified; native and both wasm checks
+    equal on it, 120 of 120 CSVs. CI 26m15s, the interpreted wasm step 18m19s of it, the trailer's six runs about
+    two minutes each there)
