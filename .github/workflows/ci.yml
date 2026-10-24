@@ -15,8 +15,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      # ShotDetector's commit the packages are packed from while 3.14.0 isn't on nuget.org (the merge of #486).
-      SHOTDETECTOR_REF: 587353917d106e906b2fdec439ed0806b1816a1a
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -38,21 +36,6 @@ jobs:
         uses: ./.github/actions/btbn-ffmpeg
         with:
           build: gpl-shared
-
-      # Until ShotDetector 3.14.0 is on nuget.org: pack it (and FastYuv) from shotdetector into local-feed/, which
-      # Directory.Build.props adds as a source. FrameReader 2.10.0 comes from nuget.org either way.
-      - name: ShotDetector packages
-        run: |
-          if curl -fsS https://api.nuget.org/v3-flatcontainer/shotdetector/index.json | grep -q '"3.14.0"'; then
-            echo "ShotDetector 3.14.0 is on nuget.org."
-            exit 0
-          fi
-          git clone -q https://github.com/bisforboman/shotdetector "$RUNNER_TEMP/shotdetector"
-          git -C "$RUNNER_TEMP/shotdetector" checkout -q "$SHOTDETECTOR_REF"
-          for p in ShotDetector ShotDetector.FastYuv; do
-            dotnet pack "$RUNNER_TEMP/shotdetector/src/$p" -c Release -nologo -v q -o local-feed \
-              -p:ShotDetectorVersion=3.14.0 -p:FrameReaderVersion=2.10.0
-          done
 
       - name: Install the wasm-tools workload
         run: dotnet workload install wasm-tools
