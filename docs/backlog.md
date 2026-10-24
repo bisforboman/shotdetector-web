@@ -134,7 +134,8 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
   - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
     into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
     holding the decoded audio. FrameReader already has `WaveformData`, also over an FFmpeg-backed `AudioReader`:
-    use its bucket definition, and ask upstream for an entry that takes samples, like the tone's in "Audio measures".
+    use its bucket definition, through an entry that takes samples once upstream has one
+    ([shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)).
     `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
     gotcha on priming and `SkipSamples`, and apply the edit list. The App: its own `[JSExport]` (not part of `Detect`,
     so detection's time and results stay as they are), called by `worker.js` after `Detect`. `app.js` draws it on the
@@ -160,8 +161,9 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     - the reference tone, as ShotDetector already defines it (`ShotDetection.FindReferenceTone`, FrameReader's
       `ReferenceTone`): mostly 1 kHz (about ±15 Hz) at a steady level for at least 5 s, breaks of up to 1 s not
       splitting it, given as start, end and level (`ToneSegment`). FrameReader is in the bundle already, but its
-      `ReferenceTone.Find` reads an FFmpeg-backed `AudioReader`, not samples. First ask upstream for an entry that
-      takes samples, so the core feeds it ManagedCodecs' and the definition is shared code. Only if that's refused,
+      `ReferenceTone.Find` reads an FFmpeg-backed `AudioReader`, not samples. Use the entry that takes samples
+      once upstream has one ([shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)), so the core
+      feeds it ManagedCodecs' and the definition is shared code. Only if that's refused,
       implement the same definition here;
     - silence: spans below -60 dBFS for 2 s or more (FFmpeg's `silencedetect` defaults);
     - peak per channel in dBFS, and how many samples reach full scale;
@@ -207,11 +209,13 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
 
 ## Waiting
 
-Asks upstream, for filing together once the owner says so (none filed as of 2026-10-24):
-- **shotdetector:** an asynchronous frame-source `Detect` ("Cancel without restarting the worker"), and a way to be
-  told each shot on the frame-source path ("Shots as they're found").
-- **FrameReader:** entries for `ReferenceTone` and `WaveformData` that take samples rather than an FFmpeg-backed
-  `AudioReader` ("Audio measures", the waveform row).
+Asks upstream, filed in bisforboman/shotdetector (FrameReader lives there too) on 2026-10-24:
+- [#492](https://github.com/bisforboman/shotdetector/issues/492): an asynchronous frame-source `Detect` ("Cancel
+  without restarting the worker").
+- [#493](https://github.com/bisforboman/shotdetector/issues/493): a shot callback on the frame-source `Detect`
+  ("Shots as they're found").
+- [#494](https://github.com/bisforboman/shotdetector/issues/494): FrameReader's `ReferenceTone` and `WaveformData`
+  from decoded samples rather than an FFmpeg-backed `AudioReader` ("Audio measures", the waveform row).
 
 - ManagedCodecs' license
   - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to
@@ -244,7 +248,8 @@ Asks upstream, for filing together once the owner says so (none filed as of 2026
     unchanged.
   - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; the shots found before the cancel
     are the next row's, which also gives them CSVs once this one lands.
-  - Status: Waiting on upstream (2026-10-24: ShotDetector has no asynchronous frame-source `Detect`)
+  - Status: Waiting on upstream ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492), filed
+    2026-10-24)
 
 - Shots as they're found, kept when a run is cancelled
   - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
@@ -267,7 +272,8 @@ Asks upstream, for filing together once the owner says so (none filed as of 2026
     JavaScript would be a second `Shots.Csv`). Once "Cancel without restarting the worker" lands, `Api` keeps the shots
     it was told and makes the scenes CSV from them with `Shots.Csv`, and that becomes a line of this row. No partial
     stats CSV (the stats are in the result).
-  - Status: Waiting on upstream (2026-10-24: the frame-source `Detect` has no shot callback)
+  - Status: Waiting on upstream ([shotdetector#493](https://github.com/bisforboman/shotdetector/issues/493), filed
+    2026-10-24)
 
 ## Maybe
 
