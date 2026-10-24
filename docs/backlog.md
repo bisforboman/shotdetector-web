@@ -20,19 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- Bundle size
-  - Why: a .NET browser-wasm publish is tens of megabytes raw; a visitor on a phone gives up. Decision "Delivery".
-  - Where: measure the published `_framework/` (raw, and transferred from the live site: does Pages gzip
-    `application/wasm` and `.dat`?); `InvariantGlobalization` on the App (ICU is large; the CSVs are invariant
-    already, `tools/check.sh wasm` proves it); if Pages doesn't compress, pre-compressed `.gz` next to each file and a
-    `withResourceLoader` in `worker.js` that fetches the `.gz` and inflates it with `DecompressionStream('gzip')`;
-    note what FFmpeg.AutoGen and FrameReader cost (the trimming row). README: the sizes, raw and transferred, with the
-    date. Depends on the deploy row (the live numbers).
-  - Done when: first load at most 8 MB transferred, measured from the live site and written in the README; checks
-    green.
-  - Not: no change of what is bundled (that is the trimming row); no brotli library.
-  - Status: In progress (2026-10-24)
-
 - The demo clip
   - Why: the owner wants a visitor to try it without a file of their own (2026-10-24). Decision "The demo clip".
   - Where: `pages.yml` downloads the original from download.blender.org pinned by SHA-256 (as `ci.yml`) and runs the

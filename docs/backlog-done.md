@@ -71,3 +71,12 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     downloaded scenes and stats CSVs identical to the native check's (Sintel's trailer in about 20 s, 60 frames per
     second); `licenses/ShotDetector.FastYuv/COPYING.LGPL` is served, the package's own file byte for byte, and
     `_framework/ShotDetector.FastYuv.wasm` as `application/wasm`)
+
+- Bundle size
+  - Why: a .NET browser-wasm publish is tens of megabytes raw; a visitor on a phone gives up. Decision "Delivery".
+  - Status: Done (2026-10-24: Pages gzips every response itself, `.wasm` and `.dat` included (live, `curl` and
+    Chromium), so no pre-compressed `.gz` and no resource loader. First load from the live site, Chromium, empty
+    cache: 5.98 MB transferred, 19.13 MB decoded, under the 8 MB target before any change. `InvariantGlobalization`
+    on the App drops `icudt_*.dat` (198 KB of that) and shrinks `dotnet.native.wasm` (14.83 to 13.28 MB raw): about
+    5.1 MB transferred, 16.96 MB raw, checked by `tools/check.sh wasm` and `wasm aot` (120 of 120 CSVs each).
+    FFmpeg.AutoGen 103 KB transferred, FrameReader 26 KB (the trimming row). README "Size")
