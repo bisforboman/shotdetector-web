@@ -51,8 +51,9 @@ library's messages, a damaged file's prefixed "The file is damaged or not an MP4
 ## Size
 
 A first visit downloads the page and every file in `_framework/` that `dotnet.js` names. GitHub Pages gzips every
-response itself (`.wasm` and `.dat` too), so the bundle ships as published, with no pre-compressed files or resource
-loader ([decision](docs/decisions/2026-10-24-the-page.md), "Delivery"). Measured 2026-10-24 in Chromium, first load,
+response itself (`.wasm` and `.dat` too), so the site holds the published files as they are, with no resource loader, and the
+publish makes no `.br`/`.gz` copies (`CompressionEnabled` false: Pages would never serve them; the site is 17 MB, not 32)
+([decision](docs/decisions/2026-10-24-the-page.md), "Delivery"). Measured 2026-10-24 in Chromium, first load,
 empty cache:
 
 | Bundle | Transferred | Decoded |
