@@ -1,0 +1,108 @@
+/* The page's look: system fonts, light and dark from the visitor's setting, one column. */
+
+:root {
+  color-scheme: light dark;
+  --text: #1d1f23;
+  --muted: #5b616b;
+  --background: #fbfbfa;
+  --surface: #ffffff;
+  --line: #d9dbe0;
+  --accent: #2357c6;
+  --accent-text: #ffffff;
+  --playing: #e6eeff;
+  --error: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e7ea;
+    --muted: #9aa0aa;
+    --background: #15171a;
+    --surface: #1d2024;
+    --line: #353a41;
+    --accent: #7aa2ff;
+    --accent-text: #0f1420;
+    --playing: #24324f;
+    --error: #ff8a7a;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0 auto;
+  max-width: 52rem;
+  padding: 1.5rem 1rem 2rem;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--background);
+}
+
+h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+header p { margin: 0 0 1.5rem; color: var(--muted); }
+a { color: var(--accent); }
+
+form { display: grid; gap: 1rem; }
+
+.drop {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1.25rem;
+  border: 2px dashed var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  text-align: center;
+  cursor: pointer;
+}
+.drop:hover, .drop.over, .drop:focus-within { border-color: var(--accent); }
+/* The input is the whole box (its label): kept for the keyboard and screen readers, out of sight. */
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.drop { position: relative; }
+#file-name { font-weight: 600; overflow-wrap: anywhere; }
+.drop small { color: var(--muted); }
+
+.options { display: flex; flex-wrap: wrap; gap: 1rem; }
+.options label { display: grid; gap: 0.25rem; flex: 1 1 10rem; font-size: 0.9rem; color: var(--muted); }
+
+input, select, button, .button { font: inherit; }
+input[type="number"], input[type="text"], select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.actions { display: flex; gap: 0.75rem; }
+button, .button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.375rem;
+  color: var(--accent);
+  background: transparent;
+  text-decoration: none;
+  cursor: pointer;
+}
+button[type="submit"] { color: var(--accent-text); background: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+
+#status { margin: 1.25rem 0; min-height: 1.5rem; }
+#message { margin: 0 0 0.5rem; }
+[data-state="error"] #message { color: var(--error); font-weight: 600; }
+progress { width: 100%; height: 0.75rem; accent-color: var(--accent); }
+
+video { display: block; width: 100%; max-height: 60vh; border-radius: 0.5rem; background: #000; }
+
+.downloads { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+
+.table { max-height: 24rem; overflow: auto; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 0.35rem 0.75rem; text-align: right; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: center; }
+th { position: sticky; top: 0; background: var(--surface); font-weight: 600; }
+tbody tr { cursor: pointer; }
+tbody tr:hover, tbody tr.playing { background: var(--playing); }
+td button { padding: 0 0.5rem; min-width: 2.5rem; border: 0; color: var(--accent); }
+
+footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: 0.875rem; color: var(--muted); }
