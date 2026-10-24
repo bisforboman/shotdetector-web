@@ -87,6 +87,10 @@ jobs:
       - name: WebAssembly check, AOT
         run: tools/check.sh wasm aot
 
+      # LGPL-2.1: a FastYuv built from its source replaces the package's in a rebuilt bundle, and runs (README, Licensing).
+      - name: FastYuv replaced from its source, AOT
+        run: tools/check.sh replace aot
+
       - name: Results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

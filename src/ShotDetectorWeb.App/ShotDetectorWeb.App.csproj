@@ -20,4 +20,10 @@
     <ProjectReference Include="..\ShotDetectorWeb.Core\ShotDetectorWeb.Core.csproj" />
   </ItemGroup>
 
+  <!-- A replaced FastYuv (-p:FastYuvAssembly, the core csproj and README "Licensing") goes into the bundle in place of
+       the package's, which the core then leaves out. -->
+  <ItemGroup Condition="'$(FastYuvAssembly)' != ''">
+    <Reference Include="ShotDetector.FastYuv" HintPath="$(FastYuvAssembly)" />
+  </ItemGroup>
+
 </Project>

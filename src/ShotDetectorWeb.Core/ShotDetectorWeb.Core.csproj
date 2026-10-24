@@ -15,6 +15,13 @@
     <PackageReference Include="ShotDetector.FastYuv" GeneratePathProperty="true" />
   </ItemGroup>
 
+  <!-- Replacing FastYuv (LGPL-2.1, README "Licensing"): -p:FastYuvAssembly=<a ShotDetector.FastYuv.dll built from its
+       source> builds against that one instead of the package's, which then only supplies the license text. -->
+  <ItemGroup Condition="'$(FastYuvAssembly)' != ''">
+    <PackageReference Update="ShotDetector.FastYuv" ExcludeAssets="compile;runtime" />
+    <Reference Include="ShotDetector.FastYuv" HintPath="$(FastYuvAssembly)" />
+  </ItemGroup>
+
   <!-- FastYuv's license goes wherever its DLL goes (LGPL-2.1: the notice ships with the library). -->
   <ItemGroup>
     <None Include="$(PkgShotDetector_FastYuv)/COPYING.LGPL" Link="licenses/ShotDetector.FastYuv/COPYING.LGPL" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />

@@ -34,7 +34,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
   - Done when: the decision is written, the published bundle does what it says, and README "Licensing" and
     THIRD-PARTY-NOTICES.md say exactly how to replace FastYuv. Blocks the deploy row.
   - Not: no change to FastYuv itself.
-  - Status: Open
+  - Status: In progress (2026-10-24)
 
 - GitHub Pages deploy
   - Why: the page is for visitors.

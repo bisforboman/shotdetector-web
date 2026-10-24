@@ -78,6 +78,7 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 tools/make-samples.sh        # once: samples/ (FFMPEG=<an ffmpeg with libx264>; SINTEL=<Sintel's 1080p trailer MP4>)
 export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # also put on LD_LIBRARY_PATH by the script
 tools/check.sh               # native, then wasm (interpreted); tools/check.sh wasm aot for the AOT build
+tools/check.sh replace       # FastYuv replaced from its source (needs github.com); add aot for the AOT build
 ```
 
 - **native** (`tools/NativeCheck`): for each sample, first the core library's `YuvVideo` against FFmpeg's description
@@ -97,6 +98,9 @@ tools/check.sh               # native, then wasm (interpreted); tools/check.sh w
   FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads some assemblies at start that
   the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only if the runs load one. No FFmpeg
   library exists in the browser either way.
+- **replace** (`tools/replace-check.mjs`, under Node): LGPL-2.1, FastYuv replaceable (Licensing). It clones shotdetector
+  at the tag of the packaged FastYuv, makes its converter's constructor throw, builds it, publishes the App against it
+  (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement.
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
 browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution).
@@ -118,7 +122,26 @@ ManagedCodecs isn't on NuGet: it is a git submodule, `external/ManagedCodecs` (`
 ## Licensing
 
 MIT ([LICENSE](LICENSE)). The app bundles libraries under their own licenses, listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). **ShotDetector.FastYuv is LGPL-2.1-or-later**: it stays its own,
-replaceable assembly (no single-file or merged AOT output; on WebAssembly its own `ShotDetector.FastYuv.wasm` in the
-bundle), and its license text ships next to it (`licenses/ShotDetector.FastYuv/COPYING.LGPL` in every build and
-publish output).
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). **ShotDetector.FastYuv is LGPL-2.1-or-later**: it stays its own assembly
+(on WebAssembly its own `_framework/ShotDetector.FastYuv.wasm`), and its license text ships next to it
+(`licenses/ShotDetector.FastYuv/COPYING.LGPL` in every build and publish output).
+
+To use a changed FastYuv, build it from its source and publish the app against it. Swapping the `.wasm` file in a
+published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
+(as the page is) FastYuv's code is also in `dotnet.native.wasm`
+([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
+in the shotdetector repository at the package's version (3.14.0, Directory.Packages.props):
+
+```
+git clone --branch v3.14.0 https://github.com/bisforboman/shotdetector
+# change shotdetector/src/ShotDetector.FastYuv, then:
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.14.0 -p:FrameReaderVersion=2.10.0
+git clone --recursive https://github.com/bisforboman/shotdetector-web
+dotnet workload install wasm-tools
+dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
+  -p:FastYuvAssembly=$PWD/shotdetector/src/ShotDetector.FastYuv/bin/Release/net10.0/ShotDetector.FastYuv.dll
+# the page is shotdetector-web/src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot
+```
+
+`tools/check.sh replace` does this with a visibly changed FastYuv and checks the rebuilt bundle runs it; CI runs it
+compiled ahead of time.

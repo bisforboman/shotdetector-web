@@ -26,7 +26,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `wwwroot/index.html`, `app.js`, `style.css` (no build step, no dependency; README "Running the page"). `Api` prefixes
   ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/app-check.mjs`: the App's published
-  bundle under Node through the same exports; `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
+  bundle under Node through the same exports; `tools/replace-check.mjs`: a bundle rebuilt with a changed FastYuv runs
+  it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
   holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks; `tools/make-samples.sh`: the
   samples.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`.
@@ -51,8 +52,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `tools/check.sh wasm aot` for anything that could differ under AOT.
 - Packages: ShotDetector/FastYuv 3.14.0 from nuget.org, versions central in `Directory.Packages.props`; ManagedCodecs
   is the submodule, referenced by project. README, "Packages".
-- FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file or merged AOT output), and its COPYING.LGPL is copied
-  into every output (the core csproj). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.
+- FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
+  (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
+  file (`docs/decisions/2026-10-24-fastyuv-replaceable.md`; `tools/check.sh replace aot` in CI). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.
 - Commit messages: what and why. Small commits.
 
 ## Gotchas
