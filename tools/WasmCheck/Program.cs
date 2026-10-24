@@ -34,8 +34,8 @@ if (byRuns.Count > 0)
     return 1;
 }
 
-// The AOT runtime loads every assembly in the bundle before Main (FFmpeg.AutoGen is there because ShotDetector
-// references it); interpreted, an assembly loads when code first needs it, so there "none at all" shows that nothing
+// The AOT runtime loads some assemblies before Main that the interpreter never touches, FFmpeg.AutoGen among them
+// (in the bundle because ShotDetector references it); interpreted, an assembly loads when code first needs it, so there "none at all" shows that nothing
 // on this path touches FFmpeg.
 Console.Error.WriteLine(atStart.Count == 0
     ? "No FFmpeg assembly loaded at all."

@@ -71,8 +71,9 @@ tools/check.sh               # native, then wasm (interpreted); tools/check.sh w
 - **wasm** (`tools/WasmCheck`, browser-wasm under Node): the core library on the same samples, its CSVs written to
   `out/wasm/` and compared with `out/native/` file for file. Interpreted, it fails if FFmpeg.AutoGen (in the bundle
   because ShotDetector references it) is loaded at all: the runtime loads an assembly only when code needs it, so
-  nothing on the path touches FFmpeg. AOT (`aot`, a few minutes more to build) loads every bundled assembly before
-  `Main`, so there it fails only if the runs load one. No FFmpeg library exists in the browser either way.
+  nothing on the path touches FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads
+  some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only
+  if the runs load one. No FFmpeg library exists in the browser either way.
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; WasmCheck is a
 browser-wasm project, so build it with `dotnet publish tools/WasmCheck`, not as part of a solution).
