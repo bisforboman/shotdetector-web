@@ -2,7 +2,10 @@ using ShotDetector;
 
 namespace ShotDetectorWeb.Checks;
 
-/// <summary>The detector runs both checks make on every sample, and the files their results are written to.</summary>
+/// <summary>
+/// The detector runs the native check makes on every sample, and the files their results are written to. The wasm check
+/// (tools/app-check.mjs) holds the same runs as the App's options JSON: change both together.
+/// </summary>
 internal static class Runs
 {
     /// <summary>Each of the five detectors with scenedetect's defaults, and all five in one run, every one with stats.</summary>

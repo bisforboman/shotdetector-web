@@ -21,3 +21,10 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     workaround for a problem that is gone.
   - Status: Done (2026-10-24: the local-feed source, CI's packing step and SHOTDETECTOR_REF dropped; a restore into
     an empty global packages folder takes both from nuget.org)
+
+- The app project: one browser-wasm project with the page's exports, replacing WasmCheck
+  - Why: the page needs a browser-wasm project with `[JSExport]`; one project means the exactness check runs the
+    page's own entry points (decision "One wasm project").
+  - Status: Done (2026-10-24: `src/ShotDetectorWeb.App` with `Open`, `Detect`, `LoadedAssemblies` and `progress`,
+    `wwwroot/worker.js`; `tools/app-check.mjs` under Node, 108 of 108 CSVs identical interpreted and AOT; FastYuv's
+    `.wasm` and license checked in the publish output; tools/WasmCheck deleted)

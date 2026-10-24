@@ -20,30 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- The app project: one browser-wasm project with the page's exports, replacing WasmCheck
-  - Why: the page needs a browser-wasm project with `[JSExport]`; the check already has one (tools/WasmCheck). One
-    project means the exactness check runs the page's own entry points (decision "One wasm project").
-  - Where: new `src/ShotDetectorWeb.App` (browser-wasm, `OutputType Exe`, references the core project; `Program.cs`
-    keeps the runtime alive; `Api.cs` with `[JSExport] string Open(byte[] file)` returning the `YuvVideo` as JSON,
-    `[JSExport] string Detect(string optionsJson)` returning JSON with `shots` (`Shots.Json`), `scenesCsv`
-    (`Shots.Csv(shots, cuts: cuts)`), `statsCsv` (`Stats.Csv(video.Position)`), `frameCount`, `frameRate`,
-    `duration`, and `[JSExport] string[] LoadedAssemblies()`; progress through `[JSImport] progress(int done, int
-    expected)` from a `Progress` set in the options; `wwwroot/worker.js` starting `dotnet.js`, answering `open` and
-    `detect` messages and forwarding progress). The options JSON carries what the page offers: `detector`,
-    `threshold` (null: the detector's default), `minSceneLength` (scenedetect's string forms), and an optional
-    `detectors: [...]` (several in one run, each with its kind and threshold: the page sends one, the check sends the
-    `all` run's five). New `tools/app-check.mjs` driving the App's published bundle under Node on every sample and
-    every run of `tools/Shared/Runs.cs`, which becomes the options JSON the script holds (the App bundles no
-    check-only code; `Runs.Csvs` and `BaseName` move to the script or go), writing the CSVs under `out/wasm/`, and
-    failing if `LoadedAssemblies()` grew by an FFmpeg assembly (the interpreted/AOT rule is in `tools/check.sh`
-    today). `tools/check.sh wasm` publishes the App instead of WasmCheck. Delete `tools/WasmCheck`. README "Checks",
-    "Layout" in CLAUDE.md.
-  - Done when: `tools/check.sh wasm` and `tools/check.sh wasm aot` pass through the App's bundle with the same CSVs as
-    before (CI green), `ShotDetector.FastYuv.wasm` is its own file in the published `_framework/` and
-    `licenses/ShotDetector.FastYuv/COPYING.LGPL` is in the publish output.
-  - Not: no `index.html`, no styling, no deploy; no change to the core library's behaviour.
-  - Status: Open
-
 - The page
   - Why: the showcase is the page; everything else is around it.
   - Where: `src/ShotDetectorWeb.App/wwwroot/index.html`, `app.js`, `style.css`, nothing else (no build step, no
@@ -63,6 +39,22 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     `samples/reject/` shows its message. A short screen recording or screenshots in the PR. Safari is the owner's to
     try (before the demo clip row); the PR says it wasn't.
   - Not: no demo clip (its own row), no thumbnails, no streaming of large files, no options beyond the three above.
+  - Status: Open
+
+- FastYuv under AOT: is it still its own, replaceable library?
+  - Why: the deploy publishes ahead of time, and an AOT publish compiles every assembly's code into
+    `_framework/dotnet.native.wasm` (it holds `mono_aot_ShotDetector_FastYuv_*`, seen 2026-10-24 in the app project's
+    `tools/check.sh wasm aot` publish); `ShotDetector.FastYuv.wasm` stays its own file, but whether the runtime runs a
+    replaced one (or its IL at all: `WasmStripILAfterAOT`) is not known. `dotnet.js` also pins every assembly's sha256 (its inlined
+    boot config). README "Licensing" and THIRD-PARTY-NOTICES.md say a visitor can swap the file for a build of its
+    source: under AOT that is unproven, and LGPL-2.1 (section 6) asks for it.
+  - Where: a decision in `docs/decisions/` first (the owner's: interpreted for FastYuv only, if the runtime allows a
+    mixed build; a documented recipe for replacing it, boot config hash included; or ship interpreted); then the
+    build, the checks and the two documents. Try it: swap in a FastYuv built from source with a visible change and
+    see whether the page uses it, interpreted and AOT.
+  - Done when: the decision is written, the published bundle does what it says, and README "Licensing" and
+    THIRD-PARTY-NOTICES.md say exactly how to replace FastYuv. Blocks the deploy row.
+  - Not: no change to FastYuv itself.
   - Status: Open
 
 - GitHub Pages deploy

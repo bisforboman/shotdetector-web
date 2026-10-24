@@ -19,7 +19,8 @@ scope) are in shotdetector's
 
 First stage: exactness, no UI yet. `src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its
 scene and stats CSVs equal ShotDetector's FFmpeg path's on every sample, all five detectors, natively and on
-browser-wasm (interpreted and AOT).
+browser-wasm (interpreted and AOT), the latter through the page's own exports (`src/ShotDetectorWeb.App`, with the
+worker the page will talk to).
 
 Supported so far: **8-bit 4:2:0 H.264 (progressive) in a non-fragmented MP4, at a constant frame rate, not rotated.**
 Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
@@ -70,15 +71,19 @@ tools/check.sh               # native, then wasm (interpreted); tools/check.sh w
   frame count, frame rate, length, duration, processed size, cuts, scene CSV and stats CSV must be equal. It also
   checks that `samples/reject/` is refused, each file with its own message. A Markdown table goes to
   `out/native-report.md`, (a)'s CSVs to `out/native/`.
-- **wasm** (`tools/WasmCheck`, browser-wasm under Node): the core library on the same samples, its CSVs written to
-  `out/wasm/` and compared with `out/native/` file for file. Interpreted, it fails if FFmpeg.AutoGen (in the bundle
-  because ShotDetector references it) is loaded at all: the runtime loads an assembly only when code needs it, so
-  nothing on the path touches FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads
-  some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only
-  if the runs load one. No FFmpeg library exists in the browser either way.
+- **wasm** (`tools/app-check.mjs`, under Node): the page's own .NET side, `src/ShotDetectorWeb.App` published for
+  browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs;
+  its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
+  checks that progress reaches the last frame, that `samples/reject/` is refused through `Open`, and that the publish
+  output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
+  Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it) is loaded at all
+  (`LoadedAssemblies()`): the runtime loads an assembly only when code needs it, so nothing on the path touches
+  FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads some assemblies at start that
+  the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only if the runs load one. No FFmpeg
+  library exists in the browser either way.
 
-Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; WasmCheck is a
-browser-wasm project, so build it with `dotnet publish tools/WasmCheck`, not as part of a solution).
+Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
+browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution).
 `.github/workflows/ci.yml` runs all of it on Linux.
 
 The samples (tools/make-samples.sh) each isolate something the description must get right: 25, 29.97 and 23.976 fps;
