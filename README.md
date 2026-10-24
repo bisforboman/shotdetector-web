@@ -17,19 +17,36 @@ scope) are in shotdetector's
 
 ## Status
 
-First stage: exactness, no UI yet. `src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its
-scene and stats CSVs equal ShotDetector's FFmpeg path's on every sample, all five detectors, natively and on
-browser-wasm (interpreted and AOT), the latter through the page's own exports (`src/ShotDetectorWeb.App`, with the
-worker the page will talk to).
+`src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its scene and stats CSVs equal
+ShotDetector's FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT),
+the latter through the page's own exports (`src/ShotDetectorWeb.App`). The page (`src/ShotDetectorWeb.App/wwwroot`:
+`index.html`, `app.js`, `style.css`, and `worker.js`, which runs .NET) works in Chromium and Firefox; it isn't online
+yet ("Running the page" below).
 
 Supported so far: **8-bit 4:2:0 H.264 (progressive) in a non-fragmented MP4, at a constant frame rate, not rotated.**
 Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
 codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame rate). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
-Next: the page (plain HTML, .NET on browser-wasm with `[JSExport]`, decoding in a web worker), then GitHub Pages.
-How it is built is decided in [docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work,
-row by row, is in [docs/backlog.md](docs/backlog.md).
+Next: GitHub Pages, the bundle's size, the demo clip. How the page is built is decided in
+[docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work, row by row, is in
+[docs/backlog.md](docs/backlog.md).
+
+## Running the page
+
+```
+dotnet publish src/ShotDetectorWeb.App -c Release      # needs the wasm-tools workload (Checks, below)
+python3 -m http.server 8080 -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot
+```
+
+Then open http://localhost:8080/. Any static server does: the page needs only `.wasm` served as `application/wasm`
+(Python's `http.server` does that) and `.js` as JavaScript; no special headers. The page is plain HTML, JavaScript and
+CSS with no build step: `index.html`, `app.js` (the states, the options, the table, the downloads) and `style.css`.
+`worker.js` starts the .NET runtime in a web worker and calls `Api`'s exports, so the page stays responsive while a
+video is decoded; Cancel terminates the worker and starts a new one. A file is read whole into memory, so the page
+refuses files above 512 MB (`MAX_BYTES` at the top of `app.js`). `dotnet publish` adds to an existing publish
+folder: delete it first when files were removed. How it is built and why:
+[docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md).
 
 ## Using the library
 

@@ -22,7 +22,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`'s `[JSExport]`s `Open(byte[])` (the `YuvVideo` as JSON), `Detect(string optionsJson)` (shots, scene and
   stats CSVs, frame count, rate, duration as JSON), `LoadedAssemblies()`, and `[JSImport] progress(done, expected)`;
-  `wwwroot/worker.js` owns the runtime and answers the page's `open` and `detect` messages.
+  `wwwroot/worker.js` owns the runtime and answers the page's `open` and `detect` messages; the page is
+  `wwwroot/index.html`, `app.js`, `style.css` (no build step, no framework, no dependency; README "Running the page").
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/app-check.mjs`: the App's published
   bundle under Node through the same exports; `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
   holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks; `tools/make-samples.sh`: the
