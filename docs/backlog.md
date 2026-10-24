@@ -20,30 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- The app project: one browser-wasm project with the page's exports, replacing WasmCheck
-  - Why: the page needs a browser-wasm project with `[JSExport]`; the check already has one (tools/WasmCheck). One
-    project means the exactness check runs the page's own entry points (decision "One wasm project").
-  - Where: new `src/ShotDetectorWeb.App` (browser-wasm, `OutputType Exe`, references the core project; `Program.cs`
-    keeps the runtime alive; `Api.cs` with `[JSExport] string Open(byte[] file)` returning the `YuvVideo` as JSON,
-    `[JSExport] string Detect(string optionsJson)` returning JSON with `shots` (`Shots.Json`), `scenesCsv`
-    (`Shots.Csv(shots, cuts: cuts)`), `statsCsv` (`Stats.Csv(video.Position)`), `frameCount`, `frameRate`,
-    `duration`, and `[JSExport] string[] LoadedAssemblies()`; progress through `[JSImport] progress(int done, int
-    expected)` from a `Progress` set in the options; `wwwroot/worker.js` starting `dotnet.js`, answering `open` and
-    `detect` messages and forwarding progress). The options JSON carries what the page offers: `detector`,
-    `threshold` (null: the detector's default), `minSceneLength` (scenedetect's string forms), and an optional
-    `detectors: [...]` (several in one run, each with its kind and threshold: the page sends one, the check sends the
-    `all` run's five). New `tools/app-check.mjs` driving the App's published bundle under Node on every sample and
-    every run of `tools/Shared/Runs.cs`, which becomes the options JSON the script holds (the App bundles no
-    check-only code; `Runs.Csvs` and `BaseName` move to the script or go), writing the CSVs under `out/wasm/`, and
-    failing if `LoadedAssemblies()` grew by an FFmpeg assembly (the interpreted/AOT rule is in `tools/check.sh`
-    today). `tools/check.sh wasm` publishes the App instead of WasmCheck. Delete `tools/WasmCheck`. README "Checks",
-    "Layout" in CLAUDE.md.
-  - Done when: `tools/check.sh wasm` and `tools/check.sh wasm aot` pass through the App's bundle with the same CSVs as
-    before (CI green), `ShotDetector.FastYuv.wasm` is its own file in the published `_framework/` and
-    `licenses/ShotDetector.FastYuv/COPYING.LGPL` is in the publish output.
-  - Not: no `index.html`, no styling, no deploy; no change to the core library's behaviour.
-  - Status: In progress (2026-10-24)
-
 - The page
   - Why: the showcase is the page; everything else is around it.
   - Where: `src/ShotDetectorWeb.App/wwwroot/index.html`, `app.js`, `style.css`, nothing else (no build step, no
