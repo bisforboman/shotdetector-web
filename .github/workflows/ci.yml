@@ -1,0 +1,83 @@
+# Draft (not run yet): the exactness checks on every pull request and push to main. README, "Checks".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # ShotDetector's commit the packages are packed from while 3.14.0 isn't on nuget.org (the merge of #486).
+      SHOTDETECTOR_REF: 587353917d106e906b2fdec439ed0806b1816a1a
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # FFmpeg 8.1 with its shared libraries (BtbN's build, pinned by SHA-256): libx264 makes the samples, and
+      # ShotDetector's in-process path decodes them for the reference results.
+      - name: Install FFmpeg 8.1
+        id: ffmpeg
+        uses: ./.github/actions/btbn-ffmpeg
+        with:
+          build: gpl-shared
+
+      # Until ShotDetector 3.14.0 is on nuget.org: pack it (and FastYuv) from shotdetector into local-feed/, which
+      # Directory.Build.props adds as a source. FrameReader 2.10.0 comes from nuget.org either way.
+      - name: ShotDetector packages
+        run: |
+          if curl -fsS https://api.nuget.org/v3-flatcontainer/shotdetector/index.json | grep -q '"3.14.0"'; then
+            echo "ShotDetector 3.14.0 is on nuget.org."
+            exit 0
+          fi
+          git clone -q https://github.com/bisforboman/shotdetector "$RUNNER_TEMP/shotdetector"
+          git -C "$RUNNER_TEMP/shotdetector" checkout -q "$SHOTDETECTOR_REF"
+          for p in ShotDetector ShotDetector.FastYuv; do
+            dotnet pack "$RUNNER_TEMP/shotdetector/src/$p" -c Release -nologo -v q -o local-feed \
+              -p:ShotDetectorVersion=3.14.0 -p:FrameReaderVersion=2.10.0
+          done
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Make the samples
+        env:
+          FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
+          LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
+        run: tools/make-samples.sh
+
+      - name: Native check (ManagedCodecs + FastYuv against FFmpeg)
+        env:
+          SHOTDETECTOR_FFMPEG_LIBS: ${{ steps.ffmpeg.outputs.bin }}
+        run: tools/check.sh native
+
+      - name: WebAssembly check, interpreted
+        run: tools/check.sh wasm
+
+      - name: WebAssembly check, AOT
+        run: tools/check.sh wasm aot
+
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: results
+          path: out/
+          if-no-files-found: ignore

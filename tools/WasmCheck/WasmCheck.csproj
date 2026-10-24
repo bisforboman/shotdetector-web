@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ShotDetectorWeb.Core on browser-wasm, run by Node (tools/check.sh): writes the same scene and stats CSVs as
+    tools/NativeCheck, which the script compares. Needs the wasm-tools workload (dotnet workload install wasm-tools).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <RootNamespace>ShotDetectorWeb.Checks</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <WasmMainJSPath>main.mjs</WasmMainJSPath>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Runs.cs" Link="Runs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ShotDetectorWeb.Core\ShotDetectorWeb.Core.csproj" />
+  </ItemGroup>
+
+</Project>

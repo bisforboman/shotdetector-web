@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# The exactness checks (README, "Checks"):
+#   native: ShotDetectorWeb.Core (ManagedCodecs + FastYuv) against ShotDetector's Detect(path) through FFmpeg in-process,
+#           every detector, scene and stats CSVs byte for byte (tools/NativeCheck);
+#   wasm:   the same library on browser-wasm under Node (tools/WasmCheck), its CSVs against the native run's.
+#
+# Usage: tools/check.sh [native] [wasm] [aot]     (default: native wasm; aot: the wasm run compiled ahead of time)
+#   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
+#   LD_LIBRARY_PATH) for native, and Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+native=false wasm=false aot=false
+for arg in "$@"; do
+  case $arg in
+    native) native=true ;;
+    wasm) wasm=true ;;
+    aot) aot=true ;;
+    *) echo "Unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
+if [[ $native == false && $wasm == false ]]; then native=true wasm=true; fi
+
+shopt -s nullglob
+samples=(samples/*.mp4)
+rejects=(samples/reject/*)
+if [[ ${#samples[@]} == 0 ]]; then echo "No samples: run tools/make-samples.sh first." >&2; exit 1; fi
+
+if [[ $native == true ]]; then
+  : "${SHOTDETECTOR_FFMPEG_LIBS:?Set SHOTDETECTOR_FFMPEG_LIBS to the folder of an FFmpeg 8.1 shared build}"
+  export LD_LIBRARY_PATH=$SHOTDETECTOR_FFMPEG_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+  dotnet build tools/NativeCheck -c Release -v q -nologo
+  rm -rf out/native
+  mkdir -p out
+  status=0
+  dotnet tools/NativeCheck/bin/Release/net10.0/NativeCheck.dll --out out/native "${samples[@]}" --reject "${rejects[@]}" | tee out/native-report.md || status=$?
+  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then { echo "## Native: ManagedCodecs + FastYuv vs FFmpeg"; cat out/native-report.md; } >> "$GITHUB_STEP_SUMMARY"; fi
+  if [[ $status != 0 ]]; then echo "The native check failed (above)." >&2; exit 1; fi
+fi
+
+if [[ $wasm == true ]]; then
+  if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
+  dotnet publish tools/WasmCheck -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot
+  bundle=tools/WasmCheck/bin/Release/net10.0/browser-wasm/AppBundle
+  rm -rf out/wasm
+  mkdir -p out/wasm
+  abs=()
+  for s in "${samples[@]}"; do abs+=("$PWD/$s"); done
+  # The runtime's own notes (under Node, that it can't load its symbol file) come on stdout, starting MONO_WASM.
+  node "$bundle/main.mjs" "$PWD/out/wasm" "${abs[@]}" 2> out/wasm-stderr.txt | grep -v '^MONO_WASM:' || true
+  cat out/wasm-stderr.txt
+  if ! grep -q '^No FFmpeg assembly loaded.$' out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
+
+  files=0 differ=0
+  for n in out/native/*.csv; do
+    [[ $n == *.ffmpeg.* ]] && continue
+    files=$((files + 1))
+    w=out/wasm/${n#out/native/}
+    if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
+  done
+  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs identical."
+  echo "$summary"
+  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+  if [[ $differ != 0 ]]; then exit 1; fi
+fi

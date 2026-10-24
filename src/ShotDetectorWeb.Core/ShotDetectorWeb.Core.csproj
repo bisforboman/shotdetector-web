@@ -12,7 +12,12 @@
 
   <ItemGroup>
     <PackageReference Include="ShotDetector" />
-    <PackageReference Include="ShotDetector.FastYuv" />
+    <PackageReference Include="ShotDetector.FastYuv" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- FastYuv's license goes wherever its DLL goes (LGPL-2.1: the notice ships with the library). -->
+  <ItemGroup>
+    <None Include="$(PkgShotDetector_FastYuv)/COPYING.LGPL" Link="licenses/ShotDetector.FastYuv/COPYING.LGPL" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
