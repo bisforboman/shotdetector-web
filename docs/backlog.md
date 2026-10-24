@@ -42,7 +42,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     before (CI green), `ShotDetector.FastYuv.wasm` is its own file in the published `_framework/` and
     `licenses/ShotDetector.FastYuv/COPYING.LGPL` is in the publish output.
   - Not: no `index.html`, no styling, no deploy; no change to the core library's behaviour.
-  - Status: Open
+  - Status: In progress (2026-10-24)
 
 - The page
   - Why: the showcase is the page; everything else is around it.
