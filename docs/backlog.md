@@ -78,6 +78,79 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
   - Not: no second decode in .NET, no image export.
   - Status: Open
 
+The five rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
+itself", which lists the first release's page, not every page there will be. Each touches `app.js` and `index.html`,
+as thumbnails does, so they run one at a time, in this order. Whatever the page derives for display is labelled as
+the page's own; the CSVs stay the only output the exactness check speaks for.
+
+- Warnings on the page
+  - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.
+  - Where: `src/ShotDetectorWeb.App/Api.cs`: `warnings` (the strings as they are) added to `DetectResponse`;
+    `app.js` shows them under the summary when there are any.
+  - Done when: a run that produces a warning shows it on the page (find which input does, or say none of the samples
+    does and show it with a made-up response in the PR); `tools/check.sh wasm` and `wasm aot` green, CSVs unchanged.
+  - Not: no new warnings of our own.
+  - Status: Open
+
+- About this file
+  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
+    already returns that description as JSON, but the page shows none of it.
+  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
+    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
+    not the enum's name), the raw JSON one click away.
+  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
+    tags, full range, the cropped 854x480); screenshots in the PR.
+  - Not: no fields the core doesn't already return.
+  - Status: Open
+
+- Shot statistics and a timeline
+  - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
+    of shots under the player shows where the cuts are at a glance.
+  - Where: `app.js`, `index.html`, `style.css`: from the shots as `Detect` returns them, the number of shots, average and
+    median shot length, shortest and longest, cuts per minute, and how long the run took against the video's length
+    ("2.4 times real time"); a strip of shots in proportion to their length under the `<video>`, each one seeking to its
+    shot, with the playhead following `timeupdate` and the current shot's table row marked.
+  - Done when: the Sintel trailer's numbers match what the scenes CSV gives by hand, and the strip and the table follow
+    playback; screenshots in the PR.
+  - Not: no change to `Api`, no libraries.
+  - Status: Open
+
+- A graph of the scores
+  - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
+    a cut was found and what a different threshold would do. The stats are computed for every run already
+    (`statsCsv`), and the page only offers them as a download.
+  - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
+    threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
+    differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
+    CSV header, not by position, and say in the row's PR which column each detector's graph shows.
+  - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
+    threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
+  - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
+    languages is how results drift).
+  - Status: Open
+
+- A waveform from ManagedCodecs' AAC
+  - Why: a waveform under the player shows where the sound changes against the cuts. The owner chose (2026-10-24) to
+    decode it with ManagedCodecs' `AacDecoder` (AAC LC and HE-AAC, within 3e-7 of FFmpeg's float output) rather than
+    the browser's Web Audio, so every decoder on the page is managed code. Unlike "Pictures of shots", which uses the
+    browser's decode, this is on purpose.
+  - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
+    into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
+    holding the decoded audio. `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
+    gotcha on priming and `SkipSamples`, and apply the edit list. The App: its own `[JSExport]` (not part of `Detect`,
+    so detection's time and results stay as they are), called by `worker.js` after `Detect`. `app.js` draws it on the
+    shots strip from "Shot statistics and a timeline" (depends on that row). A file without an audio track draws
+    nothing and says nothing. A track that isn't AAC, or that `AacDecoder` refuses (HE-AAC v2 with 34-band parametric
+    stereo, for example), gets one line saying why there's no waveform, not an error. A sample in
+    `tools/make-samples.sh` with a tone, a second of silence, then the tone again (`sine`, `anullsrc`), plus a check in
+    `tools/app-check.mjs` that the envelope is loud, silent, loud at those times, within a video frame.
+  - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
+    Chromium and Firefox (screenshots in the PR). The PR gives how much the bundle grew and how much time the decode
+    adds on the trailer.
+  - Not: no Web Audio; no change to playback (the `<video>` still plays the sound); no audio-based cut detection
+    (ShotDetector has none); no exactness check against FFmpeg's audio, since a waveform has nothing to be exact about.
+  - Status: Open
+
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships (the trimmer keeps whole assemblies that don't opt in:
     ShotDetector's package isn't marked `IsTrimmable`), and THIRD-PARTY-NOTICES.md has to list it.
