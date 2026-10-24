@@ -18,6 +18,25 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
+### Picked up next
+
+The owner moved this row ahead of the rest (2026-10-24): a film should run, not be refused.
+
+- Large files: stream from the file instead of copying it into memory
+  - Why: the page refuses files above 512 MB, and a feature-length MP4 is bigger. The whole file is copied twice
+    (into the page's memory, then into .NET's), a .NET array stops just under 2 GB, and the browser gives wasm at
+    most 4 GB on a desktop, less on a phone. `Mp4Input` takes a `Func<Stream>`, and workers have `FileReaderSync`, so
+    a stream that reads slices of the `File` synchronously needs no change to the core. Decision "The file in memory".
+  - Where: `src/ShotDetectorWeb.App`: a `BlobStream` (`Stream` over `[JSImport]` slice reads, a buffer of a megabyte
+    or so, seekable) and `Open` taking a handle to the file rather than its bytes; `worker.js` and `app.js` pass the
+    `File`; drop the size limit and its "trailers, not films" message. Instead, before a run starts, say how long it
+    will take: the measured frames per second scaled by picture size, labelled as an estimate. `tools/app-check.mjs`
+    reads samples through the same path under Node (a `Blob` from the file). Measure peak memory on a two-hour file.
+    The audio rows will read their packets through the same stream.
+  - Done when: a 2 GB MP4 runs in Chrome without the heap growing with the file; checks green.
+  - Not: no change to how the frames are decoded.
+  - Status: Open
+
 ### First release: the page on GitHub Pages
 
 - The demo clip
@@ -42,18 +61,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
   - Done when: the job fails when `app.js` breaks the download and passes on `main`.
   - Not: no cross-browser matrix, no visual tests.
-  - Status: Open
-
-- Large files: stream from the file instead of copying it into memory
-  - Why: the page refuses files above 512 MB; a feature-length MP4 is bigger. `Mp4Input` takes a `Func<Stream>`, and
-    workers have `FileReaderSync`, so a stream that reads slices of the `File` synchronously needs no change to the
-    core. Decision "The file in memory".
-  - Where: `src/ShotDetectorWeb.App`: a `BlobStream` (`Stream` over `[JSImport]` slice reads, a buffer of a megabyte
-    or so, seekable) and `Open` taking a handle to the file rather than its bytes; `worker.js` and `app.js` pass the
-    `File`; drop the size limit; `tools/app-check.mjs` reads samples through the same path under Node (a `Blob` from
-    the file). Measure peak memory on a two-hour file.
-  - Done when: a 2 GB MP4 runs in Chrome without the heap growing with the file; checks green.
-  - Not: no change to how the frames are decoded.
   - Status: Open
 
 - Thumbnails per shot
@@ -200,6 +207,12 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
 
 ## Waiting
 
+Asks upstream, for filing together once the owner says so (none filed as of 2026-10-24):
+- **shotdetector:** an asynchronous frame-source `Detect` ("Cancel without restarting the worker"), and a way to be
+  told each shot on the frame-source path ("Shots as they're found").
+- **FrameReader:** entries for `ReferenceTone` and `WaveformData` that take samples rather than an FFmpeg-backed
+  `AudioReader` ("Audio measures", the waveform row).
+
 - ManagedCodecs' license
   - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to
     every visitor and should say under what terms.
@@ -229,8 +242,32 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
   - Done when: on the Sintel trailer, a run cancelled mid-way is followed at once by a run with another threshold,
     without opening the file again; the yields cost under 1% of the run's time (pick N for it); checks green, CSVs
     unchanged.
-  - Not: no partial results (a cancelled run throws, upstream too); no shared memory.
+  - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; the shots found before the cancel
+    are the next row's, which also gives them CSVs once this one lands.
   - Status: Waiting on upstream (2026-10-24: ShotDetector has no asynchronous frame-source `Detect`)
+
+- Shots as they're found, kept when a run is cancelled
+  - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
+    owner wants the shots found so far shown, and kept after a cancel (2026-10-24). ShotDetector already reports
+    each shot once the cut that ends it is confirmed (`Run`'s `onShot`, which `DetectStreamAsync` uses: "the shots
+    are exactly those Detect returns"), but the frame-source `Detect` passes none.
+  - Where: first upstream (bisforboman/shotdetector): a way to be told each shot on the frame-source path, reported
+    synchronously on the detection thread, as `DetectionOptions.Warnings` is, since single-threaded wasm has no other
+    thread to report on (the API is upstream's to choose). Then here: a `[JSImport] shot(...)` called for each one,
+    like `progress`, which `worker.js` posts on (a `postMessage` from synchronous .NET is delivered, decision "Where
+    the runtime lives"); `app.js` adds each row to the table as it comes. On Cancel the table stays, with one more
+    line from the last cut to where the run stopped, marked unfinished, not as a shot. The shots arrive a few frames
+    late (the adaptive detector's window, the minimum shot length), and only for one detector without
+    `DropShortScenes` or `MergeLastScene` (`Run`'s `incremental`), which is what the page sends; with several
+    detectors they all come at the end. `tools/app-check.mjs` checks that the shots told equal the result's shots,
+    exactly, on every sample and run.
+  - Done when: on the Sintel trailer, rows appear while the run goes, and a cancel mid-way leaves the shots found so
+    far and the unfinished line; checks green.
+  - Not: no downloads for a cancelled run while Cancel terminates the worker (.NET is gone, and a CSV built in
+    JavaScript would be a second `Shots.Csv`). Once "Cancel without restarting the worker" lands, `Api` keeps the shots
+    it was told and makes the scenes CSV from them with `Shots.Csv`, and that becomes a line of this row. No partial
+    stats CSV (the stats are in the result).
+  - Status: Waiting on upstream (2026-10-24: the frame-source `Detect` has no shot callback)
 
 ## Maybe
 
