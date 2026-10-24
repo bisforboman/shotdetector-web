@@ -54,3 +54,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the published file alone was tried and fails three ways (integrity hashes, trimmed facades, the AOT image).
     `tools/check.sh replace aot` in CI builds a visibly changed FastYuv from its tag and proves the rebuilt bundle runs
     it; README "Licensing" and THIRD-PARTY-NOTICES.md give the recipe)
+
+- GitHub Pages deploy
+  - Why: the page is for visitors.
+  - Status: Done (2026-10-24: `.github/workflows/pages.yml`, on CI's success for a push to `main` (`workflow_run`),
+    publishes the App ahead of time; the bundle is the publish's `wwwroot/`, to which it adds `.nojekyll` and
+    `licenses/ShotDetector.FastYuv/COPYING.LGPL` (the core csproj puts it in the publish root, outside the bundle),
+    uploads it with `include-hidden-files` (`upload-pages-artifact` leaves dotfiles out otherwise) and fails before
+    `deploy-pages` unless the uploaded archive lists `_framework/ShotDetector.FastYuv.wasm` and the license as regular
+    files. The repository's Pages source is "GitHub Actions" (the owner, 2026-10-24). Before the merge, the workflow's
+    own steps run here on an AOT publish, served under `/shotdetector-web/`: in headless Chromium the cuts sample and
+    Sintel's trailer gave the native check's scenes and stats CSVs, the two LGPL files served; the check fails
+    without them. Live: https://bisforboman.github.io/shotdetector-web/)

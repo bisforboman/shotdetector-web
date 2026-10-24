@@ -20,21 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- GitHub Pages deploy
-  - Why: the page is for visitors.
-  - Where: `.github/workflows/pages.yml`: on push to `main` (after CI, `workflow_run` or a job needing the check job),
-    publish the App ahead of time (`-p:RunAOTCompilation=true`), add `.nojekyll`, upload the bundle folder as the
-    Pages artifact (look at where `dotnet publish` puts it: `AppBundle` in `tools/check.sh` today, `wwwroot` in newer
-    layouts; don't assume), deploy with `actions/deploy-pages`; pin actions by commit SHA with the tag in a comment,
-    as `ci.yml`. The core csproj copies `licenses/ShotDetector.FastYuv/COPYING.LGPL` to the publish root, which is
-    probably outside the bundle folder: copy it in (the csproj or the workflow). A step that fails the deploy unless
-    the published listing has `_framework/ShotDetector.FastYuv.wasm` as its own file and
-    `licenses/ShotDetector.FastYuv/COPYING.LGPL`. README: the URL, "Status". Depends on the page row.
-  - Done when: https://bisforboman.github.io/shotdetector-web runs a sample end to end; the two files are in the live
-    site; the repository's Pages setting is "GitHub Actions" (the owner sets it; say so in the PR).
-  - Not: no compression or size work (next row), no demo clip.
-  - Status: In progress (2026-10-24)
-
 - Bundle size
   - Why: a .NET browser-wasm publish is tens of megabytes raw; a visitor on a phone gives up. Decision "Delivery".
   - Where: measure the published `_framework/` (raw, and transferred from the live site: does Pages gzip
