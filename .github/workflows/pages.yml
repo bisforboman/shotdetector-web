@@ -1,0 +1,92 @@
+# The page on GitHub Pages (https://bisforboman.github.io/shotdetector-web/): after CI passes on a push to main, the App
+# published ahead of time, deployed as it is. README, "Status"; decision 2026-10-24-the-page.md, "Delivery". The
+# repository's Pages source is "GitHub Actions". workflow_dispatch redeploys main by hand.
+name: Pages
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer one waits rather than cancelling one half done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Only the commit CI just passed on a push to main (not a pull request's run that happens to be from main).
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
+      github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          submodules: true
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      # As tools/check.sh wasm aot publishes it, which CI just checked against the native results.
+      - name: Publish the App ahead of time
+        run: dotnet publish src/ShotDetectorWeb.App -c Release -nologo -warnaserror -p:RunAOTCompilation=true
+
+      # The bundle is the publish's wwwroot/. FastYuv's license (LGPL-2.1) is copied by the core csproj to the publish
+      # root, outside it, so it goes in here; .nojekyll so nothing on Pages' side touches the files.
+      - name: Make the site
+        id: site
+        run: |
+          publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
+          site=$publish/wwwroot
+          mkdir -p "$site/licenses/ShotDetector.FastYuv"
+          cp "$publish/licenses/ShotDetector.FastYuv/COPYING.LGPL" "$site/licenses/ShotDetector.FastYuv/"
+          touch "$site/.nojekyll"
+          echo "path=$site" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ steps.site.outputs.path }}
+          include-hidden-files: true
+
+      # LGPL-2.1 (README, Licensing): checked in the archive just uploaded, the one Pages deploys. FastYuv must be its
+      # own file in _framework/ and its license must be there; the deploy job doesn't run if not.
+      - name: Check the uploaded site
+        run: |
+          tar -tvf "$RUNNER_TEMP/artifact.tar" | tee "$RUNNER_TEMP/listing.txt" | wc -l | xargs echo "Files and folders:"
+          status=0
+          for f in .nojekyll index.html _framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL; do
+            # A regular file (type -), not a link: tar's long listing starts with the type.
+            if awk -v f="./$f" '$1 ~ /^-/ && $NF == f { found = 1 } END { exit !found }' "$RUNNER_TEMP/listing.txt"; then echo "In the site: $f"; else echo "::error::Not in the site as its own file: $f"; status=1; fi
+          done
+          { echo "## The site"; echo; echo '```'; awk '{print $3, $NF}' "$RUNNER_TEMP/listing.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
