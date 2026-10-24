@@ -45,3 +45,12 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     check's scenes and stats CSVs, Sintel's trailer included (60 to 77 frames per second); progress moves; cancel
     mid-run, then a second run; each file in `samples/reject/`, a damaged and a 600 MB file show their messages.
     Safari not tried: the owner's, before the demo clip row)
+
+- FastYuv under AOT: is it still its own, replaceable library?
+  - Why: the page ships compiled ahead of time, which puts FastYuv's code in `dotnet.native.wasm` too; LGPL-2.1
+    (section 6) asks that a user can replace the library.
+  - Status: Done (2026-10-24, PR #7: decision [2026-10-24-fastyuv-replaceable.md](decisions/2026-10-24-fastyuv-replaceable.md),
+    choice 1, the owner's: AOT kept, FastYuv replaced by rebuilding the App with `-p:FastYuvAssembly=<dll>`; swapping
+    the published file alone was tried and fails three ways (integrity hashes, trimmed facades, the AOT image).
+    `tools/check.sh replace aot` in CI builds a visibly changed FastYuv from its tag and proves the rebuilt bundle runs
+    it; README "Licensing" and THIRD-PARTY-NOTICES.md give the recipe)
