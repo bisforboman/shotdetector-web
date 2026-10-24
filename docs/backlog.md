@@ -41,13 +41,15 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     (`Shots.Csv(shots, cuts: cuts)`), `statsCsv` (`Stats.Csv(video.Position)`), `frameCount`, `frameRate`,
     `duration`, and `[JSExport] string[] LoadedAssemblies()`; progress through `[JSImport] progress(int done, int
     expected)` from a `Progress` set in the options; `wwwroot/worker.js` starting `dotnet.js`, answering `open` and
-    `detect` messages and forwarding progress). The options JSON carries only what the page offers: `detector`,
-    `threshold` (null: the detector's default), `minSceneLength` (scenedetect's string forms). New
-    `tools/app-check.mjs` driving the App's published bundle under Node on every sample and every run of
-    `tools/Shared/Runs.cs` (which the App then compiles in, or the runs move to JSON the script holds), writing the
-    CSVs under `out/wasm/`, and failing if `LoadedAssemblies()` grew by an FFmpeg assembly (the interpreted/AOT rule
-    is in `tools/check.sh` today). `tools/check.sh wasm` publishes the App instead of WasmCheck. Delete
-    `tools/WasmCheck`. README "Checks", "Layout" in CLAUDE.md.
+    `detect` messages and forwarding progress). The options JSON carries what the page offers: `detector`,
+    `threshold` (null: the detector's default), `minSceneLength` (scenedetect's string forms), and an optional
+    `detectors: [...]` (several in one run, each with its kind and threshold: the page sends one, the check sends the
+    `all` run's five). New `tools/app-check.mjs` driving the App's published bundle under Node on every sample and
+    every run of `tools/Shared/Runs.cs`, which becomes the options JSON the script holds (the App bundles no
+    check-only code; `Runs.Csvs` and `BaseName` move to the script or go), writing the CSVs under `out/wasm/`, and
+    failing if `LoadedAssemblies()` grew by an FFmpeg assembly (the interpreted/AOT rule is in `tools/check.sh`
+    today). `tools/check.sh wasm` publishes the App instead of WasmCheck. Delete `tools/WasmCheck`. README "Checks",
+    "Layout" in CLAUDE.md.
   - Done when: `tools/check.sh wasm` and `tools/check.sh wasm aot` pass through the App's bundle with the same CSVs as
     before (CI green), `ShotDetector.FastYuv.wasm` is its own file in the published `_framework/` and
     `licenses/ShotDetector.FastYuv/COPYING.LGPL` is in the publish output.
@@ -68,19 +70,23 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
     prefixed "The file is damaged or not an MP4 this page can read:"); a footer saying what runs where, that nothing
     leaves the machine, and linking LICENSE and THIRD-PARTY-NOTICES.md. Depends on the app project row. Serve for
     development with any static server on the publish's `wwwroot` (say which in README "Running the page").
-  - Done when: in Chrome, Firefox and Safari, a sample from `tools/make-samples.sh` and a real trailer give the native
+  - Done when: in Chromium and Firefox, a sample from `tools/make-samples.sh` and a real trailer give the native
     check's scenes CSV, progress moves, cancel works mid-run and a second run works after it, each refused file in
-    `samples/reject/` shows its message. A short screen recording or screenshots in the PR.
+    `samples/reject/` shows its message. A short screen recording or screenshots in the PR. Safari is the owner's to
+    try (before the demo clip row); the PR says it wasn't.
   - Not: no demo clip (its own row), no thumbnails, no streaming of large files, no options beyond the three above.
   - Status: Open
 
 - GitHub Pages deploy
   - Why: the page is for visitors.
   - Where: `.github/workflows/pages.yml`: on push to `main` (after CI, `workflow_run` or a job needing the check job),
-    publish the App ahead of time (`-p:RunAOTCompilation=true`), add `.nojekyll`, upload the `wwwroot` as the Pages
-    artifact, deploy with `actions/deploy-pages`; pin actions by commit SHA with the tag in a comment, as `ci.yml`.
-    A step that fails the deploy unless the published listing has `_framework/ShotDetector.FastYuv.wasm` as its own
-    file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`. README: the URL, "Status". Depends on the page row.
+    publish the App ahead of time (`-p:RunAOTCompilation=true`), add `.nojekyll`, upload the bundle folder as the
+    Pages artifact (look at where `dotnet publish` puts it: `AppBundle` in `tools/check.sh` today, `wwwroot` in newer
+    layouts; don't assume), deploy with `actions/deploy-pages`; pin actions by commit SHA with the tag in a comment,
+    as `ci.yml`. The core csproj copies `licenses/ShotDetector.FastYuv/COPYING.LGPL` to the publish root, which is
+    probably outside the bundle folder: copy it in (the csproj or the workflow). A step that fails the deploy unless
+    the published listing has `_framework/ShotDetector.FastYuv.wasm` as its own file and
+    `licenses/ShotDetector.FastYuv/COPYING.LGPL`. README: the URL, "Status". Depends on the page row.
   - Done when: https://bisforboman.github.io/shotdetector-web runs a sample end to end; the two files are in the live
     site; the repository's Pages setting is "GitHub Actions" (the owner sets it; say so in the PR).
   - Not: no compression or size work (next row), no demo clip.
@@ -102,8 +108,8 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 - The demo clip
   - Why: the owner wants a visitor to try it without a file of their own (2026-10-24). Decision "The demo clip".
   - Where: `tools/make-samples.sh`: a recipe that, given `SINTEL=<the original trailer>`, re-encodes it to 8-bit
-    4:2:0 progressive H.264 at a constant rate in a non-fragmented MP4 (libx264, 480p or 720p, around 15 MB;
-    ffprobe-verified in the script), so CI's native check covers it; `ci.yml` and `pages.yml` download the original
+    4:2:0 progressive H.264 at a constant rate in a non-fragmented MP4 (libx264, 480p as the sample's name says,
+    around 10 MB; ffprobe-verified in the script), so CI's native check covers it; `ci.yml` and `pages.yml` download the original
     from download.blender.org (Sintel's trailer, Blender Foundation, CC-BY 3.0) pinned by SHA-256 and run the recipe;
     `pages.yml` puts the result next to the page as `demo/sintel-trailer.mp4`; `index.html` gets "Try the demo"
     which fetches it and runs it as a picked file, and a credit line with the license. THIRD-PARTY-NOTICES.md: the

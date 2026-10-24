@@ -29,9 +29,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 
 ## Working on this repository
 
-- Work is a row of `docs/backlog.md`: one row, one pull request against `main`, CI green. Set its status to In
-  progress when starting (with the date), move it to `docs/backlog-done.md` when it lands, and add a row when a gap
-  turns up. A design question that the row doesn't settle goes to `docs/decisions/` before the code.
+- Work is a row of `docs/backlog.md`: one row, one cloud session (the owner's choice, 2026-10-24: not on their
+  machine), one pull request against `main`, CI green. Set its status to In progress when starting (with the date),
+  move it to `docs/backlog-done.md` when it lands, and add a row when a gap turns up. A design question that the row doesn't settle goes to `docs/decisions/` before the code.
 - Scope so far: 8-bit 4:2:0 progressive H.264 in non-fragmented MP4, constant frame rate, not rotated; anything else
   is refused in `Mp4Input`'s constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it.
