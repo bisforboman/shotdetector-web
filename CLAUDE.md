@@ -30,7 +30,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
   holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks; `tools/make-samples.sh`: the
   samples.
-- `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`.
+- `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`;
+  `.github/workflows/pages.yml`: after CI on a push to `main`, the AOT publish's `wwwroot/` plus FastYuv's license and
+  `.nojekyll`, checked for the two LGPL files, deployed to https://bisforboman.github.io/shotdetector-web/.
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
   (`2026-10-24-the-page.md`: how the page is built).

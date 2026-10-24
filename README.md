@@ -17,24 +17,25 @@ scope) are in shotdetector's
 
 ## Status
 
-The page runs locally ("Running the page"), not yet on GitHub Pages. `src/ShotDetectorWeb.Core` opens an MP4 and
-detects; the checks show that its scene and stats CSVs equal ShotDetector's FFmpeg path's on every sample, all five
-detectors, natively and on browser-wasm (interpreted and AOT), the latter through the page's own exports
-(`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
+The page is live at **https://bisforboman.github.io/shotdetector-web/**, compiled ahead of time and deployed by
+`.github/workflows/pages.yml` after CI passes on each push to `main` (it runs locally too: "Running the page").
+`src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its scene and stats CSVs equal ShotDetector's
+FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
+through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
 Supported so far: **8-bit 4:2:0 H.264 (progressive) in a non-fragmented MP4, at a constant frame rate, not rotated.**
 Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
 codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame rate). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
-Next: GitHub Pages. How the page is built is decided in
+Next: the bundle's size, then the demo clip. How the page is built is decided in
 [docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work, row by row, is in
 [docs/backlog.md](docs/backlog.md).
 
 ## Running the page
 
 ```
-dotnet publish src/ShotDetectorWeb.App -c Release            # -p:RunAOTCompilation=true for the build Pages will get
+dotnet publish src/ShotDetectorWeb.App -c Release            # -p:RunAOTCompilation=true for the build Pages gets
 python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot 8000
 ```
 
@@ -104,7 +105,10 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
 browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution).
-`.github/workflows/ci.yml` runs all of it on Linux.
+`.github/workflows/ci.yml` runs all of it on Linux; after it passes on a push to `main`,
+`.github/workflows/pages.yml` publishes the App ahead of time, adds FastYuv's license and `.nojekyll`, fails unless
+the uploaded site has `_framework/ShotDetector.FastYuv.wasm` and `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files
+of their own, and deploys it to GitHub Pages.
 
 The samples (tools/make-samples.sh) each isolate something the description must get right: 25, 29.97 and 23.976 fps;
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
@@ -140,7 +144,8 @@ git clone --recursive https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
   -p:FastYuvAssembly=$PWD/shotdetector/src/ShotDetector.FastYuv/bin/Release/net10.0/ShotDetector.FastYuv.dll
-# the page is shotdetector-web/src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot
+# the page is shotdetector-web/src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot, FastYuv's license in
+# publish/licenses/ (pages.yml copies it into the site, as licenses/ShotDetector.FastYuv/COPYING.LGPL)
 ```
 
 `tools/check.sh replace` does this with a visibly changed FastYuv and checks the rebuilt bundle runs it; CI runs it
