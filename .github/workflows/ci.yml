@@ -1,4 +1,4 @@
-# Draft (not run yet): the exactness checks on every pull request and push to main. README, "Checks".
+# The exactness checks on every pull request and push to main. README, "Checks".
 name: CI
 
 on:

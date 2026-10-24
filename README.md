@@ -27,6 +27,8 @@ codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame ra
 `InvalidDataException`.
 
 Next: the page (plain HTML, .NET on browser-wasm with `[JSExport]`, decoding in a web worker), then GitHub Pages.
+How it is built is decided in [docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work,
+row by row, is in [docs/backlog.md](docs/backlog.md).
 
 ## Using the library
 
