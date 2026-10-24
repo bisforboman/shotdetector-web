@@ -20,27 +20,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
-- The page
-  - Why: the showcase is the page; everything else is around it.
-  - Where: `src/ShotDetectorWeb.App/wwwroot/index.html`, `app.js`, `style.css`, nothing else (no build step, no
-    framework, no dependency). A file input that also takes a drop; the detector (adaptive, content, threshold,
-    histogram, hash), its threshold prefilled with ShotDetector's default for that detector, the minimum shot length
-    (default "0.6s"); states *idle*, *opening*, *detecting* (progress bar from `progress`, frames per second),
-    *done*, *error*, with a Cancel that terminates the worker and starts a new one; files above 512 MB refused before
-    they are read, with a message saying trailers, not films, yet (the limit a constant at the top of `app.js`); the
-    result as a table (shot, start, end, length, as `Shots.Json` gives them) whose rows seek a `<video>` playing the
-    chosen file (`URL.createObjectURL`); downloads of the scenes CSV and the stats CSV named `<file>.scenes.csv` and
-    `<file>.stats.csv`; errors shown with the message the library threw (ManagedCodecs' `InvalidDataException`
-    prefixed "The file is damaged or not an MP4 this page can read:"); a footer saying what runs where, that nothing
-    leaves the machine, and linking LICENSE and THIRD-PARTY-NOTICES.md. Depends on the app project row. Serve for
-    development with any static server on the publish's `wwwroot` (say which in README "Running the page").
-  - Done when: in Chromium and Firefox, a sample from `tools/make-samples.sh` and a real trailer give the native
-    check's scenes CSV, progress moves, cancel works mid-run and a second run works after it, each refused file in
-    `samples/reject/` shows its message. A short screen recording or screenshots in the PR. Safari is the owner's to
-    try (before the demo clip row); the PR says it wasn't.
-  - Not: no demo clip (its own row), no thumbnails, no streaming of large files, no options beyond the three above.
-  - Status: Open
-
 - FastYuv under AOT: is it still its own, replaceable library?
   - Why: the deploy publishes ahead of time, and an AOT publish compiles every assembly's code into
     `_framework/dotnet.native.wasm` (it holds `mono_aot_ShotDetector_FastYuv_*`, seen 2026-10-24 in the app project's

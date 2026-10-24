@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shot detection in the browser</title>
+  <meta name="description" content="Finds the shots in an MP4 on WebAssembly, with scenedetect's results byte for byte. Nothing leaves the machine.">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Shot detection in the browser</h1>
+    <p>Pick an MP4 and get its shots, the same as <a href="https://www.scenedetect.com/">scenedetect</a> finds them,
+      byte for byte. The video is decoded and analysed here, on this machine.</p>
+  </header>
+
+  <main>
+    <form id="form">
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".mp4,video/mp4">
+        <span id="drop-text">Choose an MP4, or drop one here</span>
+        <small>8-bit 4:2:0 H.264, progressive, constant frame rate, up to 512 MB</small>
+      </label>
+
+      <div class="options">
+        <label>Detector
+          <select id="detector">
+            <option value="adaptive">adaptive</option>
+            <option value="content">content</option>
+            <option value="threshold">threshold</option>
+            <option value="histogram">histogram</option>
+            <option value="hash">hash</option>
+          </select>
+        </label>
+        <label>Threshold
+          <input type="number" id="threshold" step="any" min="0" required>
+        </label>
+        <label>Minimum shot length
+          <input type="text" id="min-length" value="0.6s" required
+            title="Frames (15), seconds (0.6s or 0.6) or HH:MM:SS.mmm, as scenedetect takes it">
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" id="detect" disabled>Detect shots</button>
+        <button type="button" id="cancel" hidden>Cancel</button>
+      </div>
+    </form>
+
+    <section id="status" aria-live="polite">
+      <progress id="progress" max="1" hidden></progress>
+      <p id="status-text"></p>
+    </section>
+
+    <section id="error" role="alert" hidden></section>
+
+    <section id="result" hidden>
+      <video id="video" controls preload="metadata"></video>
+      <div class="result-side">
+        <p id="summary"></p>
+        <p class="downloads">
+          <a id="scenes-csv" download>Scenes CSV</a>
+          <a id="stats-csv" download>Stats CSV</a>
+        </p>
+        <table id="shots">
+          <thead><tr><th>Shot</th><th>Start</th><th>End</th><th>Length</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>What runs where: <a href="https://github.com/bisforboman/ManagedCodecs">ManagedCodecs</a> demuxes the MP4 and
+      decodes the H.264, ShotDetector.FastYuv converts the frames and
+      <a href="https://github.com/bisforboman/shotdetector">ShotDetector</a> finds the shots, all of it .NET on
+      WebAssembly, in a worker of this page. The player is your browser's own; the shots don't come from it.</p>
+    <p>Nothing leaves your machine: the file is read here, there is no upload, no server and no analytics.</p>
+    <p><a href="https://github.com/bisforboman/shotdetector-web">Source</a> ·
+      <a href="https://github.com/bisforboman/shotdetector-web/blob/main/LICENSE">MIT license</a> ·
+      <a href="https://github.com/bisforboman/shotdetector-web/blob/main/THIRD-PARTY-NOTICES.md">Third-party notices</a>
+      (ShotDetector.FastYuv is LGPL-2.1-or-later, its own replaceable file)</p>
+  </footer>
+</body>
+</html>
