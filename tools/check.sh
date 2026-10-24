@@ -2,7 +2,8 @@
 # The exactness checks (README, "Checks"):
 #   native: ShotDetectorWeb.Core (ManagedCodecs + FastYuv) against ShotDetector's Detect(path) through FFmpeg in-process,
 #           every detector, scene and stats CSVs byte for byte (tools/NativeCheck);
-#   wasm:   the same library on browser-wasm under Node (tools/WasmCheck), its CSVs against the native run's.
+#   wasm:   the same library on browser-wasm under Node, through the page's own exports (src/ShotDetectorWeb.App,
+#           driven by tools/app-check.mjs), its CSVs against the native run's.
 #
 # Usage: tools/check.sh [native] [wasm] [aot]     (default: native wasm; aot: the wasm run compiled ahead of time)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
@@ -40,29 +41,37 @@ fi
 
 if [[ $wasm == true ]]; then
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
-  dotnet publish tools/WasmCheck -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot
-  bundle=tools/WasmCheck/bin/Release/net10.0/browser-wasm/AppBundle
+  publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
+  rm -rf "$publish"
+  dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot
+  # LGPL-2.1: FastYuv is its own file in the bundle, its license in the publish output.
+  for f in wwwroot/_framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL; do
+    if [[ ! -f $publish/$f ]]; then echo "Not in the App's publish output: $f" >&2; exit 1; fi
+  done
   rm -rf out/wasm
-  mkdir -p out/wasm
-  abs=()
-  for s in "${samples[@]}"; do abs+=("$PWD/$s"); done
   # The runtime's own notes (under Node, that it can't load its symbol file) come on stdout, starting MONO_WASM.
-  node "$bundle/main.mjs" "$PWD/out/wasm" "${abs[@]}" 2> out/wasm-stderr.txt | grep -v '^MONO_WASM:' || true
+  status=0
+  node tools/app-check.mjs "$publish/wwwroot" out/wasm "${samples[@]}" --reject "${rejects[@]}" 2> out/wasm-stderr.txt \
+    | { grep -v '^MONO_WASM:' || true; } || status=$?
   cat out/wasm-stderr.txt
-  # Interpreted, FFmpeg.AutoGen must not be loaded at all; AOT loads every bundled assembly before Main, so there only
-  # the runs must not load it.
+  if [[ $status != 0 ]]; then echo "The WebAssembly run failed (above)." >&2; exit 1; fi
+  # Interpreted, FFmpeg.AutoGen must not be loaded at all; AOT loads some assemblies before the first call, FFmpeg.AutoGen
+  # among them, so there only the runs must not load it.
   if [[ $aot == true ]]; then expect='^No FFmpeg assembly loaded'; else expect='^No FFmpeg assembly loaded at all\.$'; fi
   if ! grep -qE "$expect" out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
 
-  files=0 differ=0
+  files=0 differ=0 extra=0
   for n in out/native/*.csv; do
     [[ $n == *.ffmpeg.* ]] && continue
     files=$((files + 1))
     w=out/wasm/${n#out/native/}
     if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
   done
+  for w in out/wasm/*.csv; do
+    if [[ ! -f out/native/${w#out/wasm/} ]]; then echo "Not written natively: $w"; extra=$((extra + 1)); fi
+  done
   summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs identical."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
-  if [[ $differ != 0 ]]; then exit 1; fi
+  if [[ $differ != 0 || $extra != 0 ]]; then exit 1; fi
 fi
