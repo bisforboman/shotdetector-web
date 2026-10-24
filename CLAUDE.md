@@ -23,9 +23,15 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   Node (outside any solution: needs the wasm-tools workload); `tools/Shared/Runs.cs`: the runs both make;
   `tools/check.sh`: both checks; `tools/make-samples.sh`: the samples.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`.
+- `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
+  `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
+  (`2026-10-24-the-page.md`: how the page is built).
 
 ## Working on this repository
 
+- Work is a row of `docs/backlog.md`: one row, one cloud session (the owner's choice, 2026-10-24: not on their
+  machine), one pull request against `main`, CI green. Set its status to In progress when starting (with the date),
+  move it to `docs/backlog-done.md` when it lands, and add a row when a gap turns up. A design question that the row doesn't settle goes to `docs/decisions/` before the code.
 - Scope so far: 8-bit 4:2:0 progressive H.264 in non-fragmented MP4, constant frame rate, not rotated; anything else
   is refused in `Mp4Input`'s constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it.
