@@ -15,3 +15,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Why: the showcase lives in its own repository with its own CI (shotdetector's decision 2026-10-24).
   - Status: Done (2026-10-24: handed off from shotdetector's `handoff/shotdetector-web` branch; the first CI run on
     `main` green, 9m41s)
+
+- Packages from nuget.org
+  - Why: ShotDetector and ShotDetector.FastYuv 3.14.0 are on nuget.org (released 2026-10-24), so the local feed was a
+    workaround for a problem that is gone.
+  - Status: Done (2026-10-24: the local-feed source, CI's packing step and SHOTDETECTOR_REF dropped; a restore into
+    an empty global packages folder takes both from nuget.org)
