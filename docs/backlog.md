@@ -20,6 +20,20 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### First release: the page on GitHub Pages
 
+- The Sintel trailer sample: a real trailer in the checks, re-encoded as the demo will be
+  - Why: the synthetic samples each isolate one thing; a real trailer (Sintel's, Blender Foundation, CC-BY 3.0) has
+    them together, with real cuts, fades and audio. The page row checks against it, and the demo clip is this same
+    re-encoded file, so the exactness check covers what visitors run (decision "The demo clip").
+  - Where: `tools/make-samples.sh`: given `SINTEL=<the original trailer>`, a recipe re-encoding it with libx264 to
+    8-bit 4:2:0 progressive H.264 at a constant frame rate in a non-fragmented MP4, 854x480, around 10 MB, as
+    `samples/sintel_trailer-480p.mp4`, verified in the script with ffprobe; `.github/workflows/ci.yml`: downloads the
+    original from download.blender.org pinned by SHA-256 (failing on a mismatch) and runs the recipe in "Make the
+    samples"; THIRD-PARTY-NOTICES.md: the clip; README "Checks": the SINTEL line.
+  - Done when: CI's native check and both wasm checks pass on the trailer (`tools/check.sh` runs every
+    `samples/*.mp4`), the run's step timings are in the PR.
+  - Not: no `pages.yml`, no page (the demo clip row); no change to `tools/check.sh`.
+  - Status: In progress (2026-10-24)
+
 - The page
   - Why: the showcase is the page; everything else is around it.
   - Where: `src/ShotDetectorWeb.App/wwwroot/index.html`, `app.js`, `style.css`, nothing else (no build step, no
@@ -87,16 +101,14 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 - The demo clip
   - Why: the owner wants a visitor to try it without a file of their own (2026-10-24). Decision "The demo clip".
-  - Where: `tools/make-samples.sh`: a recipe that, given `SINTEL=<the original trailer>`, re-encodes it to 8-bit
-    4:2:0 progressive H.264 at a constant rate in a non-fragmented MP4 (libx264, 480p as the sample's name says,
-    around 10 MB; ffprobe-verified in the script), so CI's native check covers it; `ci.yml` and `pages.yml` download the original
-    from download.blender.org (Sintel's trailer, Blender Foundation, CC-BY 3.0) pinned by SHA-256 and run the recipe;
-    `pages.yml` puts the result next to the page as `demo/sintel-trailer.mp4`; `index.html` gets "Try the demo"
-    which fetches it and runs it as a picked file, and a credit line with the license. THIRD-PARTY-NOTICES.md: the
-    clip. Depends on the page and deploy rows.
+  - Where: `pages.yml` downloads the original from download.blender.org pinned by SHA-256 (as `ci.yml`) and runs the
+    recipe of `tools/make-samples.sh` (`SINTEL=`), and puts its `samples/sintel_trailer-480p.mp4` next to the page as
+    `demo/sintel-trailer.mp4`; `index.html` gets "Try the demo" which fetches it and runs it as a picked file, and a
+    credit line with the license (Sintel's trailer, Blender Foundation, CC-BY 3.0). Depends on the Sintel trailer
+    sample, the page and deploy rows.
   - Done when: the live page runs the demo to the same scenes CSV the native check writes for the same file in CI.
   - Not: no clip committed to git (if the download disappears, the row to commit the re-encoded file is written
-    then).
+    then); no change to the recipe (the Sintel trailer sample row).
   - Status: Open
 
 ### After the first release
