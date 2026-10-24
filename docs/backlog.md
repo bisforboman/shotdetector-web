@@ -126,13 +126,15 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     [2026-10-24-audio.md](decisions/2026-10-24-audio.md) says how.
   - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
     into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
-    holding the decoded audio. `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
+    holding the decoded audio. FrameReader already has `WaveformData`, also over an FFmpeg-backed `AudioReader`:
+    use its bucket definition, and ask upstream for an entry that takes samples, like the tone's in "Audio measures".
+    `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
     gotcha on priming and `SkipSamples`, and apply the edit list. The App: its own `[JSExport]` (not part of `Detect`,
     so detection's time and results stay as they are), called by `worker.js` after `Detect`. `app.js` draws it on the
     shots strip from "Shot statistics and a timeline" (depends on that row). A file without an audio track draws
     nothing and says nothing. A track that isn't AAC, or that `AacDecoder` refuses (HE-AAC v2 with 34-band parametric
     stereo, for example), gets one line saying why there's no waveform, not an error. A sample in
-    `tools/make-samples.sh` with 3 s of a 1 kHz tone at -20 dBFS, 2 s of silence, then 3 s of the tone again (`sine`,
+    `tools/make-samples.sh` with 6 s of a 1 kHz tone at -20 dBFS, 2 s of silence, then 6 s of the tone again (`sine`,
     `volume`, `anullsrc`; the "Audio measures" row reuses it), plus a check in `tools/app-check.mjs` that the envelope
     is loud, silent, loud at those times, within a video frame.
   - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
@@ -148,16 +150,21 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     (LUFS)? All of it comes from the samples the waveform row already decodes. Decision
     [2026-10-24-audio.md](decisions/2026-10-24-audio.md).
   - Where: the core, in the waveform's pass, with no second decode and without holding the samples:
-    - the reference tone: blocks where one frequency holds nearly all the energy at a steady level (a Goertzel at the
-      candidate frequency is enough, no FFT), lasting a few seconds or more, given as start, end, frequency and level;
+    - the reference tone, as ShotDetector already defines it (`ShotDetection.FindReferenceTone`, FrameReader's
+      `ReferenceTone`): mostly 1 kHz (about ±15 Hz) at a steady level for at least 5 s, breaks of up to 1 s not
+      splitting it, given as start, end and level (`ToneSegment`). FrameReader is in the bundle already, but its
+      `ReferenceTone.Find` reads an FFmpeg-backed `AudioReader`, not samples. First ask upstream for an entry that
+      takes samples, so the core feeds it ManagedCodecs' and the definition is shared code. Only if that's refused,
+      implement the same definition here;
     - silence: spans below -60 dBFS for 2 s or more (FFmpeg's `silencedetect` defaults);
     - peak per channel in dBFS, and how many samples reach full scale;
     - loudness per ITU-R BS.1770-4 and EBU Tech 3341/3342: integrated loudness, loudness range and true peak.
     The waveform's export returns these too. `app.js` shows a sound panel with the numbers, the tone's span and the
     silences marked on the shots strip. `tools/NativeCheck` compares the loudness numbers with FFmpeg's
-    `ebur128=peak=true` (within 0.1 LU and 0.1 dB) and the silences with `silencedetect` (within a packet), on the
-    Sintel trailer and on the waveform row's tone sample, where the tone must come out as 1000 Hz at -20 dBFS. README
-    "Checks" says these are tolerances, not byte-exact. Depends on the waveform row.
+    `ebur128=peak=true` (within 0.1 LU and 0.1 dB), the silences with `silencedetect` (within a packet) and the tone
+    segments with ShotDetector's `FindReferenceTone` on the same file (within a packet, level within 0.1 dB), on the
+    Sintel trailer and on the waveform row's tone sample, where both tones must come out at -20 dBFS. README "Checks"
+    says these are tolerances, not byte-exact. Depends on the waveform row.
   - Done when: those checks pass in CI, natively and through the App on wasm interpreted and AOT; the panel shows the
     trailer's numbers (screenshot in the PR); the PR gives the time the measures add.
   - Not: no loudness correction or normalising; no codecs other than AAC; no colour bars detection (the Maybe row on
@@ -205,6 +212,25 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
   - Where: when it is on nuget.org: replace the two project references in the core csproj with a package reference,
     delete `external/` and `.gitmodules`, update README "Packages" and CLAUDE.md, `ci.yml`'s `submodules: true`.
   - Status: Waiting on upstream (2026-10-24: not on NuGet)
+
+- Cancel without restarting the worker
+  - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
+    two on a trailer, and a full re-read of the file once "Large files" streams it. The owner chose (2026-10-24)
+    cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
+  - Where: first upstream (bisforboman/shotdetector): `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>,
+    DetectionOptions?, CancellationToken)`, the frame-source API with an asynchronous source; today's asynchronous
+    overloads take a path or a `Stream` only. Then here: an asynchronous `Mp4Input` frame source that yields to the
+    worker's event loop every N frames, so a `cancel` message can run and cancel the token. On single-threaded wasm
+    the yield must be a real macrotask: a `[JSImport]` returning a Promise resolved by `setTimeout(0)` or a
+    `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
+    `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
+    `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
+    `tools/app-check.mjs` calls the new export.
+  - Done when: on the Sintel trailer, a run cancelled mid-way is followed at once by a run with another threshold,
+    without opening the file again; the yields cost under 1% of the run's time (pick N for it); checks green, CSVs
+    unchanged.
+  - Not: no partial results (a cancelled run throws, upstream too); no shared memory.
+  - Status: Waiting on upstream (2026-10-24: ShotDetector has no asynchronous frame-source `Detect`)
 
 ## Maybe
 
