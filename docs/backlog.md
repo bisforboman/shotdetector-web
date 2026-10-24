@@ -65,7 +65,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
   - Not: no second decode in .NET, no image export.
   - Status: Open
 
-The five rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
+The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Each touches `app.js` and `index.html`,
 as thumbnails does, so they run one at a time, in this order. Whatever the page derives for display is labelled as
 the page's own; the CSVs stay the only output the exactness check speaks for.
@@ -84,10 +84,11 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     already returns that description as JSON, but the page shows none of it.
   - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
     rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
-    not the enum's name), the raw JSON one click away.
+    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
+    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
   - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
-    tags, full range, the cropped 854x480); screenshots in the PR.
-  - Not: no fields the core doesn't already return.
+    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
+  - Not: no other fields beyond what the core returns.
   - Status: Open
 
 - Shot statistics and a timeline
@@ -109,7 +110,9 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
   - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
     threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
     differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
-    CSV header, not by position, and say in the row's PR which column each detector's graph shows.
+    CSV header, not by position, and say in the row's PR which column each detector's graph shows. Where a
+    frame-difference score (`content_val`, `delta_*`) stays near zero for a second or more, mark the span as a still
+    picture, labelled as the page's reading.
   - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
     threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
   - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
@@ -119,8 +122,8 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
 - A waveform from ManagedCodecs' AAC
   - Why: a waveform under the player shows where the sound changes against the cuts. The owner chose (2026-10-24) to
     decode it with ManagedCodecs' `AacDecoder` (AAC LC and HE-AAC, within 3e-7 of FFmpeg's float output) rather than
-    the browser's Web Audio, so every decoder on the page is managed code. Unlike "Pictures of shots", which uses the
-    browser's decode, this is on purpose.
+    the browser's Web Audio, so every decoder on the page is managed code. Decision
+    [2026-10-24-audio.md](decisions/2026-10-24-audio.md) says how.
   - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
     into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
     holding the decoded audio. `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
@@ -129,13 +132,51 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     shots strip from "Shot statistics and a timeline" (depends on that row). A file without an audio track draws
     nothing and says nothing. A track that isn't AAC, or that `AacDecoder` refuses (HE-AAC v2 with 34-band parametric
     stereo, for example), gets one line saying why there's no waveform, not an error. A sample in
-    `tools/make-samples.sh` with a tone, a second of silence, then the tone again (`sine`, `anullsrc`), plus a check in
-    `tools/app-check.mjs` that the envelope is loud, silent, loud at those times, within a video frame.
+    `tools/make-samples.sh` with 3 s of a 1 kHz tone at -20 dBFS, 2 s of silence, then 3 s of the tone again (`sine`,
+    `volume`, `anullsrc`; the "Audio measures" row reuses it), plus a check in `tools/app-check.mjs` that the envelope
+    is loud, silent, loud at those times, within a video frame.
   - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
     Chromium and Firefox (screenshots in the PR). The PR gives how much the bundle grew and how much time the decode
     adds on the trailer.
   - Not: no Web Audio; no change to playback (the `<video>` still plays the sound); no audio-based cut detection
     (ShotDetector has none); no exactness check against FFmpeg's audio, since a waveform has nothing to be exact about.
+  - Status: Open
+
+- Audio measures: reference tone, silence, peaks, loudness
+  - Why: someone checking a master before delivery asks these first. Is there bars and tone at the head (a steady
+    1 kHz sine at -18 or -20 dBFS)? Where is it silent? Does it clip? How loud is it, as EBU R128 measures loudness
+    (LUFS)? All of it comes from the samples the waveform row already decodes. Decision
+    [2026-10-24-audio.md](decisions/2026-10-24-audio.md).
+  - Where: the core, in the waveform's pass, with no second decode and without holding the samples:
+    - the reference tone: blocks where one frequency holds nearly all the energy at a steady level (a Goertzel at the
+      candidate frequency is enough, no FFT), lasting a few seconds or more, given as start, end, frequency and level;
+    - silence: spans below -60 dBFS for 2 s or more (FFmpeg's `silencedetect` defaults);
+    - peak per channel in dBFS, and how many samples reach full scale;
+    - loudness per ITU-R BS.1770-4 and EBU Tech 3341/3342: integrated loudness, loudness range and true peak.
+    The waveform's export returns these too. `app.js` shows a sound panel with the numbers, the tone's span and the
+    silences marked on the shots strip. `tools/NativeCheck` compares the loudness numbers with FFmpeg's
+    `ebur128=peak=true` (within 0.1 LU and 0.1 dB) and the silences with `silencedetect` (within a packet), on the
+    Sintel trailer and on the waveform row's tone sample, where the tone must come out as 1000 Hz at -20 dBFS. README
+    "Checks" says these are tolerances, not byte-exact. Depends on the waveform row.
+  - Done when: those checks pass in CI, natively and through the App on wasm interpreted and AOT; the panel shows the
+    trailer's numbers (screenshot in the PR); the PR gives the time the measures add.
+  - Not: no loudness correction or normalising; no codecs other than AAC; no colour bars detection (the Maybe row on
+    picture measures has it).
+  - Status: Open
+
+- Bitrate and keyframes
+  - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
+    on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each
+    MP4 packet carries its size, its time and whether it is a keyframe.
+  - Where: the core keeps, for each video packet, its pts in seconds, its size and its keyframe flag, during the walk
+    over every packet `Mp4Input` already makes when it opens a file (a few numbers a packet). The App returns them
+    from an export of their own, as compact arrays. `app.js` draws bitrate per second as a graph under the strip,
+    puts keyframe ticks on the strip, and says how many cuts fall on a keyframe (labelled as the page's reading).
+    `tools/NativeCheck` compares the list with `ffprobe -show_packets` (pts, size, the K flag), exactly. Depends on
+    "Shot statistics and a timeline".
+  - Done when: the check is green on every sample, and the Sintel trailer's graph and ticks show on the page
+    (screenshot in the PR).
+  - Not: no I, P and B frame types (`VideoFrame` doesn't carry them; that is a Maybe); no audio bitrate.
   - Status: Open
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
@@ -219,6 +260,21 @@ file out of `samples/reject/`, and passes the native check.
 - Shots as JSON and HTML
   - Why: `Shots.Json` and `Shots.Html` exist; two more download buttons.
   - Status: Maybe
+
+- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
+  - Why: the picture side of a check before delivery, next to the audio measures: where it goes to black, how bright
+    each frame is, whether luma leaves 16 to 235, whether there are black bars, whether there are colour bars at the
+    head (with the reference tone, "bars and tone"). Each one has an FFmpeg filter to compare with (`blackdetect`,
+    `signalstats`, `cropdetect`).
+  - Where: a pass over each frame's Y plane as `Mp4Input.Frames` yields it, alongside detection, so it adds time to
+    every run (measure how much before deciding). The owner filed it as a Maybe (2026-10-24).
+  - Status: Maybe
+
+- Frame types (I, P, B) on the strip
+  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes.
+  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
+    exists inside the decoder); then here, after "Bitrate and keyframes".
+  - Status: Maybe (needs ManagedCodecs)
 
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output differs between browsers and from FFmpeg's, and
