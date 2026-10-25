@@ -162,6 +162,29 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     sample's 39 discarded packets too. On a two-hour film (172,800 frames) it keeps and allocates 2.25 MB, in the same
     time to open. The CSVs are unchanged)
 
+- The page's structure: one timeline, cards, a module per panel
+  - Why: every panel row edits `app.js`, `Api.cs` and `worker.js`, so they could only run one at a time, and each
+    placed its panel its own way. Decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md).
+  - Where: `src/ShotDetectorWeb.App`. Split `app.js` into the page's states plus native ES modules: `timeline.js`
+    (one time axis under the `<video>`, a playhead that follows `timeupdate`, a click seeks, lanes register
+    themselves) and `panels/<name>.js`, one per panel (lanes and cards). Move today's shots table into a panel, and
+    add one lane, the cuts as ticks, so the timeline is used from the start. `Api` becomes partial class files (`Api.cs`
+    keeps open and detect). `worker.js` calls any export by name. `index.html` gets the layout: the video and the
+    timeline, cards beside it, the table below, cards stacked at phone width. CLAUDE.md "Layout" says where a new
+    lane, card or export goes.
+  - Done when: the page works as it does now (the checks green, CSVs unchanged), plus the timeline with the cuts
+    lane and the playhead, in Chromium and Firefox and at phone width (screenshots in the PR).
+  - Not: no new panels (their rows); no bundler, no framework, no dependency.
+  - Status: Done (2026-10-25: `app.js` keeps the states, the options, the estimate, cancel and the demo, and tells
+    the panels its events (`chose`, `opened`, `run`, `progress`, `shot`, `done`, `cancelled`); `timeline.js` is the axis,
+    the playhead, click and arrow keys to seek and `lane()`; `panels/cuts.js` (the new lane: a tick per cut as it is
+    found, the part read shaded), `panels/run.js` (a card: summary, downloads), `panels/shots.js` (the table, below);
+    `Api.cs`, `Api.Csv.cs`, `Api.Assemblies.cs`; `worker.js` calls any export by name. `tools/check.sh wasm` and
+    `wasm aot`: 120 of 120 CSVs identical, `tools/app-check.mjs` unchanged. In headless Chromium (Playwright) and
+    Firefox 136 (Ubuntu's build, Puppeteer over WebDriver BiDi), interpreted and AOT: a sample's CSVs equal the native
+    ones, the demo with live shots and ticks, cancel with the unfinished line, a run after it, a refused file, a click
+    and keys seeking with the playhead following, cards under the timeline at 390 px; screenshots in the PR)
+
 - Audio in the core: waveform, reference tone, silence, peaks, loudness
   - Why: the core parts of "A waveform from ManagedCodecs' AAC" and "Audio measures", with their native checks, so
     their page rows only add an export and a panel.

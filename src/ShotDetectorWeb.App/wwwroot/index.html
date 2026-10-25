@@ -7,6 +7,11 @@
   <meta name="description" content="Finds the shots in an MP4 on WebAssembly, with scenedetect's results byte for byte. Nothing leaves the machine.">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
+  <!-- The panels (decision 2026-10-25-one-page.md), each a lane of the timeline or a card: lanes stack in this order,
+       cards beside the video in this order. A new panel is a module in panels/ and a line here. -->
+  <script type="module" src="panels/cuts.js"></script>
+  <script type="module" src="panels/run.js"></script>
+  <script type="module" src="panels/shots.js"></script>
 </head>
 <body>
   <header>
@@ -63,18 +68,18 @@
     <section id="error" role="alert" hidden></section>
 
     <section id="result" hidden>
-      <video id="video" controls preload="metadata"></video>
-      <div class="result-side">
-        <p id="summary"></p>
-        <p class="downloads">
-          <a id="scenes-csv" download>Scenes CSV</a>
-          <a id="stats-csv" download>Stats CSV</a>
-        </p>
-        <table id="shots">
-          <thead><tr><th>Shot</th><th>Start</th><th>End</th><th>Length</th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div class="player">
+        <video id="video" controls preload="metadata"></video>
+        <div id="timeline" hidden>
+          <div class="labels"><div class="lane-label axis-label">Time</div></div>
+          <div class="tracks" tabindex="0" role="slider" aria-label="Position in the video" aria-valuemin="0">
+            <div class="axis"></div>
+            <div class="playhead"></div>
+          </div>
+        </div>
       </div>
+      <div id="cards"></div>
+      <div id="below"></div>
     </section>
   </main>
 

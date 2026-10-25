@@ -7,8 +7,10 @@ using ShotDetector;
 namespace ShotDetectorWeb.App;
 
 /// <summary>
-/// What the page's worker (wwwroot/worker.js) calls: open a file, detect on it. Strings cross the boundary, JSON made
-/// by ShotDetector where it has a form for it (docs/decisions/2026-10-24-the-page.md, "Where the runtime lives").
+/// What the page's worker (wwwroot/worker.js) calls, by name: open a file, detect on it. Strings cross the boundary, JSON
+/// made by ShotDetector where it has a form for it (docs/decisions/2026-10-24-the-page.md, "Where the runtime lives").
+/// The other exports are partial files of their own, one per feature (Api.Csv.cs, ...; decision 2026-10-25-one-page.md),
+/// each with its own JSON context if it needs one, so features are added side by side.
 /// </summary>
 [SupportedOSPlatform("browser")]
 public static partial class Api
@@ -59,23 +61,8 @@ public static partial class Api
             ApiJson.Default.DetectResponse);
     }
 
-    /// <summary>
-    /// The last <see cref="Detect"/>'s scene list CSV (scenedetect list-scenes'), a string as it is: not inside the JSON,
-    /// where escaping a film's stats CSV took buffers of six times its length that the heap kept (README "Large files").
-    /// </summary>
-    [JSExport]
-    public static string ScenesCsv() => Shots.Csv(Result.Shots, cuts: Result.Cuts);
-
-    /// <summary>The last <see cref="Detect"/>'s stats CSV (scenedetect -s's), a string as it is (<see cref="ScenesCsv"/>).</summary>
-    [JSExport]
-    public static string StatsCsv() => Result.Stats!.Csv(Result.Video.Position);
-
+    /// <summary>The last <see cref="Detect"/>'s result, for the exports that show more of it.</summary>
     static DetectionResult Result => _result ?? throw new InvalidOperationException("Detect first.");
-
-    /// <summary>The names of the assemblies loaded so far, sorted: the checks show nothing of FFmpeg's is loaded.</summary>
-    [JSExport]
-    public static string[] LoadedAssemblies() =>
-        AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name ?? "").Order(StringComparer.Ordinal).ToArray();
 
     /// <summary>ManagedCodecs' <see cref="InvalidDataException"/> (a damaged file) with the page's words in front.</summary>
     static T DamagedPrefixed<T>(Func<T> f)
