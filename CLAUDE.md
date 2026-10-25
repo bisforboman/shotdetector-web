@@ -21,8 +21,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   fields), `UnsupportedVideoException`.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`'s `[JSExport]`s `Open(JSObject)` (a `Blob`, the picked `File`, read through `BlobStream`; the `YuvVideo`
-  as JSON), `Detect(string optionsJson)` (shots, scene and stats CSVs, frame count, rate, duration as JSON),
-  `LoadedAssemblies()`, and `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`: each
+  as JSON), `Detect(string optionsJson)` (shots, frame count, rate, duration as JSON), `ScenesCsv()` and `StatsCsv()`
+  (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"), `LoadedAssemblies()`, and `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`: each
   shot as soon as it is known, one object of `Shots.Json`'s array) and `read(blob, position, view)` (`BlobStream`: a
   seekable `Stream` over the file in slices of a megabyte); `wwwroot/worker.js` owns the runtime and answers the page's
   `open` and `detect` messages (posting `progress` and `shot` while a run goes), `wwwroot/blob-read.js` is its `read`

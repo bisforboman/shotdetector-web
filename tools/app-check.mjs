@@ -34,7 +34,7 @@ setModuleImports('host', {
   progress: (done, expected) => progress.push([done, expected]),
   shot: json => { told.push(JSON.parse(json)); toldAt.push(progress.at(-1)?.[0] ?? 0); },
 });
-const { Open, Detect, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, ScenesCsv, StatsCsv, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 const ffmpeg = () => LoadedAssemblies().filter(name => name.startsWith('FFmpeg'));
@@ -54,8 +54,8 @@ for (const sample of samples) {
     const result = JSON.parse(Detect(JSON.stringify(options)));
     const seconds = (performance.now() - started) / 1000;
     const name = join(outDir, `${basename(sample, extname(sample))}.${run}`);
-    writeFileSync(`${name}.scenes.csv`, result.scenesCsv);
-    writeFileSync(`${name}.stats.csv`, result.statsCsv);
+    writeFileSync(`${name}.scenes.csv`, ScenesCsv());
+    writeFileSync(`${name}.stats.csv`, StatsCsv());
     // How many shots were told before the last frame's progress: with one detector, all but the last, give or take
     // the progress reports' spacing (about ten a second).
     const early = toldAt.filter(done => done < result.frameCount).length;
