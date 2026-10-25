@@ -116,7 +116,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     and `app.js` hands it to the file path as a `File`; the credit line (Blender Foundation, CC-BY 3.0) is beside the
     button. Before the merge, in headless Chromium on an interpreted publish with the clip in `demo/`: the demo ran
     to 8 shots in 1,253 frames, and with the clip missing it shows "The demo clip didn't download: 404 File not
-    found". The live result: added after the first deploy with it)
+    found". Live, first deployed by Pages run 40211814960 from `78958d9` (PR #21): the clip CI's run 40209682275
+    checked on that commit, the one that run's Pages build made and the one https://bisforboman.github.io/shotdetector-web/demo/sintel-trailer.mp4
+    serves are one file (SHA-256 `861b4a19…2138` in both step summaries and of the download, 10,069,632 bytes). In
+    headless Chromium "Try the demo" on the live page ran it in 21 s (59 frames per second) to 8 shots, and its
+    downloaded scenes CSV (839 bytes) and stats CSV (143,220 bytes) are byte for byte the native check's adaptive run
+    on that file. CI's "Results" artifact couldn't be downloaded from the cloud session (its storage host is outside
+    the session's network policy), so the native check was run there on the served file with CI's pinned BtbN FFmpeg
+    8.1: its table equals CI's run's log row for row, every detector's shots and stats sizes)
 
 - Shots as they're found, kept when a run is cancelled
   - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
