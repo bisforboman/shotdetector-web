@@ -1,11 +1,13 @@
 // The page's worker: it owns the .NET runtime, the page owns the DOM (docs/decisions/2026-10-24-the-page.md).
 //   in:  { type: 'open', file: <a File or Blob> }                  out: { type: 'opened', video: <the YuvVideo> }
 //        { type: 'detect', options: { detector, threshold, minSceneLength } }
-//                                                                  out: { type: 'progress', done, expected } while it
-//                                                                       runs, then { type: 'detected', result }
+//                                                                  out: { type: 'progress', done, expected } and
+//                                                                       { type: 'shot', shot } (each shot as soon as
+//                                                                       it is known) while it runs, then
+//                                                                       { type: 'detected', result }
 //   on failure:                                                    out: { type: 'error', message }
 // Messages are answered in order. A run can't be interrupted (the worker is busy in .NET): to cancel, terminate the
-// worker and start another. The file is read in slices as .NET needs them (blob-read.js), not copied into memory.
+// worker and start another; the shots it posted before stay the page's. The file is read in slices as .NET needs them (blob-read.js), not copied into memory.
 import { dotnet } from './_framework/dotnet.js';
 import { read } from './blob-read.js';
 
@@ -13,6 +15,7 @@ async function start() {
   const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
   setModuleImports('host', {
     progress: (done, expected) => postMessage({ type: 'progress', done, expected }),
+    shot: json => postMessage({ type: 'shot', shot: JSON.parse(json) }),
     read,
   });
   const exports = await getAssemblyExports(getConfig().mainAssemblyName);

@@ -38,7 +38,8 @@ public static partial class Api
     /// <summary>
     /// Detects on the opened file with the page's options (<see cref="DetectRequest"/>), stats always collected: the
     /// shots (<see cref="Shots.Json"/>), scenedetect's scene and stats CSVs, the frame count, frame rate and duration.
-    /// Reports progress through <see cref="Progress"/> while it runs.
+    /// Reports progress through <see cref="Progress"/> while it runs, and each shot through <see cref="ShotFound"/> as
+    /// soon as ShotDetector knows it (<see cref="DetectionOptions.OnShot"/>).
     /// </summary>
     [JSExport]
     public static string Detect(string optionsJson)
@@ -46,7 +47,7 @@ public static partial class Api
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
-        var result = DamagedPrefixed(() => input.Detect(request.ToOptions(new JsProgress())));
+        var result = DamagedPrefixed(() => input.Detect(request.ToOptions(new JsProgress(), new JsShots())));
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
             new DetectResponse(
@@ -75,9 +76,27 @@ public static partial class Api
     [JSImport("progress", "host")]
     internal static partial void Progress(int done, int expected);
 
+    /// <summary>
+    /// A shot as soon as ShotDetector knows it, while <see cref="Detect"/> runs: one object of
+    /// <see cref="Shots.Json"/>'s array, so it reads as the result's shots do. With one detector the page sends, a few
+    /// frames after the cut that ends it; with several, all of them at the end (<see cref="DetectionOptions.OnShot"/>).
+    /// </summary>
+    [JSImport("shot", "host")]
+    internal static partial void ShotFound(string shotJson);
+
     sealed class JsProgress : IProgress<DetectionProgress>
     {
         public void Report(DetectionProgress value) => Progress(value.FramesProcessed, value.ExpectedFrames);
+    }
+
+    // Not Progress<T>: that would post to a synchronization context and could tell a shot after Detect returned.
+    sealed class JsShots : IProgress<Shot>
+    {
+        public void Report(Shot value)
+        {
+            using var json = JsonDocument.Parse(Shots.Json([value]));
+            ShotFound(json.RootElement[0].GetRawText());
+        }
     }
 }
 
@@ -92,7 +111,7 @@ sealed record DetectRequest
     public string? MinSceneLength { get; init; }
     public IReadOnlyList<DetectorRequest>? Detectors { get; init; }
 
-    public DetectionOptions ToOptions(IProgress<DetectionProgress> progress)
+    public DetectionOptions ToOptions(IProgress<DetectionProgress> progress, IProgress<Shot> onShot)
     {
         var options = new DetectionOptions
         {
@@ -101,6 +120,7 @@ sealed record DetectRequest
             Detectors = Detectors?.Select(d => new DetectorSettings(d.Kind) { Threshold = d.Threshold }).ToArray(),
             CollectStats = true,
             Progress = progress,
+            OnShot = onShot,
         };
         return MinSceneLength is null ? options : options with { MinSceneLength = MinSceneLength };
     }
