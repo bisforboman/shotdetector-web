@@ -90,7 +90,7 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 | TimeBase | 1 / the 'mdhd' timescale |
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); full range is yuvj420p |
-| Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included |
+| Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
 ## Checks
 
