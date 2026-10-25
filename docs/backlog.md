@@ -93,7 +93,7 @@ and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that
     end, or garbage the runtime's heap kept. Fix it where it lives; ShotDetector's own goes upstream as an issue.
   - Done when: the cause is named, and the heap on the two-hour file is lower or the row says why it can't be.
   - Not: no change to the CSVs.
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 - Real-browser smoke test
   - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
