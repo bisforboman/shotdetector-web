@@ -18,25 +18,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Picked up next
-
-The owner moved this row ahead of the rest (2026-10-24): a film should run, not be refused.
-
-- Large files: stream from the file instead of copying it into memory
-  - Why: the page refuses files above 512 MB, and a feature-length MP4 is bigger. The whole file is copied twice
-    (into the page's memory, then into .NET's), a .NET array stops just under 2 GB, and the browser gives wasm at
-    most 4 GB on a desktop, less on a phone. `Mp4Input` takes a `Func<Stream>`, and workers have `FileReaderSync`, so
-    a stream that reads slices of the `File` synchronously needs no change to the core. Decision "The file in memory".
-  - Where: `src/ShotDetectorWeb.App`: a `BlobStream` (`Stream` over `[JSImport]` slice reads, a buffer of a megabyte
-    or so, seekable) and `Open` taking a handle to the file rather than its bytes; `worker.js` and `app.js` pass the
-    `File`; drop the size limit and its "trailers, not films" message. Instead, before a run starts, say how long it
-    will take: the measured frames per second scaled by picture size, labelled as an estimate. `tools/app-check.mjs`
-    reads samples through the same path under Node (a `Blob` from the file). Measure peak memory on a two-hour file.
-    The audio rows will read their packets through the same stream.
-  - Done when: a 2 GB MP4 runs in Chrome without the heap growing with the file; checks green.
-  - Not: no change to how the frames are decoded.
-  - Status: In progress (2026-10-25)
-
 ### First release: the page on GitHub Pages
 
 - The demo clip
@@ -52,6 +33,18 @@ The owner moved this row ahead of the rest (2026-10-24): a film should run, not 
   - Status: Open
 
 ### After the first release
+
+- Memory per frame
+  - Why: the wasm heap grows with the frame count, about 4 KB a frame: 735 MB after a two-hour film at 640x360
+    (172,800 frames), the same with the file at an eighth of the bytes (README "Large files", 2026-10-25). Scenedetect's
+    stats are a few hundred bytes a frame; the rest is unaccounted for. A three-hour film nears 1 GB of heap, and a
+    phone gives wasm less than a desktop.
+  - Where: measure what holds it first (a .NET heap dump of a native run of the core on the same file, or `GC` counts
+    around `Detect`): ShotDetector's per-frame results and stats, the CSV and JSON strings `Api.Detect` builds at the
+    end, or garbage the runtime's heap kept. Fix it where it lives; ShotDetector's own goes upstream as an issue.
+  - Done when: the cause is named, and the heap on the two-hour file is lower or the row says why it can't be.
+  - Not: no change to the CSVs.
+  - Status: Open
 
 - Real-browser smoke test
   - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`

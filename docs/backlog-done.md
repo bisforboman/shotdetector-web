@@ -81,3 +81,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     5.1 MB transferred, 16.96 MB raw, checked by `tools/check.sh wasm` and `wasm aot` (120 of 120 CSVs each).
     FFmpeg.AutoGen 103 KB transferred, FrameReader 26 KB (the trimming row). `CompressionEnabled` false: the
     publish's own `.br`/`.gz` copies, which Pages never serves, are gone (the site 17 MB, not 32). README "Size")
+
+- Large files: stream from the file instead of copying it into memory
+  - Why: the page refused files above 512 MB; the whole file was copied twice, a .NET array stops below 2 GB and wasm
+    at 4 GB. Decision "The file in memory".
+  - Status: Done (2026-10-25: `BlobStream` in the App reads the picked `File` in 1 MB slices through `[JSImport] read`
+    (`wwwroot/blob-read.js`, `FileReaderSync`); `Open(JSObject)`, the worker passes the `File`; the limit and its
+    message gone, and the page gives an estimate of the run's time before it starts. `Mp4Input.Open(Func<Stream>)`, and
+    its duration pass skips the packets' data (opening a 2.37 GB file: 43 s and a 1.7 GB renderer peak before, 3.4 s
+    after). The checks read the samples as Blobs through the published `blob-read.js` (`tools/node-host.mjs`), 120 of
+    120 CSVs identical interpreted and AOT. A two-hour, 2,370,979,581-byte MP4 runs in headless Chromium: 46 min at 63
+    fps, renderer peak 805 MB, wasm heap 735 MB, the same heap for the same frames in 288 MB (README "Large files";
+    the heap per frame is its own row)
