@@ -20,7 +20,25 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### Picked up next
 
-The owner moved this row ahead of the rest (2026-10-24): a film should run, not be refused.
+The owner moved large files ahead of the rest (2026-10-24): a film should run, not be refused. The 3.15.0 row runs
+alongside it (the owner's choice, 2026-10-25).
+
+- ShotDetector 3.15.0 and FrameReader 2.11.0
+  - Why: 3.15.0 has what the cancel and live-shots rows need (`DetectAsync` over an asynchronous frame source,
+    `DetectionOptions.OnShot`), and FrameReader 2.11.0 what the audio rows need (`ReferenceToneFinder`,
+    `WaveformBuilder`). 3.15.0 also fixes a duration that was cut to the tick below (4.56 s came out 4.5599999 s),
+    which `Mp4Input` copies on purpose today (CLAUDE.md, Gotchas), so the native check's `YuvVideo` comparison will
+    disagree on `Duration` until the core follows.
+  - Where: `Directory.Packages.props`: ShotDetector and ShotDetector.FastYuv to 3.15.0, and an explicit FrameReader
+    2.11.0 (it comes with ShotDetector today; the audio rows will reference it directly, and versions are central).
+    `Mp4Input`'s duration: read how 3.15.0 builds `DetectedVideo.Duration` in shotdetector's source at `v3.15.0` and
+    do the same, rather than guess; the native check is the authority. Correct the CLAUDE.md gotcha and README.
+    3.15.0's other fix (in-process FastYuv following each frame's colour tags) is for FFmpeg's decoding of videos
+    whose tags change midway: no sample does, and `YuvFrame` carries no per-frame tags, so it changes nothing here.
+  - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
+    unchanged. A CSV that changes is a finding to report (here or upstream, as CLAUDE.md says), not to fix around.
+  - Not: no use of the new APIs yet (their rows).
+  - Status: Open
 
 - Large files: stream from the file instead of copying it into memory
   - Why: the page refuses files above 512 MB, and a feature-length MP4 is bigger. The whole file is copied twice
@@ -35,6 +53,55 @@ The owner moved this row ahead of the rest (2026-10-24): a film should run, not 
     The audio rows will read their packets through the same stream.
   - Done when: a 2 GB MP4 runs in Chrome without the heap growing with the file; checks green.
   - Not: no change to how the frames are decoded.
+  - Status: Open
+
+### Unblocked by ShotDetector 3.15.0
+
+These waited on shotdetector#492 and #493, which shipped in ShotDetector 3.15.0 (2026-10-25). Both change `Api.Detect`
+and `worker.js`, so they run one at a time, after the two rows above.
+
+- Shots as they're found, kept when a run is cancelled
+  - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
+    owner wants the shots found so far shown, and kept after a cancel (2026-10-24). ShotDetector already reports
+    each shot once the cut that ends it is confirmed, and since 3.15.0 tells the caller on every `Detect` overload:
+    `DetectionOptions.OnShot` ([shotdetector#493](https://github.com/bisforboman/shotdetector/issues/493)), on the
+    thread that runs the detection.
+  - Where: `Api` sets `OnShot` to a `[JSImport] shot(...)` called for each one,
+    like `progress`, which `worker.js` posts on (a `postMessage` from synchronous .NET is delivered, decision "Where
+    the runtime lives"); `app.js` adds each row to the table as it comes. On Cancel the table stays, with one more
+    line from the last cut to where the run stopped, marked unfinished, not as a shot. The shots arrive a few frames
+    late (the adaptive detector's window, the minimum shot length), and only for one detector without
+    `DropShortScenes` or `MergeLastScene` (`Run`'s `incremental`), which is what the page sends; with several
+    detectors they all come at the end. `tools/app-check.mjs` checks that the shots told equal the result's shots,
+    exactly, on every sample and run.
+  - Done when: on the Sintel trailer, rows appear while the run goes, and a cancel mid-way leaves the shots found so
+    far and the unfinished line; checks green.
+  - Not: no downloads for a cancelled run while Cancel terminates the worker (.NET is gone, and a CSV built in
+    JavaScript would be a second `Shots.Csv`). Once "Cancel without restarting the worker" lands, `Api` keeps the shots
+    it was told and makes the scenes CSV from them with `Shots.Csv`, and that becomes a line of this row. No partial
+    stats CSV (the stats are in the result).
+  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`).
+  - Status: Open
+
+- Cancel without restarting the worker
+  - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
+    two on a trailer, and a full re-read of the file once "Large files" streams it. The owner chose (2026-10-24)
+    cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
+  - Where: ShotDetector 3.15.0 has `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>, DetectionOptions?,
+    CancellationToken)` ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492)): it runs on the
+    caller's own awaits, with no other thread, and gives the synchronous `Detect`'s result. Here: an asynchronous `Mp4Input` frame source that yields to the
+    worker's event loop every N frames, so a `cancel` message can run and cancel the token. On single-threaded wasm
+    the yield must be a real macrotask: a `[JSImport]` returning a Promise resolved by `setTimeout(0)` or a
+    `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
+    `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
+    `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
+    `tools/app-check.mjs` calls the new export.
+  - Done when: on the Sintel trailer, a run cancelled mid-way is followed at once by a run with another threshold,
+    without opening the file again; the yields cost under 1% of the run's time (pick N for it); checks green, CSVs
+    unchanged.
+  - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; the shots found before the cancel
+    are the next row's, which also gives them CSVs once this one lands.
+  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found".
   - Status: Open
 
 ### First release: the page on GitHub Pages
@@ -133,9 +200,9 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     [2026-10-24-audio.md](decisions/2026-10-24-audio.md) says how.
   - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
     into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
-    holding the decoded audio. FrameReader already has `WaveformData`, also over an FFmpeg-backed `AudioReader`:
-    use its bucket definition, through an entry that takes samples once upstream has one
-    ([shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)).
+    holding the decoded audio. Make the envelope with FrameReader 2.11.0's `WaveformBuilder` (`Add` each chunk of
+    samples, then `Finish`: the points `WaveformData.Read` gives, without FFmpeg,
+    [shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)).
     `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
     gotcha on priming and `SkipSamples`, and apply the edit list. The App: its own `[JSExport]` (not part of `Detect`,
     so detection's time and results stay as they are), called by `worker.js` after `Detect`. `app.js` draws it on the
@@ -144,7 +211,9 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
     stereo, for example), gets one line saying why there's no waveform, not an error. A sample in
     `tools/make-samples.sh` with 6 s of a 1 kHz tone at -20 dBFS, 2 s of silence, then 6 s of the tone again (`sine`,
     `volume`, `anullsrc`; the "Audio measures" row reuses it), plus a check in `tools/app-check.mjs` that the envelope
-    is loud, silent, loud at those times, within a video frame.
+    is loud, silent, loud at those times, within a video frame. FrameReader references FFmpeg.AutoGen: after the audio
+    pass, `LoadedAssemblies()` must still show no FFmpeg assembly (the interpreted check is strict). Depends on the
+    3.15.0 row (FrameReader 2.11.0) and on large files (the stream it reads through).
   - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
     Chromium and Firefox (screenshots in the PR). The PR gives how much the bundle grew and how much time the decode
     adds on the trailer.
@@ -160,11 +229,9 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
   - Where: the core, in the waveform's pass, with no second decode and without holding the samples:
     - the reference tone, as ShotDetector already defines it (`ShotDetection.FindReferenceTone`, FrameReader's
       `ReferenceTone`): mostly 1 kHz (about ±15 Hz) at a steady level for at least 5 s, breaks of up to 1 s not
-      splitting it, given as start, end and level (`ToneSegment`). FrameReader is in the bundle already, but its
-      `ReferenceTone.Find` reads an FFmpeg-backed `AudioReader`, not samples. Use the entry that takes samples
-      once upstream has one ([shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)), so the core
-      feeds it ManagedCodecs' and the definition is shared code. Only if that's refused,
-      implement the same definition here;
+      splitting it, given as start, end and level (`ToneSegment`). Found with FrameReader 2.11.0's `ReferenceToneFinder`
+      (`Add` each chunk of samples, then `Finish`: the segments `ReferenceTone.Find` gives, without FFmpeg,
+      [shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)), so the definition is shared code;
     - silence: spans below -60 dBFS for 2 s or more (FFmpeg's `silencedetect` defaults);
     - peak per channel in dBFS, and how many samples reach full scale;
     - loudness per ITU-R BS.1770-4 and EBU Tech 3341/3342: integrated loudness, loudness range and true peak.
@@ -209,13 +276,11 @@ the page's own; the CSVs stay the only output the exactness check speaks for.
 
 ## Waiting
 
-Asks upstream, filed in bisforboman/shotdetector (FrameReader lives there too) on 2026-10-24:
-- [#492](https://github.com/bisforboman/shotdetector/issues/492): an asynchronous frame-source `Detect` ("Cancel
-  without restarting the worker").
-- [#493](https://github.com/bisforboman/shotdetector/issues/493): a shot callback on the frame-source `Detect`
-  ("Shots as they're found").
-- [#494](https://github.com/bisforboman/shotdetector/issues/494): FrameReader's `ReferenceTone` and `WaveformData`
-  from decoded samples rather than an FFmpeg-backed `AudioReader` ("Audio measures", the waveform row).
+The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
+[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
+[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
+asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
+in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are under Next.
 
 - ManagedCodecs' license
   - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to
@@ -229,51 +294,6 @@ Asks upstream, filed in bisforboman/shotdetector (FrameReader lives there too) o
   - Where: when it is on nuget.org: replace the two project references in the core csproj with a package reference,
     delete `external/` and `.gitmodules`, update README "Packages" and CLAUDE.md, `ci.yml`'s `submodules: true`.
   - Status: Waiting on upstream (2026-10-24: not on NuGet)
-
-- Cancel without restarting the worker
-  - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
-    two on a trailer, and a full re-read of the file once "Large files" streams it. The owner chose (2026-10-24)
-    cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
-  - Where: first upstream (bisforboman/shotdetector): `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>,
-    DetectionOptions?, CancellationToken)`, the frame-source API with an asynchronous source; today's asynchronous
-    overloads take a path or a `Stream` only. Then here: an asynchronous `Mp4Input` frame source that yields to the
-    worker's event loop every N frames, so a `cancel` message can run and cancel the token. On single-threaded wasm
-    the yield must be a real macrotask: a `[JSImport]` returning a Promise resolved by `setTimeout(0)` or a
-    `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
-    `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
-    `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
-    `tools/app-check.mjs` calls the new export.
-  - Done when: on the Sintel trailer, a run cancelled mid-way is followed at once by a run with another threshold,
-    without opening the file again; the yields cost under 1% of the run's time (pick N for it); checks green, CSVs
-    unchanged.
-  - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; the shots found before the cancel
-    are the next row's, which also gives them CSVs once this one lands.
-  - Status: Waiting on upstream ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492), filed
-    2026-10-24)
-
-- Shots as they're found, kept when a run is cancelled
-  - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
-    owner wants the shots found so far shown, and kept after a cancel (2026-10-24). ShotDetector already reports
-    each shot once the cut that ends it is confirmed (`Run`'s `onShot`, which `DetectStreamAsync` uses: "the shots
-    are exactly those Detect returns"), but the frame-source `Detect` passes none.
-  - Where: first upstream (bisforboman/shotdetector): a way to be told each shot on the frame-source path, reported
-    synchronously on the detection thread, as `DetectionOptions.Warnings` is, since single-threaded wasm has no other
-    thread to report on (the API is upstream's to choose). Then here: a `[JSImport] shot(...)` called for each one,
-    like `progress`, which `worker.js` posts on (a `postMessage` from synchronous .NET is delivered, decision "Where
-    the runtime lives"); `app.js` adds each row to the table as it comes. On Cancel the table stays, with one more
-    line from the last cut to where the run stopped, marked unfinished, not as a shot. The shots arrive a few frames
-    late (the adaptive detector's window, the minimum shot length), and only for one detector without
-    `DropShortScenes` or `MergeLastScene` (`Run`'s `incremental`), which is what the page sends; with several
-    detectors they all come at the end. `tools/app-check.mjs` checks that the shots told equal the result's shots,
-    exactly, on every sample and run.
-  - Done when: on the Sintel trailer, rows appear while the run goes, and a cancel mid-way leaves the shots found so
-    far and the unfinished line; checks green.
-  - Not: no downloads for a cancelled run while Cancel terminates the worker (.NET is gone, and a CSV built in
-    JavaScript would be a second `Shots.Csv`). Once "Cancel without restarting the worker" lands, `Api` keeps the shots
-    it was told and makes the scenes CSV from them with `Shots.Csv`, and that becomes a line of this row. No partial
-    stats CSV (the stats are in the result).
-  - Status: Waiting on upstream ([shotdetector#493](https://github.com/bisforboman/shotdetector/issues/493), filed
-    2026-10-24)
 
 ## Maybe
 
