@@ -1,5 +1,6 @@
 // The page: picks a file, sends it to the worker (worker.js, which owns the .NET runtime) and shows what comes back.
-// How it is built: docs/decisions/2026-10-24-the-page.md. States: idle, opening, detecting, done, error.
+// How it is built: docs/decisions/2026-10-24-the-page.md. States: idle, opening, detecting, done, error. The shots
+// come in while a run goes and stay when it is cancelled, with a line marked unfinished up to where it stopped.
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
@@ -20,18 +21,22 @@ const detector = $('detector'), threshold = $('threshold'), minLength = $('min-l
 const detectButton = $('detect'), cancelButton = $('cancel'), demoButton = $('demo');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
 const result = $('result'), video = $('video'), summary = $('summary'), shotsBody = $('shots').tBodies[0];
-const scenesLink = $('scenes-csv'), statsLink = $('stats-csv');
+const downloads = document.querySelector('.downloads'), scenesLink = $('scenes-csv'), statsLink = $('stats-csv');
 
 let file = null;        // the chosen file
 let opened = null;      // the file's YuvVideo, once the current worker has it open
 let estimate = '';      // the estimate of the current run, as the status shows it
 let state = 'idle';
 let started = 0;        // when the current detection started (performance.now())
+let found = [];         // the shots the current run has told so far, in order
+let framesDone = 0;     // frames the current run has done, as its last progress report said
+let framesExpected = 0; // and how many it expects (0 when unknown)
 let worker = newWorker();
 
 function newWorker() {
   const w = new Worker('worker.js', { type: 'module' });
-  w.onmessage = ({ data }) => handlers[data.type]?.(data);
+  // Only the current worker's: one terminated by a cancel may still have messages on their way.
+  w.onmessage = ({ data }) => { if (w === worker) handlers[data.type]?.(data); };
   // Not an exception from .NET (those come as 'error' messages): the worker itself failed, e.g. out of memory.
   w.onerror = e => {
     e.preventDefault();
@@ -54,11 +59,21 @@ const handlers = {
   },
   progress({ done, expected }) {
     if (state !== 'detecting') return;
+    framesDone = done;
+    framesExpected = expected;
     if (expected > 0) progress.value = Math.min(done / expected, 1);
     const seconds = (performance.now() - started) / 1000;
     const fps = seconds > 0 ? done / seconds : 0;
     statusText.textContent = `Detecting: frame ${done}${expected > 0 ? ` of ${expected}` : ''}, ` +
       `${fps.toFixed(0)} frames per second. ${estimate}`;
+  },
+  // A shot as soon as ShotDetector knows it: a few frames after the cut that ends it with one detector (what the page
+  // sends), the same object as in the result's shots (tools/app-check.mjs checks they are the same).
+  shot({ shot }) {
+    if (state !== 'detecting') return;
+    found.push(shot);
+    addRow(shot);
+    summary.textContent = `${found.length} ${found.length === 1 ? 'shot' : 'shots'} so far.`;
   },
   detected({ result }) {
     show(result, (performance.now() - started) / 1000);
@@ -80,7 +95,7 @@ function setState(next) {
   cancelButton.hidden = !busy;
   progress.hidden = !busy;
   error.hidden = next !== 'error';
-  if (busy) result.hidden = true;
+  if (next === 'opening') result.hidden = true;
 }
 
 function choose(chosen) {
@@ -112,6 +127,11 @@ function start() {
 
 function detect() {
   setState('detecting');
+  clearResult();
+  found = [];
+  framesDone = framesExpected = 0;
+  summary.textContent = 'The shots appear here as they are found.';
+  result.hidden = false;
   progress.removeAttribute('value');
   estimate = estimateText(opened);
   statusText.textContent = `Detecting… ${estimate}`;
@@ -162,10 +182,21 @@ function options() {
   };
 }
 
+// Terminates the worker (decision "Cancelling a run"): the result is gone with it, the shots told so far stay, and one
+// line, not a shot, goes from the last cut to the frame the run had reached.
 function cancel() {
+  const wasDetecting = state === 'detecting', rate = opened?.frameRate;
   replaceWorker();
   setState('idle');
   statusText.textContent = 'Cancelled.';
+  if (!wasDetecting) return;
+  const { num, den } = rate;
+  const from = found.length > 0 ? secondsOf(found.at(-1).endTimecode) : 0;
+  const to = framesDone * den / num;
+  if (to > from) addUnfinished(from, to);
+  summary.textContent = `Cancelled at frame ${framesDone}${framesExpected > 0 ? ` of ${framesExpected}` : ''}: ` +
+    `${found.length} ${found.length === 1 ? 'shot' : 'shots'} found` +
+    `${to > from ? ', then one unfinished up to where the run stopped' : ''}. No downloads for a cancelled run.`;
 }
 
 function fail(message) {
@@ -188,22 +219,50 @@ function show(r, seconds) {
   link(scenesLink, r.scenesCsv, `${base}.scenes.csv`);
   link(statsLink, r.statsCsv, `${base}.stats.csv`);
 
-  for (const shot of r.shots) {
-    const row = shotsBody.insertRow();
-    for (const text of [shot.shot, shot.startTimecode, shot.endTimecode, `${shot.durationSeconds.toFixed(3)} s`])
-      row.insertCell().textContent = text;
-    row.tabIndex = 0;
-    row.title = `Play from ${shot.startTimecode}`;
-    row.onclick = () => seek(shot.startTimecode);
-    row.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seek(shot.startTimecode); } };
-  }
+  // The result's shots, which are the ones told while it ran: the table is the result's.
+  for (const shot of r.shots) addRow(shot);
+  downloads.hidden = false;
   result.hidden = false;
 }
 
-function seek(timecode) {
-  const [h, m, s] = timecode.split(':').map(Number);
-  video.currentTime = h * 3600 + m * 60 + s;
+function addRow(shot) {
+  row(shotsBody.insertRow(), [shot.shot, shot.startTimecode, shot.endTimecode, `${shot.durationSeconds.toFixed(3)} s`],
+    secondsOf(shot.startTimecode));
+}
+
+// The part of the video after the last cut that a cancelled run had read: the page's own times (frames done over the
+// frame rate), not a shot of ShotDetector's, so it says so.
+function addUnfinished(from, to) {
+  const r = shotsBody.insertRow();
+  r.className = 'unfinished';
+  row(r, ['unfinished', timecode(from), timecode(to), `${(to - from).toFixed(3)} s`], from);
+  r.title = `Not a shot: the run was cancelled here. Play from ${timecode(from)}`;
+}
+
+function row(r, texts, at) {
+  for (const text of texts) r.insertCell().textContent = text;
+  r.tabIndex = 0;
+  r.title = `Play from ${texts[1]}`;
+  r.onclick = () => seek(at);
+  r.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); seek(at); } };
+}
+
+function seek(at) {
+  video.currentTime = at;
   video.play().catch(() => {}); // a browser that can't play the file still shows where the shot is
+}
+
+// A timecode as ShotDetector prints them (HH:MM:SS.mmm) in seconds, and back.
+function secondsOf(tc) {
+  const [h, m, s] = tc.split(':').map(Number);
+  return h * 3600 + m * 60 + s;
+}
+
+function timecode(s) {
+  const ms = Math.round(s * 1000);
+  const pad = (n, w) => String(n).padStart(w, '0');
+  return `${pad(Math.floor(ms / 3600000), 2)}:${pad(Math.floor(ms / 60000) % 60, 2)}:${pad(Math.floor(ms / 1000) % 60, 2)}` +
+    `.${pad(ms % 1000, 3)}`;
 }
 
 function link(a, text, name) {
@@ -218,6 +277,7 @@ function clearResult() {
   }
   shotsBody.replaceChildren();
   summary.textContent = '';
+  downloads.hidden = true;
 }
 
 function megabytes(bytes) {
