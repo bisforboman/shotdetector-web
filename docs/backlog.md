@@ -35,7 +35,7 @@ The owner moved this row ahead of the rest (2026-10-24): a film should run, not 
     The audio rows will read their packets through the same stream.
   - Done when: a 2 GB MP4 runs in Chrome without the heap growing with the file; checks green.
   - Not: no change to how the frames are decoded.
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 ### First release: the page on GitHub Pages
 
