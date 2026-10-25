@@ -35,7 +35,7 @@ class FileReaderSync {
   }
 }
 
-// The host module's functions as worker.js gives them, but progress, which each check gives its own.
+// The host module's functions as worker.js gives them, but progress and shot, which each check gives its own.
 export async function host(wwwroot) {
   globalThis.FileReaderSync ??= FileReaderSync;
   const { read } = await import(pathToFileURL(resolve(wwwroot, 'blob-read.js')).href);

@@ -1,7 +1,8 @@
 // The App's exports under Node, as the page's worker calls them (src/ShotDetectorWeb.App/wwwroot/worker.js): each
 // sample opened, then every run of tools/Shared/Runs.cs (RUNS below) detected on it, the scene and stats CSVs written to
 // the output folder under the names tools/NativeCheck gives its own (tools/check.sh compares the two folders). Each
-// file to refuse must be refused when opened. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
+// file to refuse must be refused when opened. The shots told while a run goes (the 'shot' import, which the worker posts
+// to the page as they come) must be the result's shots, exactly. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
 // through the published blob-read.js (tools/node-host.mjs). Fails if the runs load an assembly of FFmpeg's; says whether one was
 // loaded at all (interpreted: none).
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
@@ -25,10 +26,14 @@ const at = rest.indexOf('--reject');
 const samples = at < 0 ? rest : rest.slice(0, at);
 const rejects = at < 0 ? [] : rest.slice(at + 1);
 
-let progress = [];
+let progress = [], told = [], toldAt = [];
 const { dotnet } = await import(pathToFileURL(resolve(wwwroot, '_framework/dotnet.js')).href);
 const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
-setModuleImports('host', { ...await host(wwwroot), progress: (done, expected) => progress.push([done, expected]) });
+setModuleImports('host', {
+  ...await host(wwwroot),
+  progress: (done, expected) => progress.push([done, expected]),
+  shot: json => { told.push(JSON.parse(json)); toldAt.push(progress.at(-1)?.[0] ?? 0); },
+});
 const { Open, Detect, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
@@ -43,17 +48,26 @@ for (const sample of samples) {
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frameCount} frames, ${video.duration} s`);
   for (const [run, options] of Object.entries(RUNS)) {
     progress = [];
+    told = [];
+    toldAt = [];
     const started = performance.now();
     const result = JSON.parse(Detect(JSON.stringify(options)));
     const seconds = (performance.now() - started) / 1000;
     const name = join(outDir, `${basename(sample, extname(sample))}.${run}`);
     writeFileSync(`${name}.scenes.csv`, result.scenesCsv);
     writeFileSync(`${name}.stats.csv`, result.statsCsv);
-    console.error(`${basename(sample)} ${run}: ${result.frameCount} frames, ${result.shots.length} shots, ${seconds.toFixed(2)} s`);
+    // How many shots were told before the last frame's progress: with one detector, all but the last, give or take
+    // the progress reports' spacing (about ten a second).
+    const early = toldAt.filter(done => done < result.frameCount).length;
+    console.error(`${basename(sample)} ${run}: ${result.frameCount} frames, ${result.shots.length} shots ` +
+      `(${early} told before the last frame), ${seconds.toFixed(2)} s`);
     // The worker turns these into the page's progress bar: they must come, and the last one says every frame is done.
     const last = progress.at(-1);
     if (last?.[0] !== result.frameCount)
       fail(`${basename(sample)} ${run}: progress ended at ${JSON.stringify(last)}, not at ${result.frameCount} frames`);
+    // The page shows these as they come and keeps them when a run is cancelled: they are the result's shots.
+    if (JSON.stringify(told) !== JSON.stringify(result.shots))
+      fail(`${basename(sample)} ${run}: the shots told were ${JSON.stringify(told)}, the result's ${JSON.stringify(result.shots)}`);
   }
 }
 
