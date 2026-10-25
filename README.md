@@ -42,11 +42,15 @@ python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/ww
 ```
 
 Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does). The
-page is `wwwroot/index.html`, `app.js` and `style.css`, no build step and no dependencies; `worker.js` owns the .NET
-runtime and answers the page's `open` and `detect` messages, and `blob-read.js` reads the picked file for it. Pick an
-MP4 (or drop one), choose the detector, its threshold (prefilled with ShotDetector's default for it) and the minimum
-shot length, and detect: the shots come as a table whose rows seek the player, each row as soon as ShotDetector knows
-the shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`), and the scenes and stats CSVs
+page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeline.js` and a module per panel in
+`panels/`, native ES modules with no build step and no dependencies; `worker.js` owns the .NET runtime and calls the
+exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
+its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
+is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
+over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded). Beside
+the player are cards, today the run's summary and downloads; below, the shots as a table whose rows play the video from
+the shot, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
+`DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the

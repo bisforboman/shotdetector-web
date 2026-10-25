@@ -20,15 +20,28 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose), `SpsInfo` (the SPS's format and VUI colour
   fields), `UnsupportedVideoException`.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
-  side, `Api`'s `[JSExport]`s `Open(JSObject)` (a `Blob`, the picked `File`, read through `BlobStream`; the `YuvVideo`
-  as JSON), `Detect(string optionsJson)` (shots, frame count, rate, duration as JSON), `ScenesCsv()` and `StatsCsv()`
-  (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"), `LoadedAssemblies()`, and `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`: each
-  shot as soon as it is known, one object of `Shots.Json`'s array) and `read(blob, position, view)` (`BlobStream`: a
-  seekable `Stream` over the file in slices of a megabyte); `wwwroot/worker.js` owns the runtime and answers the page's
-  `open` and `detect` messages (posting `progress` and `shot` while a run goes), `wwwroot/blob-read.js` is its `read`
-  (`FileReaderSync`); the page is
-  `wwwroot/index.html`, `app.js`, `style.css` (no build step, no dependency; README "Running the page"). `Api` prefixes
-  ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
+  side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
+  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON) and `Detect(string optionsJson)` (shots, frame
+  count, rate, duration as JSON), and the `[JSImport]`s `progress(done, expected)` and `shot(json)`
+  (`DetectionOptions.OnShot`: each shot as soon as it is known, one object of `Shots.Json`'s array); `Api.Csv.cs` has
+  `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
+  `Api.Assemblies.cs` `LoadedAssemblies()`. `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
+  the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
+  id, name, args }`, answered in order; `progress` and `shot` posted while `Detect` runs), `wwwroot/blob-read.js` is its
+  `read` (`FileReaderSync`). The page (no build step, no dependency, native ES modules; README "Running the page";
+  decision `2026-10-25-one-page.md`): `index.html` (the layout and the list of panels), `style.css`, `app.js` (the
+  states, the options, the estimate, cancel, the demo; the events panels listen to, `call(name, ...args)` and
+  `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
+  `seek()`) and `panels/`: `cuts.js` (a lane), `run.js` (a card: the summary and downloads), `shots.js` (the table
+  below). `Api` prefixes ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach
+  JavaScript).
+  - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
+    under the video, as the table). A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
+    `call` and `card` from `../app.js` and `lane`, `x`, `seek` from `../timeline.js`, plus one `<script
+    type="module">` line in `index.html` (the order of those lines is the order of the lanes and cards) and its rules
+    in `style.css`. A new export is `Api.<Feature>.cs`, a partial file of its own with its own `JsonSerializerContext`
+    if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
+    only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node); `tools/replace-check.mjs`: a bundle
