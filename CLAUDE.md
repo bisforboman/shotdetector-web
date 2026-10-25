@@ -34,8 +34,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks;
   `tools/make-samples.sh`: the samples.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`;
-  `.github/workflows/pages.yml`: after CI on a push to `main`, the AOT publish's `wwwroot/` plus FastYuv's license and
-  `.nojekyll`, checked for the two LGPL files, deployed to https://bisforboman.github.io/shotdetector-web/.
+  `.github/workflows/pages.yml`: after CI on a push to `main`, the AOT publish's `wwwroot/` plus FastYuv's license,
+  `.nojekyll` and the demo clip (`demo/sintel-trailer.mp4`: Sintel's trailer, downloaded pinned by the same SHA-256 as
+  `ci.yml` and made by `tools/make-samples.sh`, the file the checks run), checked for the two LGPL files and the clip,
+  deployed to https://bisforboman.github.io/shotdetector-web/.
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
   (`2026-10-24-the-page.md`: how the page is built; `2026-10-24-fastyuv-replaceable.md`: FastYuv replaced by

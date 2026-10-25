@@ -69,17 +69,7 @@ and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that
 
 ### First release: the page on GitHub Pages
 
-- The demo clip
-  - Why: the owner wants a visitor to try it without a file of their own (2026-10-24). Decision "The demo clip".
-  - Where: `pages.yml` downloads the original from download.blender.org pinned by SHA-256 (as `ci.yml`) and runs the
-    recipe of `tools/make-samples.sh` (`SINTEL=`), and puts its `samples/sintel_trailer-480p.mp4` next to the page as
-    `demo/sintel-trailer.mp4`; `index.html` gets "Try the demo" which fetches it and runs it as a picked file, and a
-    credit line with the license (Sintel's trailer, Blender Foundation, CC-BY 3.0). Depends on the Sintel trailer
-    sample, the page and deploy rows.
-  - Done when: the live page runs the demo to the same scenes CSV the native check writes for the same file in CI.
-  - Not: no clip committed to git (if the download disappears, the row to commit the re-encoded file is written
-    then); no change to the recipe (the Sintel trailer sample row).
-  - Status: In progress (2026-10-25)
+The first release's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### After the first release
 

@@ -106,3 +106,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     120 CSVs identical interpreted and AOT. A two-hour, 2,370,979,581-byte MP4 runs in headless Chromium: 46 min at 63
     fps, renderer peak 805 MB, wasm heap 735 MB, the same heap for the same frames in 288 MB (README "Large files";
     the heap per frame is its own row)
+
+- The demo clip
+  - Why: the owner wants a visitor to try it without a file of their own (2026-10-24). Decision "The demo clip".
+  - Status: Done (2026-10-25: `pages.yml` downloads Sintel's trailer pinned by `ci.yml`'s SHA-256 (the same cache, the
+    same BtbN FFmpeg 8.1 build), runs `tools/make-samples.sh` with `SINTEL=` and serves its
+    `samples/sintel_trailer-480p.mp4` as `demo/sintel-trailer.mp4`; its site check fails the deploy without the clip,
+    and both workflows print the re-encode's SHA-256 in their step summaries. `index.html`'s "Try the demo" fetches it
+    and `app.js` hands it to the file path as a `File`; the credit line (Blender Foundation, CC-BY 3.0) is beside the
+    button. Before the merge, in headless Chromium on an interpreted publish with the clip in `demo/`: the demo ran
+    to 8 shots in 1,253 frames, and with the clip missing it shows "The demo clip didn't download: 404 File not
+    found". The live result: added after the first deploy with it)
