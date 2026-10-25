@@ -79,7 +79,7 @@ and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that
   - Done when: the live page runs the demo to the same scenes CSV the native check writes for the same file in CI.
   - Not: no clip committed to git (if the download disappears, the row to commit the re-encoded file is written
     then); no change to the recipe (the Sintel trailer sample row).
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 ### After the first release
 
