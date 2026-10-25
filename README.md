@@ -161,6 +161,23 @@ duration, with their data skipped; the list is kept on the way, by column, 13 by
 once at the track's sample count. Measured 2026-10-25 natively against `main` on a two-hour file (172,800 frames at
 24 fps, 337,501 AAC packets): `Open` keeps 2.25 MB more and allocates 2.25 MB more, in the same time (0.9 s).
 
+### The sound
+
+```csharp
+var audio = Mp4Audio.Measure("trailer.mp4");       // or Measure(a seekable stream); options: AudioOptions
+// audio.NotMeasured: why not (no audio track, not AAC, a track the decoder refuses), else null
+// audio.Waveform, audio.ReferenceTone, audio.Silences, audio.Peaks, audio.Loudness (Integrated, Range, TruePeak)
+```
+
+One pass over the audio packets with ManagedCodecs' `AacDecoder` (AAC LC and HE-AAC), each packet's samples folded
+into the measures and dropped, so the track is never held; only the audio packets' data is read. The waveform is
+FrameReader's `WaveformBuilder` (BBC audiowaveform's min and max per point, about a thousand points by default), the
+reference tone its `ReferenceToneFinder` (ShotDetector's definition: mostly 1 kHz, steady, at least 5 s), silences as
+FFmpeg's `silencedetect` (every channel below -60 dBFS for 2 s or more), peaks per channel with how many samples reach
+full scale, and loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, loudness range in LU, true peak in dBTP
+from the signal oversampled 4 times). Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
+pass takes about 0.6 s natively. Checked against FFmpeg within tolerances (Checks, audio).
+
 ## Checks
 
 ```
@@ -179,6 +196,17 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
   `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`). Markdown
   tables go to `out/native-report.md`, (a)'s CSVs to `out/native/`.
+- **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
+  (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
+  byte-exact**: the decoded samples are within 3e-7 of FFmpeg's, not equal, and the measures are computed by other code.
+  The waveform against FrameReader's `WaveformData.Read` (FFmpeg decoding, the same points): each value within 1 (of
+  32767); the reference tone against ShotDetector's `FindReferenceTone`: the same segments, each end within a packet,
+  the level within 0.1 dB; silences against `silencedetect` at its default 2 s and at 1 s: the same spans, each end
+  within a packet; integrated loudness and loudness range against `ebur128` (its frame metadata, three decimals)
+  within 0.1 LU, true and sample peaks per channel against its `peak=true+sample` within 0.1 dB (its peaks there are
+  linear amplitudes to three decimals, which alone is up to 0.04 dB at -20 dBFS). On the tone sample both tones must
+  come out at -20 dBFS. Each file in `samples/no-aac/` (MP3 and Opus in MP4, and AAC Main, which the decoder refuses)
+  must come back with the reason it isn't measured, not an exception.
 - **wasm** (`tools/app-check.mjs`, under Node): the page's own .NET side, `src/ShotDetectorWeb.App` published for
   browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs,
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
@@ -206,7 +234,8 @@ of their own, and deploys it to GitHub Pages.
 The samples (tools/make-samples.sh) each isolate something the description must get right: 25, 29.97 and 23.976 fps;
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
-the video; fades for detect-threshold; and six files to refuse.
+the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 2 s of silence, the tone again) for the audio
+measures; six files to refuse; and three whose audio isn't measured.
 
 ## Packages
 

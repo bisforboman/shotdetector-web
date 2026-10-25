@@ -19,7 +19,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose), `SpsInfo` (the SPS's format and VUI colour
   fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by `Mp4Input`'s
-  walk when it opens a file), `UnsupportedVideoException`.
+  walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
+  `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
+  `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
+  decoder refuses).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON) and `Detect(string optionsJson)` (shots, frame
@@ -44,7 +47,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
-  `ffprobe -show_packets`; `tools/app-check.mjs`: the App's published bundle
+  `ffprobe -show_packets`; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
+  `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
+  `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,
@@ -109,6 +114,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `obj/` from the AOT build, whose IL is stripped: the runtime aborts at start (`NIY encountered in method
   System.OutOfMemoryException:.ctor`, seen 2026-10-24). Delete `src/ShotDetectorWeb.App/obj` between them; CI runs
   interpreted first.
+- FFmpeg's `ebur128` prints its summary to one decimal and its frame metadata to three, the peaks there as linear
+  amplitudes: `AudioCheck.cs` reads the last frame's metadata (`ametadata=print:file=`). A 2 s gap between tones comes
+  out 1.9966 s after FFmpeg's AAC encoder, so `silencedetect`'s default 2 s finds nothing in the tone sample: the
+  check also runs at 1 s.
 - The published bundle is trimmed with `UseSystemResourceKeys`: the framework's exception messages come out as resource
   keys (`DeserializeUnableToConvertValue, ...`), the libraries' own (ManagedCodecs, `UnsupportedVideoException`) whole.
 - Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen

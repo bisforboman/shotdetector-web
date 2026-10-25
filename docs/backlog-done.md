@@ -184,3 +184,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     Firefox 136 (Ubuntu's build, Puppeteer over WebDriver BiDi), interpreted and AOT: a sample's CSVs equal the native
     ones, the demo with live shots and ticks, cancel with the unfinished line, a run after it, a refused file, a click
     and keys seeking with the playhead following, cards under the timeline at 390 px; screenshots in the PR)
+
+- Audio in the core: waveform, reference tone, silence, peaks, loudness
+  - Why: the core parts of "A waveform from ManagedCodecs' AAC" and "Audio measures", with their native checks, so
+    their page rows only add an export and a panel.
+  - Status: Done (2026-10-25: `Mp4Audio` and `Loudness.cs`, one pass with `AacDecoder` reading only the audio packets'
+    data; `tools/NativeCheck/AudioCheck.cs` within tolerance on the tone sample, the short sine and the Sintel trailer:
+    integrated within 0.005 LU of `ebur128`, range within 0.008 LU, peaks within 0.032 dB (`ebur128`'s three-decimal
+    linear peaks), tone and silence ends 0 ms from `FindReferenceTone` and `silencedetect`, waveform values within 1 of
+    `WaveformData.Read`; `samples/no-aac/` answered with reasons. The tone sample's 2 s gap comes out 1.9966 s after
+    FFmpeg's AAC encoder, so neither finds it at `silencedetect`'s default 2 s: the check also compares at 1 s. #26)

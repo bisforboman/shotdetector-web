@@ -58,6 +58,27 @@ enc -filter_complex "$(three 1280x720 25 1),$untagged" -c:v libx264 -preset very
 # With an AAC track that runs on 0.45 s past the video: the format's duration (DetectedVideo.Duration) spans both.
 enc -filter_complex "$(three 320x240 25 1)" -f lavfi -i sine=d=3.45 -c:v libx264 -pix_fmt yuv420p -c:a aac "$out/with-audio-320x240-25.mp4"
 
+# Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
+# 0.1), 2 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 14 s of video.
+s="$out/tone-silence-320x240-25.mp4"
+tone="sine=f=1000:r=48000:d=6,volume=0.8"
+enc -filter_complex "testsrc2=s=320x240:r=25:d=14[v];$tone[a];anullsrc=r=48000:cl=mono,atrim=duration=2[b];$tone[c];[a][b][c]concat=n=3:v=0:a=1,pan=stereo|c0=c0|c1=c0[s]" \
+  -map '[v]' -map '[s]' -c:v libx264 -pix_fmt yuv420p -c:a aac "$s"
+# What it must be: one stereo 48 kHz AAC track of 14 s, the tone at -20 dBFS (an RMS level of -23.01 dB: the decoded
+# peaks wander by a few tenths) and the gap silent below -60 dBFS for almost 2 s (the encoder spreads the tone's edges
+# into it by a few milliseconds).
+got=$("$fp" -v error -select_streams a -show_entries stream=codec_name,sample_rate,channels,duration -of default=nw=1 "$s")
+want="codec_name=aac
+sample_rate=48000
+channels=2
+duration=14.000000"
+[[ $got == "$want" ]] || { printf '%s: the audio is\n%s\n' "$s" "$got" >&2; exit 1; }
+level=$("$ff" -hide_banner -nostats -i "$s" -map 0:a -af atrim=start=1:end=5,astats=measure_perchannel=none:measure_overall=RMS_level -f null - 2>&1 | awk '/RMS level dB/ {print $NF}')
+gap=$("$ff" -hide_banner -nostats -i "$s" -map 0:a -af silencedetect=d=1.9 -f null - 2>&1 | awk '/silence_end/ {print $5, $8}')
+if ! awk -v l="$level" -v g="$gap" 'BEGIN { split(g, x, " "); exit !(l > -23.06 && l < -22.96 && x[1] > 7.95 && x[1] < 8.05 && x[2] > 1.95 && x[2] < 2) }'; then
+  echo "$s: the tone's RMS level is ${level:-?} dB, the gap (end, length) is ${gap:-not found}." >&2; exit 1
+fi
+
 # Sintel's trailer (Blender Foundation, CC-BY 3.0; 1920x1080, 24 fps, 52 s, untagged), re-encoded to what the library
 # takes: 8-bit 4:2:0 progressive H.264 (libx264's High) at a constant 24 fps in a non-fragmented MP4, 854x480, two-pass
 # at 1400 kb/s with AAC at 128 kb/s, about 10 MB. Tagged BT.709, as the HD original is (untagged at 480p it would read
@@ -113,4 +134,39 @@ enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mjpeg "$out/reject/mjpeg.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/unrotated.tmp.mp4"
 enc -display_rotation 90 -i "$out/reject/unrotated.tmp.mp4" -c copy "$out/reject/rotated.mp4"
 rm "$out/reject/unrotated.tmp.mp4"
-echo "Samples in $out/: $(ls "$out"/*.mp4 | wc -l) to compare, $(ls "$out"/reject | wc -l) to refuse."
+# Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
+# and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
+# FFmpeg's encoder writes LC only).
+mkdir -p "$out/no-aac"
+short=(-f lavfi -i testsrc2=s=160x120:r=25:d=1 -f lavfi -i sine=d=1 -c:v libx264 -pix_fmt yuv420p)
+enc "${short[@]}" -c:a libmp3lame "$out/no-aac/mp3.mp4"
+enc "${short[@]}" -c:a libopus "$out/no-aac/opus.mp4"
+enc "${short[@]}" -c:a aac "$out/no-aac/aac-main.mp4"
+python3 -I - "$out/no-aac/aac-main.mp4" <<'PY'
+import sys
+path = sys.argv[1]
+d = bytearray(open(path, "rb").read())
+def descriptor(i):
+    """An MPEG-4 descriptor at i: its tag, where its payload starts, its length."""
+    tag, i, n = d[i], i + 1, 0
+    while True:
+        b, i = d[i], i + 1
+        n = n << 7 | b & 0x7F
+        if not b & 0x80:
+            return tag, i, n
+# esds: version and flags, then ES_Descriptor (ES_ID, flags: none set by FFmpeg), DecoderConfigDescriptor (13 bytes),
+# DecSpecificInfo: the AudioSpecificConfig, whose first 5 bits are the object type.
+tag, i, _ = descriptor(d.index(b"esds") + 8)
+assert tag == 3 and d[i + 2] == 0, "unexpected ES_Descriptor"
+tag, i, _ = descriptor(i + 3)
+assert tag == 4, "no DecoderConfigDescriptor"
+tag, i, _ = descriptor(i + 13)
+assert tag == 5 and d[i] >> 3 == 2, "no AAC LC AudioSpecificConfig"
+d[i] = 1 << 3 | d[i] & 7
+open(path, "wb").write(d)
+PY
+for f in mp3:mp3 opus:opus aac-main:aac/Main; do
+  got=$("$fp" -v error -select_streams a -show_entries stream=codec_name,profile -of csv=p=0 "$out/no-aac/${f%%:*}.mp4" | tr , /)
+  [[ $got == "${f#*:}"* ]] || { echo "$out/no-aac/${f%%:*}.mp4: the audio is $got, not ${f#*:}." >&2; exit 1; }
+done
+echo "Samples in $out/: $(ls "$out"/*.mp4 | wc -l) to compare, $(ls "$out"/reject | wc -l) to refuse, $(ls "$out"/no-aac | wc -l) without AAC to measure."
