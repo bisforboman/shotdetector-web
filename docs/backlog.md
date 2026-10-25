@@ -44,7 +44,7 @@ and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that
     it was told and makes the scenes CSV from them with `Shots.Csv`, and that becomes a line of this row. No partial
     stats CSV (the stats are in the result).
   - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`).
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 - Cancel without restarting the worker
   - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
