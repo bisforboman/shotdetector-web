@@ -117,3 +117,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     button. Before the merge, in headless Chromium on an interpreted publish with the clip in `demo/`: the demo ran
     to 8 shots in 1,253 frames, and with the clip missing it shows "The demo clip didn't download: 404 File not
     found". The live result: added after the first deploy with it)
+
+- Memory per frame
+  - Why: the wasm heap grew with the frame count, about 4 KB a frame: 735 MB after a two-hour film at 640x360
+    (172,800 frames), the same with the file at an eighth of the bytes.
+  - Status: Done (2026-10-25: measured step by step under Node on the AOT bundle and natively (README "What the heap
+    holds"): nothing per frame held it, the end of the run did. The CSVs went to JavaScript inside the result's JSON,
+    and escaping the 19.8-million-character stats CSV took a 268 MB char buffer and a 67 MB byte buffer that `ArrayPool`
+    kept, 337 MB of the heap. `Api.Detect`'s JSON now holds the shots and the numbers, and `ScenesCsv()` and
+    `StatsCsv()` return the CSVs as strings: the two-hour film's heap is 432 MB, not 769 MB, under Node. `Mp4Input`
+    opens with one demuxer instead of two (174 MB after opening, not 208). The rest waits upstream: ShotDetector's stats
+    and their CSV, ManagedCodecs' MP4 index (Waiting))
