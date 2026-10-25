@@ -60,7 +60,7 @@ for the first.
     `ffprobe -show_packets` (pts, size, the K flag), exactly, on every sample.
   - Done when: that check passes in CI.
   - Not: no App export, no page (the row); no change to the scene and stats CSVs.
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 ### Unblocked by ShotDetector 3.15.0
 
