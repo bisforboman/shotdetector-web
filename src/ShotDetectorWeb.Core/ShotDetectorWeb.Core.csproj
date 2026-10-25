@@ -2,7 +2,7 @@
 
   <!--
     Shot detection without FFmpeg: ManagedCodecs demuxes and decodes the MP4, ShotDetector.FastYuv converts, ShotDetector
-    detects. Runs natively and on browser-wasm. ShotDetector.FastYuv is LGPL-2.1 and stays its own DLL (README, Licensing).
+    detects; ManagedCodecs' AAC decoder decodes the sound that Mp4Audio measures. Runs natively and on browser-wasm. ShotDetector.FastYuv is LGPL-2.1 and stays its own DLL (README, Licensing).
   -->
   <PropertyGroup>
     <RootNamespace>ShotDetectorWeb</RootNamespace>
@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.Aac\ManagedCodecs.Aac.csproj" />
     <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.Containers\ManagedCodecs.Containers.csproj" />
     <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.H264\ManagedCodecs.H264.csproj" />
   </ItemGroup>
