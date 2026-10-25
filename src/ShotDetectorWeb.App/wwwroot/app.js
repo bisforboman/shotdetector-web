@@ -17,7 +17,7 @@ const DEFAULT_MIN_LENGTH = '0.6s';
 const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
-const detectButton = $('detect'), cancelButton = $('cancel');
+const detectButton = $('detect'), cancelButton = $('cancel'), demoButton = $('demo');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
 const result = $('result'), video = $('video'), summary = $('summary'), shotsBody = $('shots').tBodies[0];
 const scenesLink = $('scenes-csv'), statsLink = $('stats-csv');
@@ -75,6 +75,7 @@ function setState(next) {
   fileInput.disabled = busy;
   for (const input of [detector, threshold, minLength]) input.disabled = busy;
   detectButton.disabled = busy || !file;
+  demoButton.disabled = busy;
   detectButton.hidden = busy;
   cancelButton.hidden = !busy;
   progress.hidden = !busy;
@@ -228,6 +229,19 @@ threshold.value = DEFAULT_THRESHOLDS[detector.value];
 fileInput.onchange = () => choose(fileInput.files[0]);
 form.onsubmit = e => { e.preventDefault(); start(); };
 cancelButton.onclick = cancel;
+// The demo clip, next to the page (pages.yml), run as if it had been picked.
+demoButton.onclick = async () => {
+  demoButton.disabled = true;
+  statusText.textContent = 'Downloading the demo clip…';
+  try {
+    const response = await fetch('demo/sintel-trailer.mp4');
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    choose(new File([await response.blob()], 'sintel-trailer.mp4', { type: 'video/mp4' }));
+    start();
+  } catch (e) {
+    fail(`The demo clip didn't download: ${e.message}`);
+  }
+};
 for (const type of ['dragenter', 'dragover']) {
   document.addEventListener(type, e => { e.preventDefault(); drop.classList.add('over'); });
 }

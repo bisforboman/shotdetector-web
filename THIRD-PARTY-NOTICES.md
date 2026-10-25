@@ -26,8 +26,9 @@ path uses it (tools/app-check.mjs checks that the interpreted runtime never load
 
 ## Sintel's trailer
 
-The checks run on, and the page's demo will play, a re-encode of the trailer of *Sintel*: © copyright Blender
-Foundation | [durian.blender.org](https://durian.blender.org), licensed under
-[Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Changes: scaled to 854x480 and
+The checks run on, and the page's demo ("Try the demo", served as `demo/sintel-trailer.mp4`) runs, a re-encode of the
+trailer of *Sintel*: © copyright Blender Foundation | [durian.blender.org](https://durian.blender.org), licensed
+under [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/). Changes: scaled to 854x480 and
 re-encoded to H.264 and AAC (`tools/make-samples.sh`, from `sintel_trailer-1080p.mp4` on download.blender.org).
-Neither the original nor the re-encode is in this repository.
+Neither the original nor the re-encode is in this repository: CI and the Pages deploy each download the original
+(pinned by SHA-256) and re-encode it. The page credits it next to the button.
