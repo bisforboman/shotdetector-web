@@ -38,7 +38,7 @@ alongside it (the owner's choice, 2026-10-25).
   - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
     unchanged. A CSV that changes is a finding to report (here or upstream, as CLAUDE.md says), not to fix around.
   - Not: no use of the new APIs yet (their rows).
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 - Large files: stream from the file instead of copying it into memory
   - Why: the page refuses files above 512 MB, and a feature-length MP4 is bigger. The whole file is copied twice
