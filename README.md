@@ -97,8 +97,9 @@ what grew it (the same steps run natively, with `GC.GetTotalMemory` around them 
 | The result to JavaScript, now | 432 MB | `Detect`'s JSON holds the shots and the numbers; the CSVs come as strings of their own (`ScenesCsv()`, `StatsCsv()`), which reach JavaScript without growing the heap |
 
 So the heap grew with the frame count because of what the end of a run builds, not what it keeps a frame: the JSON
-about 2 KB a frame, the stats CSV about 1 KB, the demuxer's index about 1 KB with this file's audio. The CSVs are
-unchanged (`tools/check.sh`). What is left waits upstream (backlog, Waiting): ShotDetector's stats by column and a CSV
+about 2 KB a frame, the stats CSV about 1 KB, the demuxer's index about 1 KB with this file's audio. In headless
+Chromium as in the table above, the control's run now ends with a wasm heap of 432 MB (734 MB before) and the
+renderer's peak at 788 MB (1,043 MB), the same 1,105 shots. The CSVs are unchanged (`tools/check.sh`). What is left waits upstream (backlog, Waiting): ShotDetector's stats by column and a CSV
 written row by row, ManagedCodecs' index built without its copies.
 
 ## Size

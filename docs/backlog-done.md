@@ -142,6 +142,7 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     holds"): nothing per frame held it, the end of the run did. The CSVs went to JavaScript inside the result's JSON,
     and escaping the 19.8-million-character stats CSV took a 268 MB char buffer and a 67 MB byte buffer that `ArrayPool`
     kept, 337 MB of the heap. `Api.Detect`'s JSON now holds the shots and the numbers, and `ScenesCsv()` and
-    `StatsCsv()` return the CSVs as strings: the two-hour film's heap is 432 MB, not 769 MB, under Node. `Mp4Input`
-    opens with one demuxer instead of two (174 MB after opening, not 208). The rest waits upstream: ShotDetector's stats
-    and their CSV, ManagedCodecs' MP4 index (Waiting))
+    `StatsCsv()` return the CSVs as strings: the two-hour film's heap is 432 MB, not 769 MB, under Node, and 432 MB, not
+    734 MB, in headless Chromium (renderer peak 788 MB, not 1,043). `Mp4Input` opens with one demuxer instead of two
+    (174 MB after opening, not 208). The rest waits upstream: ShotDetector's stats and their CSV, ManagedCodecs' MP4
+    index (Waiting))
