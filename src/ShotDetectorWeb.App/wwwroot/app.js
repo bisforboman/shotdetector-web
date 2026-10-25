@@ -5,7 +5,7 @@
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
 // (854x480, the AOT build Pages serves, headless Chromium on a 4-core cloud VM, 2026-10-25): REFERENCE_FPS frames per
 // second at 854x480.
-const REFERENCE_FPS = 60;
+const REFERENCE_FPS = 46;
 const REFERENCE_PIXELS_PER_SECOND = REFERENCE_FPS * 854 * 480;
 const RATE_KEY = 'pixelsPerSecond';
 
