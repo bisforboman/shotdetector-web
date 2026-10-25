@@ -14,19 +14,23 @@ namespace ShotDetectorWeb.App;
 public static partial class Api
 {
     static Mp4Input? _input;
+    static JSObject? _file;
 
     /// <summary>What a damaged file's message starts with on the page (decision "A damaged file's message").</summary>
     const string Damaged = "The file is damaged or not an MP4 this page can read: ";
 
     /// <summary>
     /// Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON, or the library's exception (a damaged
-    /// file's prefixed with <see cref="Damaged"/>).
+    /// file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
+    /// in slices as the library needs them (<see cref="BlobStream"/>), never copied in whole.
     /// </summary>
     [JSExport]
-    public static string Open(byte[] file)
+    public static string Open(JSObject file)
     {
         _input = null;
-        var input = DamagedPrefixed(() => Mp4Input.Open(file));
+        _file?.Dispose();
+        _file = file;
+        var input = DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file)));
         _input = input;
         return JsonSerializer.Serialize(input.Video, ApiJson.Default.YuvVideo);
     }
