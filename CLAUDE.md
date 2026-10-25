@@ -56,8 +56,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - Before pushing: `tools/make-samples.sh` (once) and `tools/check.sh` (native + wasm interpreted, a few minutes),
   `tools/check.sh wasm aot` for anything that could differ under AOT.
-- Packages: ShotDetector/FastYuv 3.14.0 from nuget.org, versions central in `Directory.Packages.props`; ManagedCodecs
-  is the submodule, referenced by project. README, "Packages".
+- Packages: ShotDetector/FastYuv 3.15.0 and FrameReader 2.11.0 from nuget.org, versions central in
+  `Directory.Packages.props`; ManagedCodecs is the submodule, referenced by project. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
   file (`docs/decisions/2026-10-24-fastyuv-replaceable.md`; `tools/check.sh replace aot` in CI). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.
@@ -67,8 +67,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 
 - `dotnet workload list` can show wasm-tools installed with no packs in `~/.dotnet/packs` (NETSDK1147 on build):
   `dotnet workload install wasm-tools` again installs them.
-- ShotDetector's file path reports `DetectedVideo.Duration` from ffprobe's format duration text (six decimals) through
-  `TimeSpan.FromSeconds(double)`, which truncates (4.56 s comes out 4.5599999): `Mp4Input` does the same.
+- ShotDetector's file path reports `DetectedVideo.Duration` from ffprobe's format duration text (six decimals), to the
+  nearest tick since 3.15.0 (3.14.0 went through `TimeSpan.FromSeconds(double)`, which truncates: 4.56 s came out
+  4.5599999): `Mp4Input` and NativeCheck's oracle do the same.
 - ManagedCodecs' audio packets start at negative pts (priming) with `SkipSamples`: a stream's start for FFmpeg's
   format duration is pts + skip (in the stream's time base).
 - On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; Emscripten's file system doesn't see the host's,
