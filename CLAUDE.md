@@ -20,16 +20,19 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose), `SpsInfo` (the SPS's format and VUI colour
   fields), `UnsupportedVideoException`.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
-  side, `Api`'s `[JSExport]`s `Open(byte[])` (the `YuvVideo` as JSON), `Detect(string optionsJson)` (shots, scene and
-  stats CSVs, frame count, rate, duration as JSON), `LoadedAssemblies()`, and `[JSImport] progress(done, expected)`;
-  `wwwroot/worker.js` owns the runtime and answers the page's `open` and `detect` messages; the page is
+  side, `Api`'s `[JSExport]`s `Open(JSObject)` (a `Blob`, the picked `File`, read through `BlobStream`; the `YuvVideo`
+  as JSON), `Detect(string optionsJson)` (shots, scene and stats CSVs, frame count, rate, duration as JSON),
+  `LoadedAssemblies()`, and `[JSImport]`s `progress(done, expected)` and `read(blob, position, view)` (`BlobStream`: a
+  seekable `Stream` over the file in slices of a megabyte); `wwwroot/worker.js` owns the runtime and answers the page's
+  `open` and `detect` messages, `wwwroot/blob-read.js` is its `read` (`FileReaderSync`); the page is
   `wwwroot/index.html`, `app.js`, `style.css` (no build step, no dependency; README "Running the page"). `Api` prefixes
   ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/app-check.mjs`: the App's published
-  bundle under Node through the same exports; `tools/replace-check.mjs`: a bundle rebuilt with a changed FastYuv runs
-  it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes, which app-check.mjs
-  holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks; `tools/make-samples.sh`: the
-  samples.
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `tools/app-check.mjs`: the App's published bundle
+  under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
+  (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node); `tools/replace-check.mjs`: a bundle
+  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks;
+  `tools/make-samples.sh`: the samples.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`;
   `.github/workflows/pages.yml`: after CI on a push to `main`, the AOT publish's `wwwroot/` plus FastYuv's license and
   `.nojekyll`, checked for the two LGPL files, deployed to https://bisforboman.github.io/shotdetector-web/.
@@ -69,7 +72,15 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - ManagedCodecs' audio packets start at negative pts (priming) with `SkipSamples`: a stream's start for FFmpeg's
   format duration is pts + skip (in the stream's time base).
 - On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; Emscripten's file system doesn't see the host's,
-  so files come in as bytes through `Open(byte[])` and results go out as JSON strings (app-check.mjs writes them).
+  so files come in as a `Blob` through `Open(JSObject)`, read in slices by `[JSImport] read`, and results go out as
+  JSON strings (app-check.mjs writes them).
+- In the worker each `FileReaderSync` read is a new `ArrayBuffer` that V8 frees late while .NET holds the thread: a pass
+  that reads the file as fast as it comes grows the renderer with the file (2.37 GB read: 1.2 to 1.4 GB; seen
+  2026-10-25). A run reads at the decoder's pace and stays bounded; `Mp4Input`'s duration pass skips the packets' data
+  (`TimingOnlyStream`). A new pass over a whole file (the audio rows) should do the same or read at a decoder's pace.
+- Node has no synchronous Blob read: `tools/node-host.mjs`'s `FileReaderSync` reads each slice on a worker thread and
+  waits with `Atomics.wait`. Its Blobs hold the file in memory: a file-backed one (`fs.openAsBlob`) aborts Node 22
+  when a worker reads its clone ("Entering the V8 API without proper locking", seen 2026-10-25).
 - The App's `_framework/` keeps unhashed names (`WasmFingerprintAssets` false: `ShotDetector.FastYuv.wasm`), and
   `dotnet publish` adds to an existing publish folder: `tools/check.sh` deletes it first so its listing check means
   something.
