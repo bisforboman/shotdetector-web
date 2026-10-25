@@ -74,7 +74,10 @@ jobs:
           FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
           LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
           SINTEL: ${{ steps.sintel.outputs.file }}
-        run: tools/make-samples.sh
+        # The trailer's hash, to compare with the demo clip pages.yml makes from the same recipe (its step summary).
+        run: |
+          tools/make-samples.sh
+          sha256sum samples/sintel_trailer-480p.mp4 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Native check (ManagedCodecs + FastYuv against FFmpeg)
         env:

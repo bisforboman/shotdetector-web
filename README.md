@@ -28,7 +28,9 @@ Anything else is refused when the file is opened, with an `UnsupportedVideoExcep
 codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame rate). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
-Next: the demo clip. How the page is built is decided in
+The page's "Try the demo" runs Sintel's trailer, re-encoded at deploy time by the recipe CI's checks run on
+(`tools/make-samples.sh`), so the file visitors try is the one the exactness check covers. How the page is built is
+decided in
 [docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md); the work, row by row, is in
 [docs/backlog.md](docs/backlog.md).
 
@@ -49,7 +51,9 @@ of any size runs: the worker gets the `File` itself, and .NET reads it in slices
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
 run, else `REFERENCE_FPS` at the top of `app.js`); Cancel stops the worker and starts a new one. Errors are the
-library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this page can read:".
+library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this page can read:". "Try the demo"
+fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file: `pages.yml` puts the Sintel sample
+there; locally, copy `samples/sintel_trailer-480p.mp4` to `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
 
 ## Large files
 
