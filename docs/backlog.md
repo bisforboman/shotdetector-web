@@ -20,25 +20,8 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### Picked up next
 
-The owner moved large files ahead of the rest (2026-10-24): a film should run, not be refused. The 3.15.0 row runs
-alongside it (the owner's choice, 2026-10-25).
-
-- ShotDetector 3.15.0 and FrameReader 2.11.0
-  - Why: 3.15.0 has what the cancel and live-shots rows need (`DetectAsync` over an asynchronous frame source,
-    `DetectionOptions.OnShot`), and FrameReader 2.11.0 what the audio rows need (`ReferenceToneFinder`,
-    `WaveformBuilder`). 3.15.0 also fixes a duration that was cut to the tick below (4.56 s came out 4.5599999 s),
-    which `Mp4Input` copies on purpose today (CLAUDE.md, Gotchas), so the native check's `YuvVideo` comparison will
-    disagree on `Duration` until the core follows.
-  - Where: `Directory.Packages.props`: ShotDetector and ShotDetector.FastYuv to 3.15.0, and an explicit FrameReader
-    2.11.0 (it comes with ShotDetector today; the audio rows will reference it directly, and versions are central).
-    `Mp4Input`'s duration: read how 3.15.0 builds `DetectedVideo.Duration` in shotdetector's source at `v3.15.0` and
-    do the same, rather than guess; the native check is the authority. Correct the CLAUDE.md gotcha and README.
-    3.15.0's other fix (in-process FastYuv following each frame's colour tags) is for FFmpeg's decoding of videos
-    whose tags change midway: no sample does, and `YuvFrame` carries no per-frame tags, so it changes nothing here.
-  - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
-    unchanged. A CSV that changes is a finding to report (here or upstream, as CLAUDE.md says), not to fix around.
-  - Not: no use of the new APIs yet (their rows).
-  - Status: In progress (2026-10-25)
+The owner moved large files ahead of the rest (2026-10-24): a film should run, not be refused. The 3.15.0 row ran
+alongside it (the owner's choice, 2026-10-25) and is done.
 
 - Large files: stream from the file instead of copying it into memory
   - Why: the page refuses files above 512 MB, and a feature-length MP4 is bigger. The whole file is copied twice

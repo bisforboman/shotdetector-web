@@ -81,3 +81,16 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     5.1 MB transferred, 16.96 MB raw, checked by `tools/check.sh wasm` and `wasm aot` (120 of 120 CSVs each).
     FFmpeg.AutoGen 103 KB transferred, FrameReader 26 KB (the trimming row). `CompressionEnabled` false: the
     publish's own `.br`/`.gz` copies, which Pages never serves, are gone (the site 17 MB, not 32). README "Size")
+
+- ShotDetector 3.15.0 and FrameReader 2.11.0
+  - Why: 3.15.0 has what the cancel and live-shots rows need (`DetectAsync` over an asynchronous frame source,
+    `DetectionOptions.OnShot`), and FrameReader 2.11.0 what the audio rows need (`ReferenceToneFinder`,
+    `WaveformBuilder`). 3.15.0 also fixes a duration that was cut to the tick below (4.56 s came out 4.5599999 s),
+    which `Mp4Input` copied on purpose.
+  - Status: Done (2026-10-25: ShotDetector and FastYuv 3.15.0 and an explicit FrameReader 2.11.0 in
+    Directory.Packages.props. 3.15.0 reads ffprobe's six-decimal duration to the nearest tick (`VideoReader.Seconds`,
+    `TimeSpan.FromTicks(Math.Round(s * TicksPerSecond))`); with only the packages moved, the native check differed
+    on `DetectedVideo.Duration` for full-range and start-offset (4.5599999 vs 4.56), and `Mp4Input` and NativeCheck's
+    oracle now do the same. Every scene and stats CSV byte-identical to the 3.14.0 run natively; wasm interpreted and
+    AOT 108 of 108 CSVs identical; `replace aot` from `v3.15.0`. The per-frame colour tags fix changes nothing here:
+    no sample's tags change midway, and `YuvFrame` carries none)
