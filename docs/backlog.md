@@ -21,30 +21,8 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 ### Unblocked by ShotDetector 3.15.0
 
 These waited on shotdetector#492 and #493, which shipped in ShotDetector 3.15.0 (2026-10-25). Both change `Api.Detect`
-and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that came first are done).
-
-- Shots as they're found, kept when a run is cancelled
-  - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
-    owner wants the shots found so far shown, and kept after a cancel (2026-10-24). ShotDetector already reports
-    each shot once the cut that ends it is confirmed, and since 3.15.0 tells the caller on every `Detect` overload:
-    `DetectionOptions.OnShot` ([shotdetector#493](https://github.com/bisforboman/shotdetector/issues/493)), on the
-    thread that runs the detection.
-  - Where: `Api` sets `OnShot` to a `[JSImport] shot(...)` called for each one,
-    like `progress`, which `worker.js` posts on (a `postMessage` from synchronous .NET is delivered, decision "Where
-    the runtime lives"); `app.js` adds each row to the table as it comes. On Cancel the table stays, with one more
-    line from the last cut to where the run stopped, marked unfinished, not as a shot. The shots arrive a few frames
-    late (the adaptive detector's window, the minimum shot length), and only for one detector without
-    `DropShortScenes` or `MergeLastScene` (`Run`'s `incremental`), which is what the page sends; with several
-    detectors they all come at the end. `tools/app-check.mjs` checks that the shots told equal the result's shots,
-    exactly, on every sample and run.
-  - Done when: on the Sintel trailer, rows appear while the run goes, and a cancel mid-way leaves the shots found so
-    far and the unfinished line; checks green.
-  - Not: no downloads for a cancelled run while Cancel terminates the worker (.NET is gone, and a CSV built in
-    JavaScript would be a second `Shots.Csv`). Once "Cancel without restarting the worker" lands, `Api` keeps the shots
-    it was told and makes the scenes CSV from them with `Shots.Csv`, and that becomes a line of this row. No partial
-    stats CSV (the stats are in the result).
-  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`).
-  - Status: In progress (2026-10-25)
+and `worker.js`, so they run one at a time (the 3.15.0, large files and "Shots as they're found" rows that came first
+are done).
 
 - Cancel without restarting the worker
   - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
@@ -58,13 +36,15 @@ and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that
     `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
     `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
     `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
-    `tools/app-check.mjs` calls the new export.
+    `tools/app-check.mjs` calls the new export. A cancelled run's shots (the page keeps those it was told, "Shots as
+    they're found", done) get a scenes CSV: `Api` keeps the shots it was told and makes it from them with `Shots.Csv`,
+    and `cancelled` carries it (no partial stats CSV); `app.js` offers it as the download, the unfinished line not in it.
   - Done when: on the Sintel trailer, a run cancelled mid-way is followed at once by a run with another threshold,
     without opening the file again; the yields cost under 1% of the run's time (pick N for it); checks green, CSVs
     unchanged.
-  - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; the shots found before the cancel
-    are the next row's, which also gives them CSVs once this one lands.
-  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found".
+  - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; its shots are the ones told.
+  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
+    (done).
   - Status: Open
 
 ### First release: the page on GitHub Pages
