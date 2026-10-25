@@ -20,24 +20,10 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ### Now: the page's structure, and the core's audio and packets
 
-The owner asked (2026-10-25) to build the missing pieces at once rather than one by one. These three run side by
-side: the first touches only the App, the other two only the core and `tools/NativeCheck`. The panel rows below wait
-for the first.
-
-- The page's structure: one timeline, cards, a module per panel
-  - Why: every panel row edits `app.js`, `Api.cs` and `worker.js`, so they could only run one at a time, and each
-    placed its panel its own way. Decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md).
-  - Where: `src/ShotDetectorWeb.App`. Split `app.js` into the page's states plus native ES modules: `timeline.js`
-    (one time axis under the `<video>`, a playhead that follows `timeupdate`, a click seeks, lanes register
-    themselves) and `panels/<name>.js`, one per panel (lanes and cards). Move today's shots table into a panel, and
-    add one lane, the cuts as ticks, so the timeline is used from the start. `Api` becomes partial class files (`Api.cs`
-    keeps open and detect). `worker.js` calls any export by name. `index.html` gets the layout: the video and the
-    timeline, cards beside it, the table below, cards stacked at phone width. CLAUDE.md "Layout" says where a new
-    lane, card or export goes.
-  - Done when: the page works as it does now (the checks green, CSVs unchanged), plus the timeline with the cuts
-    lane and the playhead, in Chromium and Firefox and at phone width (screenshots in the PR).
-  - Not: no new panels (their rows); no bundler, no framework, no dependency.
-  - Status: In progress (2026-10-25)
+The owner asked (2026-10-25) to build the missing pieces at once rather than one by one. These ran side by side: the
+page's structure (the App only, done: [backlog-done.md](backlog-done.md)), and these two (the core and
+`tools/NativeCheck` only). The panel rows below can run side by side now, the waveform, audio measures and bitrate
+rows once their core rows have landed.
 
 - Audio in the core: waveform, reference tone, silence, peaks, loudness
   - Why: the core parts of "A waveform from ManagedCodecs' AAC" and "Audio measures", done now, with the native
