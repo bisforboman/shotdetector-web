@@ -94,6 +94,12 @@ public sealed class Mp4Input
     public static Mp4Input Open(byte[] data) => new(() => new MemoryStream(data, writable: false));
 
     /// <summary>
+    /// Opens an MP4 file read through <paramref name="open"/>, which must give a new readable, seekable stream over the
+    /// file on every call (in the browser: one reading slices of the picked file, so it never has to fit in memory).
+    /// </summary>
+    public static Mp4Input Open(Func<Stream> open) => new(open);
+
+    /// <summary>
     /// Detects shots: <see cref="ShotDetection.Detect(YuvVideo, IEnumerable{YuvFrame}, DetectionOptions?, CancellationToken)"/>
     /// on <see cref="Frames"/>, with ShotDetector.FastYuv's converter unless the options name another.
     /// </summary>
