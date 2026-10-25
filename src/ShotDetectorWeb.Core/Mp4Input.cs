@@ -62,10 +62,13 @@ public sealed class Mp4Input
         // the stream's start (FFmpeg's start_time for an MP4 video track, edit list applied).
         var (width, height, firstPts) = FirstFrame(demuxer);
 
-        // Only the packets' timing counts for the duration: from here on the packets' data is not read (on a film in the
-        // browser that would read gigabytes just to throw them away).
+        // Only the packets' timing and sizes count for the duration and the packet list: from here on the packets' data
+        // is not read (on a film in the browser that would read gigabytes just to throw them away).
         stream.SkipReads = true;
-        long? duration = FormatDuration(demuxer);
+        var timeBase = new FrameReader.Rational(1, checked((int)header.Timescale));
+        var packets = new VideoPackets.Builder(timeBase, (int)Math.Min(header.SampleCount, Array.MaxLength));
+        long? duration = FormatDuration(demuxer, packets);
+        Packets = packets.Build();
 
         // The decoder's colour tags: the SPS's VUI where it has them, else the container's 'colr' box (FFmpeg's h264
         // decoder overrides the container's values with the SPS's). Full range makes FFmpeg's h264 decoder output yuvj420p.
@@ -82,7 +85,7 @@ public sealed class Mp4Input
             PixelFormat = fullRange ? "yuvj420p" : "yuv420p",
             ColorSpace = colorSpace,
             FullRange = fullRange,
-            TimeBase = new FrameReader.Rational(1, checked((int)header.Timescale)),
+            TimeBase = timeBase,
             StartPts = firstPts,
             FrameCount = header.SampleCount,
             Duration = duration is long us
@@ -95,6 +98,9 @@ public sealed class Mp4Input
 
     /// <summary>The video as FFmpeg's demuxer and decoder report it (average frame rate, time base, start pts, colour tags, frame count).</summary>
     public YuvVideo Video { get; }
+
+    /// <summary>The video track's packets as FFmpeg's demuxer gives them (pts, size, keyframe), from the walk opening made.</summary>
+    public VideoPackets Packets { get; }
 
     /// <summary>Opens an MP4 file on disk.</summary>
     public static Mp4Input Open(string path) => new(() => File.OpenRead(path));
@@ -157,13 +163,15 @@ public sealed class Mp4Input
     /// FFmpeg's AVFormatContext.duration in microseconds (update_stream_timings): from the earliest stream start to the
     /// latest stream end, video and audio, as the edit lists present them; null without packets. ShotDetector reports it
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
-    /// result.
+    /// result. Adds each video packet to <paramref name="packets"/> on the way.
     /// </summary>
-    static long? FormatDuration(Mp4Demuxer demuxer)
+    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets)
     {
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPackets())
         {
+            if (demuxer.Video is { } video && packet.StreamIndex == video.StreamIndex)
+                packets.Add(packet);
             if (packet.Discard)
                 continue;
             ManagedCodecs.Rational timeBase;

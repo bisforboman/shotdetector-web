@@ -106,6 +106,9 @@ Chromium as in the table above, the control's run now ends with a wasm heap of 4
 renderer's peak at 788 MB (1,043 MB), the same 1,105 shots. The CSVs are unchanged (`tools/check.sh`). What is left waits upstream (backlog, Waiting): ShotDetector's stats by column and a CSV
 written row by row, ManagedCodecs' index built without its copies.
 
+Since then an open file also holds its video packet list (`Mp4Input.Packets`, below): 13 bytes a frame, 2.25 MB on a
+two-hour film.
+
 ## Size
 
 A first visit downloads the page and every file in `_framework/` that `dotnet.js` names. GitHub Pages gzips every
@@ -150,6 +153,14 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); full range is yuvj420p |
 | Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
+`Mp4Input.Packets` lists the video track's packets as FFmpeg's demuxer gives them, in decode order, edit list applied
+and discarded packets included (what `ffprobe -show_packets -select_streams v:0` prints): each one's pts (`Pts`, in
+`TimeBase`; `Seconds(i)` as ffprobe's pts_time), size in bytes (`Sizes`) and keyframe and discard flags (`Flags`), the
+bitrate over time and the encoder's keyframes without decoding. Opening the file already walks every packet for the
+duration, with their data skipped; the list is kept on the way, by column, 13 bytes a packet, its arrays allocated
+once at the track's sample count. Measured 2026-10-25 natively against `main` on a two-hour file (172,800 frames at
+24 fps, 337,501 AAC packets): `Open` keeps 2.25 MB more and allocates 2.25 MB more, in the same time (0.9 s).
+
 ## Checks
 
 ```
@@ -164,8 +175,10 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
   field; then each detector (adaptive, content, threshold, histogram, hash, and all five in one run, with stats) on
   (a) the core library and (b) ShotDetector's `Detect(path)` with FFmpeg in-process and the same FastYuv converter:
   frame count, frame rate, length, duration, processed size, cuts, scene CSV and stats CSV must be equal. It also
-  checks that `samples/reject/` is refused, each file with its own message. A Markdown table goes to
-  `out/native-report.md`, (a)'s CSVs to `out/native/`.
+  checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
+  `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
+  same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`). Markdown
+  tables go to `out/native-report.md`, (a)'s CSVs to `out/native/`.
 - **wasm** (`tools/app-check.mjs`, under Node): the page's own .NET side, `src/ShotDetectorWeb.App` published for
   browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs,
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
