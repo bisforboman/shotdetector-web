@@ -1,13 +1,12 @@
-// The page's worker: it owns the .NET runtime, the page owns the DOM (docs/decisions/2026-10-24-the-page.md).
-//   in:  { type: 'open', file: <a File or Blob> }                  out: { type: 'opened', video: <the YuvVideo> }
-//        { type: 'detect', options: { detector, threshold, minSceneLength } }
-//                                                                  out: { type: 'progress', done, expected } and
-//                                                                       { type: 'shot', shot } (each shot as soon as
-//                                                                       it is known) while it runs, then
-//                                                                       { type: 'detected', result }
-//   on failure:                                                    out: { type: 'error', message }
-// Messages are answered in order. A run can't be interrupted (the worker is busy in .NET): to cancel, terminate the
-// worker and start another; the shots it posted before stay the page's. The file is read in slices as .NET needs them (blob-read.js), not copied into memory.
+// The page's worker: it owns the .NET runtime, the page owns the DOM (docs/decisions/2026-10-24-the-page.md). It calls
+// any of Api's exports by name (decision 2026-10-25-one-page.md), so a new export needs no change here:
+//   in:  { type: 'call', id, name, args }        out: { type: 'result', id, value } (what the export returned)
+//                                                     { type: 'error', id, message } (what it threw)
+//   while an export runs, its imports post:          { type: 'progress', done, expected } and
+//                                                     { type: 'shot', shot } (Detect's, each shot as soon as it is known)
+// Calls are answered in order, one at a time. One can't be interrupted (the worker is busy in .NET): to cancel, the
+// page terminates the worker and starts another. The file is read in slices as .NET needs them (blob-read.js), not
+// copied into memory.
 import { dotnet } from './_framework/dotnet.js';
 import { read } from './blob-read.js';
 
@@ -25,23 +24,13 @@ async function start() {
 
 // Listening before the runtime is up, so that no message sent meanwhile is lost.
 const api = start();
-onmessage = async ({ data }) => {
+onmessage = async ({ data: { type, id, name, args = [] } }) => {
   try {
-    const { Open, Detect, ScenesCsv, StatsCsv } = await api;
-    switch (data.type) {
-      case 'open':
-        postMessage({ type: 'opened', video: JSON.parse(Open(data.file)) });
-        break;
-      case 'detect': {
-        // The CSVs come as strings of their own, not inside Detect's JSON (README "Large files").
-        const result = JSON.parse(Detect(JSON.stringify(data.options ?? {})));
-        postMessage({ type: 'detected', result: { ...result, scenesCsv: ScenesCsv(), statsCsv: StatsCsv() } });
-        break;
-      }
-      default:
-        throw new Error(`Unknown message type: ${data.type}`);
-    }
+    if (type !== 'call') throw new Error(`Unknown message type: ${type}`);
+    const exported = (await api)[name];
+    if (typeof exported !== 'function') throw new Error(`No export named ${name}.`);
+    postMessage({ type: 'result', id, value: exported(...args) });
   } catch (e) {
-    postMessage({ type: 'error', message: e.message });
+    postMessage({ type: 'error', id, message: e.message });
   }
 };
