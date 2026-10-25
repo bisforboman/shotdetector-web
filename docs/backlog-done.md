@@ -153,3 +153,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     734 MB, in headless Chromium (renderer peak 788 MB, not 1,043). `Mp4Input` opens with one demuxer instead of two
     (174 MB after opening, not 208). The rest waits upstream: ShotDetector's stats and their CSV, ManagedCodecs' MP4
     index (Waiting))
+
+- Audio in the core: waveform, reference tone, silence, peaks, loudness
+  - Why: the core parts of "A waveform from ManagedCodecs' AAC" and "Audio measures", with their native checks, so
+    their page rows only add an export and a panel.
+  - Status: Done (2026-10-25: `Mp4Audio` and `Loudness.cs`, one pass with `AacDecoder` reading only the audio packets'
+    data; `tools/NativeCheck/AudioCheck.cs` within tolerance on the tone sample, the short sine and the Sintel trailer:
+    integrated within 0.005 LU of `ebur128`, range within 0.008 LU, peaks within 0.032 dB (`ebur128`'s three-decimal
+    linear peaks), tone and silence ends 0 ms from `FindReferenceTone` and `silencedetect`, waveform values within 1 of
+    `WaveformData.Read`; `samples/no-aac/` answered with reasons. The tone sample's 2 s gap comes out 1.9966 s after
+    FFmpeg's AAC encoder, so neither finds it at `silencedetect`'s default 2 s: the check also compares at 1 s. #26)

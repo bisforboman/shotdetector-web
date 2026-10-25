@@ -39,20 +39,6 @@ for the first.
   - Not: no new panels (their rows); no bundler, no framework, no dependency.
   - Status: Open
 
-- Audio in the core: waveform, reference tone, silence, peaks, loudness
-  - Why: the core parts of "A waveform from ManagedCodecs' AAC" and "Audio measures", done now, with the native
-    checks, so their page rows only add an export and a panel. Decision [2026-10-24-audio.md](decisions/2026-10-24-audio.md).
-  - Where: `src/ShotDetectorWeb.Core`, a file of its own (`Mp4Audio.cs` or similar), a reference to
-    `ManagedCodecs.Aac`, and FrameReader 2.11.0's `WaveformBuilder` and `ReferenceToneFinder`. Everything the two
-    rows' Where says about the core belongs here: one pass over the audio packets, `AacDecoder`, never holding the
-    samples, priming and `SkipSamples` and the edit list, no AAC or no audio handled without an error, the sample with
-    the tone and the silence. `tools/NativeCheck` compares the waveform with FrameReader's `WaveformData.Read` on the
-    same file, the tone with ShotDetector's `FindReferenceTone`, loudness with FFmpeg's `ebur128=peak=true` and
-    silences with `silencedetect`, within the tolerances the rows give.
-  - Done when: those native checks pass in CI on every sample with audio and on the Sintel trailer.
-  - Not: no App export, no page (the two rows); no change to `Mp4Input`'s video path.
-  - Status: In progress (2026-10-25)
-
 - Packets in the core: bitrate and keyframes
   - Why: the core part of "Bitrate and keyframes", done now with its check.
   - Where: `src/ShotDetectorWeb.Core`: for each video packet, its pts, size and keyframe flag, kept during the walk
@@ -191,7 +177,8 @@ page's own; the CSVs stay the only output the exactness check speaks for.
     `tools/make-samples.sh` with 6 s of a 1 kHz tone at -20 dBFS, 2 s of silence, then 6 s of the tone again (`sine`,
     `volume`, `anullsrc`; the "Audio measures" row reuses it), plus a check in `tools/app-check.mjs` that the envelope
     is loud, silent, loud at those times, within a video frame. FrameReader references FFmpeg.AutoGen: after the audio
-    pass, `LoadedAssemblies()` must still show no FFmpeg assembly (the interpreted check is strict). Depends on the
+    pass, `LoadedAssemblies()` must still show no FFmpeg assembly (the interpreted check is strict). The export brings
+    ManagedCodecs.Aac into the trimmed bundle: add it to THIRD-PARTY-NOTICES.md's ManagedCodecs row. Depends on the
     3.15.0 row (FrameReader 2.11.0) and on large files (the stream it reads through).
   - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
     Chromium and Firefox (screenshots in the PR). The PR gives how much the bundle grew and how much time the decode
