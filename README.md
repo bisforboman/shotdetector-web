@@ -39,14 +39,40 @@ dotnet publish src/ShotDetectorWeb.App -c Release            # -p:RunAOTCompilat
 python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot 8000
 ```
 
-Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does).
-The page is `wwwroot/index.html`, `app.js` and `style.css`, no build step and no dependencies; `worker.js` owns the
-.NET runtime and answers the page's `open` and `detect` messages. Pick an MP4 (or drop one), choose the detector, its
-threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect: the shots come as a
-table whose rows seek the player, and the scenes and stats CSVs (`<file>.scenes.csv`, `<file>.stats.csv`, the
-file's name without its extension) are the ones scenedetect writes. Files above 512 MB are refused before they are
-read (`MAX_FILE_BYTES` at the top of `app.js`); Cancel stops the worker and starts a new one. Errors are the
+Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does). The
+page is `wwwroot/index.html`, `app.js` and `style.css`, no build step and no dependencies; `worker.js` owns the .NET
+runtime and answers the page's `open` and `detect` messages, and `blob-read.js` reads the picked file for it. Pick an
+MP4 (or drop one), choose the detector, its threshold (prefilled with ShotDetector's default for it) and the minimum
+shot length, and detect: the shots come as a table whose rows seek the player, and the scenes and stats CSVs
+(`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
+of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
+(`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
+page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
+run, else `REFERENCE_FPS` at the top of `app.js`); Cancel stops the worker and starts a new one. Errors are the
 library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this page can read:".
+
+## Large files
+
+The page reads the picked file in place: the worker gets the `File` (no bytes copied), `Api.Open` takes it as a
+`JSObject`, and each pass over the file opens a `BlobStream` that reads slices of a megabyte through `FileReaderSync`
+(`wwwroot/blob-read.js`). Opening reads the file's boxes and decodes the first frame; the pass for the format's
+duration skips the packets' data ([decision](docs/decisions/2026-10-24-the-page.md), "The file in memory"). Measured
+2026-10-25 on the AOT bundle in headless Chromium (Playwright, 4-core cloud VM), on a two-hour MP4 made by looping
+Sintel's trailer: 640x360 at 24 fps, libx264 at 2.5 Mbit/s with AAC audio, 172,800 frames.
+
+| File | Opening | Run (adaptive) | Renderer's peak RSS | Wasm heap after the run |
+| --- | --- | --- | --- | --- |
+| 2,370,979,581 bytes (2.2 GiB) | 3.4 s | 46 min, 63 fps, 968 shots | 805 MB | 735 MB |
+| 288,001,693 bytes, the same at 250 kbit/s (control) | 2.4 s | 34 min, 85 fps, 1,105 shots | 1,043 MB (at the end) | 734 MB |
+
+The renderer is the process the page and its worker run in, sampled every half second; the wasm heap never shrinks, so
+its size after the run is its peak. The control has the same frames in an eighth of the bytes and the same heap: the
+heap grows with the frame count (about 4 KB a frame; Sintel's 1,253 frames: 67 MB), not with the file (backlog, "Memory
+per frame"). During the control's run the renderer stayed at 450 to 500 MB, and its peak came as the result was built
+and shown; with the big file it rose to about 800 MB in the first half hour and no further (the slices `FileReaderSync`
+returns, which V8 frees late while .NET holds the thread). Before the duration pass skipped the packets' data, opening
+the same file took 43 s and peaked the renderer at 1.7 GB. The estimate before the big file's run said 35 min (the
+reference rate scaled by picture size); the next run in the same browser uses its own measured rate.
 
 ## Size
 
@@ -73,7 +99,7 @@ ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 using ShotDetector;
 using ShotDetectorWeb;
 
-var input = Mp4Input.Open(bytes);                  // or Mp4Input.Open("trailer.mp4")
+var input = Mp4Input.Open("trailer.mp4");          // or Open(bytes), or Open(() => a new seekable stream)
 var result = input.Detect(new DetectionOptions { Detector = DetectorKind.Content, CollectStats = true });
 string scenes = Shots.Csv(result.Shots, cuts: result.Cuts);   // scenedetect list-scenes' CSV
 string stats = result.Stats!.Csv(result.Video.Position);       // scenedetect -s's CSV
@@ -109,7 +135,9 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
   checks that `samples/reject/` is refused, each file with its own message. A Markdown table goes to
   `out/native-report.md`, (a)'s CSVs to `out/native/`.
 - **wasm** (`tools/app-check.mjs`, under Node): the page's own .NET side, `src/ShotDetectorWeb.App` published for
-  browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs;
+  browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs,
+  each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
+  gives Node the `FileReaderSync` it lacks);
   its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
   checks that progress reaches the last frame, that `samples/reject/` is refused through `Open`, and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.

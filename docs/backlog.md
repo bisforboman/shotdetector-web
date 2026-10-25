@@ -18,30 +18,10 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Picked up next
-
-The owner moved large files ahead of the rest (2026-10-24): a film should run, not be refused. The 3.15.0 row ran
-alongside it (the owner's choice, 2026-10-25) and is done.
-
-- Large files: stream from the file instead of copying it into memory
-  - Why: the page refuses files above 512 MB, and a feature-length MP4 is bigger. The whole file is copied twice
-    (into the page's memory, then into .NET's), a .NET array stops just under 2 GB, and the browser gives wasm at
-    most 4 GB on a desktop, less on a phone. `Mp4Input` takes a `Func<Stream>`, and workers have `FileReaderSync`, so
-    a stream that reads slices of the `File` synchronously needs no change to the core. Decision "The file in memory".
-  - Where: `src/ShotDetectorWeb.App`: a `BlobStream` (`Stream` over `[JSImport]` slice reads, a buffer of a megabyte
-    or so, seekable) and `Open` taking a handle to the file rather than its bytes; `worker.js` and `app.js` pass the
-    `File`; drop the size limit and its "trailers, not films" message. Instead, before a run starts, say how long it
-    will take: the measured frames per second scaled by picture size, labelled as an estimate. `tools/app-check.mjs`
-    reads samples through the same path under Node (a `Blob` from the file). Measure peak memory on a two-hour file.
-    The audio rows will read their packets through the same stream.
-  - Done when: a 2 GB MP4 runs in Chrome without the heap growing with the file; checks green.
-  - Not: no change to how the frames are decoded.
-  - Status: Open
-
 ### Unblocked by ShotDetector 3.15.0
 
 These waited on shotdetector#492 and #493, which shipped in ShotDetector 3.15.0 (2026-10-25). Both change `Api.Detect`
-and `worker.js`, so they run one at a time, after the two rows above.
+and `worker.js`, so they run one at a time (the 3.15.0 and large files rows that came first are done).
 
 - Shots as they're found, kept when a run is cancelled
   - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
@@ -68,7 +48,7 @@ and `worker.js`, so they run one at a time, after the two rows above.
 
 - Cancel without restarting the worker
   - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
-    two on a trailer, and a full re-read of the file once "Large files" streams it. The owner chose (2026-10-24)
+    two on a trailer, plus opening the file again (streamed since "Large files": seconds on a film). The owner chose (2026-10-24)
     cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
   - Where: ShotDetector 3.15.0 has `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>, DetectionOptions?,
     CancellationToken)` ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492)): it runs on the
@@ -102,6 +82,18 @@ and `worker.js`, so they run one at a time, after the two rows above.
   - Status: Open
 
 ### After the first release
+
+- Memory per frame
+  - Why: the wasm heap grows with the frame count, about 4 KB a frame: 735 MB after a two-hour film at 640x360
+    (172,800 frames), the same with the file at an eighth of the bytes (README "Large files", 2026-10-25). Scenedetect's
+    stats are a few hundred bytes a frame; the rest is unaccounted for. A three-hour film nears 1 GB of heap, and a
+    phone gives wasm less than a desktop.
+  - Where: measure what holds it first (a .NET heap dump of a native run of the core on the same file, or `GC` counts
+    around `Detect`): ShotDetector's per-frame results and stats, the CSV and JSON strings `Api.Detect` builds at the
+    end, or garbage the runtime's heap kept. Fix it where it lives; ShotDetector's own goes upstream as an issue.
+  - Done when: the cause is named, and the heap on the two-hour file is lower or the row says why it can't be.
+  - Not: no change to the CSVs.
+  - Status: Open
 
 - Real-browser smoke test
   - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`

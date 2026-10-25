@@ -94,6 +94,12 @@ public sealed class Mp4Input
     public static Mp4Input Open(byte[] data) => new(() => new MemoryStream(data, writable: false));
 
     /// <summary>
+    /// Opens an MP4 file read through <paramref name="open"/>, which must give a new readable, seekable stream over the
+    /// file on every call (in the browser: one reading slices of the picked file, so it never has to fit in memory).
+    /// </summary>
+    public static Mp4Input Open(Func<Stream> open) => new(open);
+
+    /// <summary>
     /// Detects shots: <see cref="ShotDetection.Detect(YuvVideo, IEnumerable{YuvFrame}, DetectionOptions?, CancellationToken)"/>
     /// on <see cref="Frames"/>, with ShotDetector.FastYuv's converter unless the options name another.
     /// </summary>
@@ -146,8 +152,11 @@ public sealed class Mp4Input
     /// </summary>
     long? FormatDuration()
     {
-        using var stream = _open();
+        // Only the packets' timing counts here: once the demuxer has read the file's boxes, the packets' data is not read
+        // (on a film in the browser that would read gigabytes just to throw them away).
+        using var stream = new TimingOnlyStream(_open());
         using var demuxer = new Mp4Demuxer(stream);
+        stream.SkipReads = true;
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPackets())
         {
@@ -233,6 +242,55 @@ public sealed class Mp4Input
             if (entries[i].Delta != entries[0].Delta)
                 throw new UnsupportedVideoException("The video has a variable frame rate: only a constant frame rate is supported so far.");
         }
+    }
+}
+
+/// <summary>
+/// Reads through to the stream it wraps until <see cref="SkipReads"/> is set; from then on a read reads nothing and
+/// reports the bytes as read, leaving the buffer as it was, so a demuxer hands out packets with their timing and without
+/// their data (left as allocated).
+/// </summary>
+sealed class TimingOnlyStream(Stream inner) : Stream
+{
+    public bool SkipReads { get; set; }
+
+    public override bool CanRead => true;
+    public override bool CanSeek => true;
+    public override bool CanWrite => false;
+    public override long Length => inner.Length;
+
+    public override long Position
+    {
+        get => inner.Position;
+        set => inner.Position = value;
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+    public override int Read(Span<byte> buffer)
+    {
+        if (!SkipReads)
+            return inner.Read(buffer);
+        int n = (int)Math.Clamp(Length - Position, 0, buffer.Length);
+        Position += n;
+        return n;
+    }
+
+    public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+
+    public override void Flush()
+    {
+    }
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            inner.Dispose();
+        base.Dispose(disposing);
     }
 }
 

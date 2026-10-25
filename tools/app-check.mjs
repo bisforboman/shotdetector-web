@@ -1,12 +1,14 @@
 // The App's exports under Node, as the page's worker calls them (src/ShotDetectorWeb.App/wwwroot/worker.js): each
 // sample opened, then every run of tools/Shared/Runs.cs (RUNS below) detected on it, the scene and stats CSVs written to
 // the output folder under the names tools/NativeCheck gives its own (tools/check.sh compares the two folders). Each
-// file to refuse must be refused when opened. Fails if the runs load an assembly of FFmpeg's; says whether one was
+// file to refuse must be refused when opened. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
+// through the published blob-read.js (tools/node-host.mjs). Fails if the runs load an assembly of FFmpeg's; says whether one was
 // loaded at all (interpreted: none).
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fileBlob, host } from './node-host.mjs';
 
 // tools/Shared/Runs.cs's runs as the page's options: each detector with scenedetect's defaults, and all five in one run.
 const RUNS = {
@@ -26,7 +28,7 @@ const rejects = at < 0 ? [] : rest.slice(at + 1);
 let progress = [];
 const { dotnet } = await import(pathToFileURL(resolve(wwwroot, '_framework/dotnet.js')).href);
 const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
-setModuleImports('host', { progress: (done, expected) => progress.push([done, expected]) });
+setModuleImports('host', { ...await host(wwwroot), progress: (done, expected) => progress.push([done, expected]) });
 const { Open, Detect, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
@@ -37,7 +39,7 @@ const fail = message => { console.error(message); failed = true; };
 
 mkdirSync(outDir, { recursive: true });
 for (const sample of samples) {
-  const video = JSON.parse(Open(readFileSync(sample)));
+  const video = JSON.parse(Open(fileBlob(sample)));
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frameCount} frames, ${video.duration} s`);
   for (const [run, options] of Object.entries(RUNS)) {
     progress = [];
@@ -57,7 +59,7 @@ for (const sample of samples) {
 
 for (const file of rejects) {
   try {
-    Open(readFileSync(file));
+    Open(fileBlob(file));
     fail(`${basename(file)}: opened, but it should have been refused.`);
   } catch (e) {
     console.error(`${basename(file)}: refused: ${e.message}`);

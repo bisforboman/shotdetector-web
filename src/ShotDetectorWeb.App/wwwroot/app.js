@@ -1,9 +1,13 @@
 // The page: picks a file, sends it to the worker (worker.js, which owns the .NET runtime) and shows what comes back.
 // How it is built: docs/decisions/2026-10-24-the-page.md. States: idle, opening, detecting, done, error.
 
-// Files above this are refused before they are read: the whole file goes into the wasm heap (decision "The file in
-// memory").
-const MAX_FILE_BYTES = 512 * 1024 * 1024;
+// The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
+// browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
+// (854x480, the AOT build Pages serves, headless Chromium on a 4-core cloud VM, 2026-10-25): REFERENCE_FPS frames per
+// second at 854x480.
+const REFERENCE_FPS = 46;
+const REFERENCE_PIXELS_PER_SECOND = REFERENCE_FPS * 854 * 480;
+const RATE_KEY = 'pixelsPerSecond';
 
 // ShotDetector's default threshold for each detector (DetectionOptions.Threshold), prefilled when one is picked. A
 // threshold left at its default is sent as none, so the run is the library's own default run.
@@ -19,7 +23,8 @@ const result = $('result'), video = $('video'), summary = $('summary'), shotsBod
 const scenesLink = $('scenes-csv'), statsLink = $('stats-csv');
 
 let file = null;        // the chosen file
-let opened = false;     // whether the current worker has it open
+let opened = null;      // the file's YuvVideo, once the current worker has it open
+let estimate = '';      // the estimate of the current run, as the status shows it
 let state = 'idle';
 let started = 0;        // when the current detection started (performance.now())
 let worker = newWorker();
@@ -39,12 +44,12 @@ function newWorker() {
 function replaceWorker() {
   worker.terminate();
   worker = newWorker();
-  opened = false;
+  opened = null;
 }
 
 const handlers = {
-  opened() {
-    opened = true;
+  opened({ video }) {
+    opened = video;
     detect();
   },
   progress({ done, expected }) {
@@ -52,7 +57,8 @@ const handlers = {
     if (expected > 0) progress.value = Math.min(done / expected, 1);
     const seconds = (performance.now() - started) / 1000;
     const fps = seconds > 0 ? done / seconds : 0;
-    statusText.textContent = `Detecting: frame ${done}${expected > 0 ? ` of ${expected}` : ''}, ${fps.toFixed(0)} frames per second`;
+    statusText.textContent = `Detecting: frame ${done}${expected > 0 ? ` of ${expected}` : ''}, ` +
+      `${fps.toFixed(0)} frames per second. ${estimate}`;
   },
   detected({ result }) {
     show(result, (performance.now() - started) / 1000);
@@ -78,16 +84,10 @@ function setState(next) {
 
 function choose(chosen) {
   if (!chosen || state === 'opening' || state === 'detecting') return;
-  file = null;
-  opened = false;
+  opened = null;
   result.hidden = true;
   clearResult();
   dropText.textContent = `${chosen.name} (${megabytes(chosen.size)})`;
-  if (chosen.size > MAX_FILE_BYTES) {
-    fail(`${chosen.name} is ${megabytes(chosen.size)}: this page reads files up to ${megabytes(MAX_FILE_BYTES)}, ` +
-      'which is trailers, not films, yet. Larger files are coming.');
-    return;
-  }
   file = chosen;
   if (video.src) URL.revokeObjectURL(video.src);
   video.src = URL.createObjectURL(file);
@@ -95,7 +95,7 @@ function choose(chosen) {
   setState('idle');
 }
 
-async function start() {
+function start() {
   if (!file) return;
   error.textContent = '';
   if (opened) {
@@ -105,18 +105,48 @@ async function start() {
   setState('opening');
   progress.removeAttribute('value');
   statusText.textContent = `Opening ${file.name}…`;
-  const chosen = file;
-  const bytes = await chosen.arrayBuffer();
-  if (state !== 'opening' || file !== chosen) return; // cancelled while reading
-  worker.postMessage({ type: 'open', file: bytes }, [bytes]);
+  // The File itself: the worker reads it in slices as .NET needs them, so it is never copied whole (worker.js).
+  worker.postMessage({ type: 'open', file });
 }
 
 function detect() {
   setState('detecting');
   progress.removeAttribute('value');
-  statusText.textContent = 'Detecting…';
+  estimate = estimateText(opened);
+  statusText.textContent = `Detecting… ${estimate}`;
   started = performance.now();
   worker.postMessage({ type: 'detect', options: options() });
+}
+
+// How long the run will take, from the frame count and picture size: this browser's own rate from its last run, or the
+// reference rate (REFERENCE_FPS) until it has one.
+function estimateText({ width, height, frameCount }) {
+  const own = storedRate();
+  const rate = own ?? REFERENCE_PIXELS_PER_SECOND;
+  const seconds = frameCount * width * height / rate;
+  const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
+  return `Estimate: about ${duration(seconds)} for ${frameCount} frames at ${width}x${height} ` +
+    `(${(rate / (width * height)).toFixed(0)} frames per second, from ${from}).`;
+}
+
+// The pixels per second of this browser's last finished run, if it kept one (storage can be off or throw).
+function storedRate() {
+  try {
+    const rate = Number(localStorage.getItem(RATE_KEY));
+    return rate > 0 ? rate : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeRate(rate) {
+  try { localStorage.setItem(RATE_KEY, String(rate)); } catch { /* the reference rate stays */ }
+}
+
+function duration(seconds) {
+  if (seconds < 90) return `${Math.max(1, Math.round(seconds))} s`;
+  const minutes = Math.round(seconds / 60);
+  return minutes < 90 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
 // The options as Api's DetectRequest takes them; defaults as none, so the library applies its own.
@@ -148,6 +178,8 @@ function show(r, seconds) {
   clearResult();
   const rate = r.frameRate.num / r.frameRate.den;
   statusText.textContent = `Done in ${seconds.toFixed(1)} s (${(r.frameCount / seconds).toFixed(0)} frames per second).`;
+  // A run of a few seconds is mostly start-up: too short to measure this browser's speed by.
+  if (seconds >= 5) storeRate(r.frameCount * opened.width * opened.height / seconds);
   summary.textContent = `${r.shots.length} ${r.shots.length === 1 ? 'shot' : 'shots'} in ${r.frameCount} frames ` +
     `at ${Number(rate.toFixed(3))} fps${r.duration != null ? `, ${r.duration.toFixed(2)} s` : ''}.`;
 
