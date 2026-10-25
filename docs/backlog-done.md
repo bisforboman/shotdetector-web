@@ -153,3 +153,11 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     734 MB, in headless Chromium (renderer peak 788 MB, not 1,043). `Mp4Input` opens with one demuxer instead of two
     (174 MB after opening, not 208). The rest waits upstream: ShotDetector's stats and their CSV, ManagedCodecs' MP4
     index (Waiting))
+
+- Packets in the core: bitrate and keyframes
+  - Why: the core part of "Bitrate and keyframes", done with its check, so that row only adds an export and a panel.
+  - Status: Done (2026-10-25: `Mp4Input.Packets` (`VideoPackets`) keeps each video packet's pts, size and keyframe
+    and discard flags by column, 13 bytes a packet, during the walk opening makes; `tools/NativeCheck/PacketCheck.cs`
+    compares it with `ffprobe -show_packets -select_streams v:0`, exactly: all 10 samples agree, the edit-end
+    sample's 39 discarded packets too. On a two-hour film (172,800 frames) it keeps and allocates 2.25 MB, in the same
+    time to open. The CSVs are unchanged)
