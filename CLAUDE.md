@@ -47,7 +47,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
   (`2026-10-24-the-page.md`: how the page is built; `2026-10-24-fastyuv-replaceable.md`: FastYuv replaced by
-  rebuilding; `2026-10-24-audio.md`: the audio decoded in the worker by ManagedCodecs).
+  rebuilding; `2026-10-24-audio.md`: the audio decoded in the worker by ManagedCodecs; `2026-10-25-one-page.md`: one
+  timeline and cards, a module per panel).
 
 ## Working on this repository
 
