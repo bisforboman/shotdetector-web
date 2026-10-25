@@ -118,6 +118,23 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     to 8 shots in 1,253 frames, and with the clip missing it shows "The demo clip didn't download: 404 File not
     found". The live result: added after the first deploy with it)
 
+- Shots as they're found, kept when a run is cancelled
+  - Why: on a long file the user waits a long time for the first shot, and a cancel throws all the work away. The
+    owner wants the shots found so far shown, and kept after a cancel (2026-10-24). ShotDetector already reports
+    each shot once the cut that ends it is confirmed, and since 3.15.0 tells the caller on every `Detect` overload:
+    `DetectionOptions.OnShot` ([shotdetector#493](https://github.com/bisforboman/shotdetector/issues/493)), on the
+    thread that runs the detection.
+  - Status: Done (2026-10-25: `Api` sets `OnShot` to an `IProgress<Shot>` of its own that calls `[JSImport] shot(json)`
+    with one object of `Shots.Json`'s array, synchronously on the detection's thread; `worker.js` posts it, `app.js`
+    adds the row, and the finished result rebuilds the table from its own shots. `tools/app-check.mjs`: the shots told
+    equal the result's on every sample and run, interpreted and AOT; with one detector all but the last are told
+    before the last frame, with all five at the end. Cancel still terminates the worker; the rows stay, with one
+    italic line marked unfinished from the last shot's end to the frame of the last progress report, and no
+    downloads. Headless Chromium on the AOT bundle, the Sintel trailer: rows at frames 333 to 675 of 1253, the
+    finished table equal to the native scenes CSV, a cancel at frame 901 leaving shots 1 to 7 and 00:00:28.000 to
+    00:00:37.542 unfinished. Firefox wasn't run: the session's network policy blocks Playwright's and Mozilla's
+    download hosts)
+
 - Memory per frame
   - Why: the wasm heap grew with the frame count, about 4 KB a frame: 735 MB after a two-hour film at 640x360
     (172,800 frames), the same with the file at an eighth of the bytes.

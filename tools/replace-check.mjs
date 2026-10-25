@@ -9,7 +9,7 @@ const MARK = 'This is the replaced ShotDetector.FastYuv.';
 const [wwwroot, sample] = process.argv.slice(2);
 const { dotnet } = await import(pathToFileURL(resolve(wwwroot, '_framework/dotnet.js')).href);
 const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
-setModuleImports('host', { ...await host(wwwroot), progress: () => {} });
+setModuleImports('host', { ...await host(wwwroot), progress: () => {}, shot: () => {} });
 const { Open, Detect } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 

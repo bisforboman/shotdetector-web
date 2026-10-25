@@ -45,15 +45,18 @@ Then open http://localhost:8000. Any static server works if it serves `.wasm` as
 page is `wwwroot/index.html`, `app.js` and `style.css`, no build step and no dependencies; `worker.js` owns the .NET
 runtime and answers the page's `open` and `detect` messages, and `blob-read.js` reads the picked file for it. Pick an
 MP4 (or drop one), choose the detector, its threshold (prefilled with ShotDetector's default for it) and the minimum
-shot length, and detect: the shots come as a table whose rows seek the player, and the scenes and stats CSVs
+shot length, and detect: the shots come as a table whose rows seek the player, each row as soon as ShotDetector knows
+the shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`), and the scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
-run, else `REFERENCE_FPS` at the top of `app.js`); Cancel stops the worker and starts a new one. Errors are the
-library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this page can read:". "Try the demo"
-fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file: `pages.yml` puts the Sintel sample
-there; locally, copy `samples/sintel_trailer-480p.mp4` to `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
+run, else `REFERENCE_FPS` at the top of `app.js`); Cancel stops the worker and starts a new one, and keeps the shots
+found so far, with one more line, marked unfinished, from the last cut to where the run stopped (no downloads for a
+cancelled run). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
+page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
+`pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
+`wwwroot/demo/sintel-trailer.mp4` in the publish folder.
 
 ## Large files
 
@@ -163,7 +166,8 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
   gives Node the `FileReaderSync` it lacks);
   its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
-  checks that progress reaches the last frame, that `samples/reject/` is refused through `Open`, and that the publish
+  checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
+  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
   Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it) is loaded at all
   (`LoadedAssemblies()`): the runtime loads an assembly only when code needs it, so nothing on the path touches
