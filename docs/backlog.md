@@ -51,7 +51,7 @@ for the first.
     silences with `silencedetect`, within the tolerances the rows give.
   - Done when: those native checks pass in CI on every sample with audio and on the Sintel trailer.
   - Not: no App export, no page (the two rows); no change to `Mp4Input`'s video path.
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 - Packets in the core: bitrate and keyframes
   - Why: the core part of "Bitrate and keyframes", done now with its check.
