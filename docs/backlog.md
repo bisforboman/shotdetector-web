@@ -37,7 +37,7 @@ for the first.
   - Done when: the page works as it does now (the checks green, CSVs unchanged), plus the timeline with the cuts
     lane and the playhead, in Chromium and Firefox and at phone width (screenshots in the PR).
   - Not: no new panels (their rows); no bundler, no framework, no dependency.
-  - Status: Open
+  - Status: In progress (2026-10-25)
 
 - Audio in the core: waveform, reference tone, silence, peaks, loudness
   - Why: the core parts of "A waveform from ManagedCodecs' AAC" and "Audio measures", done now, with the native
