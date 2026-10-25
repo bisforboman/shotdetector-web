@@ -134,3 +134,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     finished table equal to the native scenes CSV, a cancel at frame 901 leaving shots 1 to 7 and 00:00:28.000 to
     00:00:37.542 unfinished. Firefox wasn't run: the session's network policy blocks Playwright's and Mozilla's
     download hosts)
+
+- Memory per frame
+  - Why: the wasm heap grew with the frame count, about 4 KB a frame: 735 MB after a two-hour film at 640x360
+    (172,800 frames), the same with the file at an eighth of the bytes.
+  - Status: Done (2026-10-25: measured step by step under Node on the AOT bundle and natively (README "What the heap
+    holds"): nothing per frame held it, the end of the run did. The CSVs went to JavaScript inside the result's JSON,
+    and escaping the 19.8-million-character stats CSV took a 268 MB char buffer and a 67 MB byte buffer that `ArrayPool`
+    kept, 337 MB of the heap. `Api.Detect`'s JSON now holds the shots and the numbers, and `ScenesCsv()` and
+    `StatsCsv()` return the CSVs as strings: the two-hour film's heap is 432 MB, not 769 MB, under Node, and 432 MB, not
+    734 MB, in headless Chromium (renderer peak 788 MB, not 1,043). `Mp4Input` opens with one demuxer instead of two
+    (174 MB after opening, not 208). The rest waits upstream: ShotDetector's stats and their CSV, ManagedCodecs' MP4
+    index (Waiting))

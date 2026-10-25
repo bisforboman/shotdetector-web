@@ -32,7 +32,7 @@ public sealed class Mp4Input
     Mp4Input(Func<Stream> open)
     {
         _open = open;
-        using var stream = open();
+        using var stream = new TimingOnlyStream(open());
         var header = Mp4Header.Read(stream);
         if (header.Fragmented)
             throw new UnsupportedVideoException("Fragmented MP4 isn't supported yet.");
@@ -54,9 +54,18 @@ public sealed class Mp4Input
         if (!sps.FrameMbsOnly)
             throw new UnsupportedVideoException("The video is interlaced (field or MBAFF coding): not supported yet.");
 
+        // One demuxer for the first frame and the format's duration: building its sample index allocates about 275 bytes
+        // a sample, which the browser's heap keeps once it has grown (README, "Large files").
+        using var demuxer = new Mp4Demuxer(stream, leaveOpen: true);
+
         // The first frame's size (after the SPS's cropping) and timestamp: in display order, the smallest pts, which is
         // the stream's start (FFmpeg's start_time for an MP4 video track, edit list applied).
-        var (width, height, firstPts) = FirstFrame();
+        var (width, height, firstPts) = FirstFrame(demuxer);
+
+        // Only the packets' timing counts for the duration: from here on the packets' data is not read (on a film in the
+        // browser that would read gigabytes just to throw them away).
+        stream.SkipReads = true;
+        long? duration = FormatDuration(demuxer);
 
         // The decoder's colour tags: the SPS's VUI where it has them, else the container's 'colr' box (FFmpeg's h264
         // decoder overrides the container's values with the SPS's). Full range makes FFmpeg's h264 decoder output yuvj420p.
@@ -76,7 +85,7 @@ public sealed class Mp4Input
             TimeBase = new FrameReader.Rational(1, checked((int)header.Timescale)),
             StartPts = firstPts,
             FrameCount = header.SampleCount,
-            Duration = FormatDuration() is long us
+            Duration = duration is long us
                 ? Seconds((us * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture))
                 : null,
             Codec = "h264",
@@ -133,9 +142,9 @@ public sealed class Mp4Input
         }
     }
 
-    (int Width, int Height, long Pts) FirstFrame()
+    static (int Width, int Height, long Pts) FirstFrame(Mp4Demuxer demuxer)
     {
-        foreach (var frame in DecodedFrames())
+        foreach (var frame in DecodedFrames(demuxer))
         {
             using (frame)
                 return (frame.Width, frame.Height, frame.Pts);
@@ -150,13 +159,8 @@ public sealed class Mp4Input
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
     /// result.
     /// </summary>
-    long? FormatDuration()
+    static long? FormatDuration(Mp4Demuxer demuxer)
     {
-        // Only the packets' timing counts here: once the demuxer has read the file's boxes, the packets' data is not read
-        // (on a film in the browser that would read gigabytes just to throw them away).
-        using var stream = new TimingOnlyStream(_open());
-        using var demuxer = new Mp4Demuxer(stream);
-        stream.SkipReads = true;
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPackets())
         {
@@ -215,6 +219,12 @@ public sealed class Mp4Input
     {
         using var stream = _open();
         using var demuxer = new Mp4Demuxer(stream);
+        foreach (var frame in DecodedFrames(demuxer))
+            yield return frame;
+    }
+
+    static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer)
+    {
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The MP4 file has no video track.");
         var decoder = new H264Decoder(info);
         foreach (var packet in demuxer.ReadPackets())

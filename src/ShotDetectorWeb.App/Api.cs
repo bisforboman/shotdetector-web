@@ -15,6 +15,7 @@ public static partial class Api
 {
     static Mp4Input? _input;
     static JSObject? _file;
+    static DetectionResult? _result;
 
     /// <summary>What a damaged file's message starts with on the page (decision "A damaged file's message").</summary>
     const string Damaged = "The file is damaged or not an MP4 this page can read: ";
@@ -28,6 +29,7 @@ public static partial class Api
     public static string Open(JSObject file)
     {
         _input = null;
+        _result = null;
         _file?.Dispose();
         _file = file;
         var input = DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file)));
@@ -37,28 +39,38 @@ public static partial class Api
 
     /// <summary>
     /// Detects on the opened file with the page's options (<see cref="DetectRequest"/>), stats always collected: the
-    /// shots (<see cref="Shots.Json"/>), scenedetect's scene and stats CSVs, the frame count, frame rate and duration.
-    /// Reports progress through <see cref="Progress"/> while it runs, and each shot through <see cref="ShotFound"/> as
-    /// soon as ShotDetector knows it (<see cref="DetectionOptions.OnShot"/>).
+    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate and duration; scenedetect's scene and stats CSVs come
+    /// from <see cref="ScenesCsv"/> and <see cref="StatsCsv"/>. Reports progress through <see cref="Progress"/> while it
+    /// runs, and each shot through <see cref="ShotFound"/> as soon as ShotDetector knows it
+    /// (<see cref="DetectionOptions.OnShot"/>).
     /// </summary>
     [JSExport]
     public static string Detect(string optionsJson)
     {
+        _result = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         var result = DamagedPrefixed(() => input.Detect(request.ToOptions(new JsProgress(), new JsShots())));
+        _result = result;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(
-                shots.RootElement,
-                Shots.Csv(result.Shots, cuts: result.Cuts),
-                result.Stats!.Csv(result.Video.Position),
-                result.FrameCount,
-                result.Video.FrameRate,
-                result.Video.Duration),
+            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration),
             ApiJson.Default.DetectResponse);
     }
+
+    /// <summary>
+    /// The last <see cref="Detect"/>'s scene list CSV (scenedetect list-scenes'), a string as it is: not inside the JSON,
+    /// where escaping a film's stats CSV took buffers of six times its length that the heap kept (README "Large files").
+    /// </summary>
+    [JSExport]
+    public static string ScenesCsv() => Shots.Csv(Result.Shots, cuts: Result.Cuts);
+
+    /// <summary>The last <see cref="Detect"/>'s stats CSV (scenedetect -s's), a string as it is (<see cref="ScenesCsv"/>).</summary>
+    [JSExport]
+    public static string StatsCsv() => Result.Stats!.Csv(Result.Video.Position);
+
+    static DetectionResult Result => _result ?? throw new InvalidOperationException("Detect first.");
 
     /// <summary>The names of the assemblies loaded so far, sorted: the checks show nothing of FFmpeg's is loaded.</summary>
     [JSExport]
@@ -129,7 +141,7 @@ sealed record DetectRequest
 /// <summary>One detector of a run with several.</summary>
 sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
 
-sealed record DetectResponse(JsonElement Shots, string ScenesCsv, string StatsCsv, int FrameCount, Fps FrameRate, TimeSpan? Duration);
+sealed record DetectResponse(JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration);
 
 /// <summary>Durations as seconds, which JavaScript can use as they are.</summary>
 sealed class SecondsConverter : JsonConverter<TimeSpan>

@@ -74,12 +74,33 @@ Sintel's trailer: 640x360 at 24 fps, libx264 at 2.5 Mbit/s with AAC audio, 172,8
 
 The renderer is the process the page and its worker run in, sampled every half second; the wasm heap never shrinks, so
 its size after the run is its peak. The control has the same frames in an eighth of the bytes and the same heap: the
-heap grows with the frame count (about 4 KB a frame; Sintel's 1,253 frames: 67 MB), not with the file (backlog, "Memory
-per frame"). During the control's run the renderer stayed at 450 to 500 MB, and its peak came as the result was built
+heap grew with the frame count (about 4 KB a frame; Sintel's 1,253 frames: 67 MB), not with the file, and most of it
+was the result's JSON (below, "What the heap holds"). During the control's run the renderer stayed at 450 to 500 MB, and its peak came as the result was built
 and shown; with the big file it rose to about 800 MB in the first half hour and no further (the slices `FileReaderSync`
 returns, which V8 frees late while .NET holds the thread). Before the duration pass skipped the packets' data, opening
 the same file took 43 s and peaked the renderer at 1.7 GB. The estimate before the big file's run said 35 min (the
 reference rate scaled by picture size); the next run in the same browser uses its own measured rate.
+
+### What the heap holds
+
+Measured 2026-10-25 under Node on the AOT bundle (`node` driving the App's exports as `tools/app-check.mjs` does), on the
+control file above (172,800 frames and 335,939 audio packets), adaptive with stats: the wasm heap after each step, and
+what grew it (the same steps run natively, with `GC.GetTotalMemory` around them and a `dotnet-gcdump` mid-run).
+
+| Step | Wasm heap | What grows it |
+| --- | --- | --- |
+| The runtime started | 34 MB | |
+| The file opened | 174 MB (208 MB before) | ManagedCodecs' `Mp4Demuxer` indexes every sample, video and audio: 140 MB allocated (about 275 B a sample), 28.5 MB kept (a `Sample[]`, 56 B a sample). Opening built one for the first frame and another for the duration pass; one now does both. |
+| The run | 250 MB, flat to its end | the run's own demuxer and decoder; ShotDetector's stats grow inside it, about 370 B a frame (63.7 MB at the end) |
+| The stats CSV (`Stats.Csv`) | 432 MB | a 19.8-million-character string; building it allocates 322 MB (a second dictionary per frame, the sort, the `StringBuilder`) |
+| The result to JavaScript, before | 769 MB | the CSVs were inside the result's JSON: System.Text.Json escapes a string (the CSV's line breaks) through a char buffer of six times its length rounded up to a power of two, 134 million chars (268 MB) for the stats CSV, and writes into a 67 MB UTF-8 buffer; `ArrayPool` keeps both, then the 40.6 MB JSON string |
+| The result to JavaScript, now | 432 MB | `Detect`'s JSON holds the shots and the numbers; the CSVs come as strings of their own (`ScenesCsv()`, `StatsCsv()`), which reach JavaScript without growing the heap |
+
+So the heap grew with the frame count because of what the end of a run builds, not what it keeps a frame: the JSON
+about 2 KB a frame, the stats CSV about 1 KB, the demuxer's index about 1 KB with this file's audio. In headless
+Chromium as in the table above, the control's run now ends with a wasm heap of 432 MB (734 MB before) and the
+renderer's peak at 788 MB (1,043 MB), the same 1,105 shots. The CSVs are unchanged (`tools/check.sh`). What is left waits upstream (backlog, Waiting): ShotDetector's stats by column and a CSV
+written row by row, ManagedCodecs' index built without its copies.
 
 ## Size
 

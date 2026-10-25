@@ -53,18 +53,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### After the first release
 
-- Memory per frame
-  - Why: the wasm heap grows with the frame count, about 4 KB a frame: 735 MB after a two-hour film at 640x360
-    (172,800 frames), the same with the file at an eighth of the bytes (README "Large files", 2026-10-25). Scenedetect's
-    stats are a few hundred bytes a frame; the rest is unaccounted for. A three-hour film nears 1 GB of heap, and a
-    phone gives wasm less than a desktop.
-  - Where: measure what holds it first (a .NET heap dump of a native run of the core on the same file, or `GC` counts
-    around `Detect`): ShotDetector's per-frame results and stats, the CSV and JSON strings `Api.Detect` builds at the
-    end, or garbage the runtime's heap kept. Fix it where it lives; ShotDetector's own goes upstream as an issue.
-  - Done when: the cause is named, and the heap on the two-hour file is lower or the row says why it can't be.
-  - Not: no change to the CSVs.
-  - Status: Open
-
 - Real-browser smoke test
   - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
     needs a check of its own. Decision "Testing the page".
@@ -226,6 +214,25 @@ The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
 asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
 in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are under Next.
+
+- ShotDetector: the stats in less memory, written row by row
+  - Why: since "Memory per frame" the stats CSV is the largest step of a long run: on a two-hour film `Stats.Csv`
+    grows the wasm heap from 250 to 432 MB (322 MB allocated for a 19.8-million-character string), and `Stats` holds
+    about 370 B a frame, 63.7 MB at the end (README "What the heap holds").
+  - Where: upstream (bisforboman/shotdetector), an issue for the owner to file, its text in
+    [#23](https://github.com/bisforboman/shotdetector-web/pull/23): the stats stored by column, and
+    `Stats.WriteCsv(TextWriter, position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a
+    `Blob` in pieces (a `[JSImport]` the worker gives), so the whole CSV is never one string.
+  - Status: Waiting on the owner to file it (2026-10-25)
+
+- ManagedCodecs: the MP4 index without its copies
+  - Why: `Mp4Demuxer` allocates about 275 B a sample to index a file and keeps 56 (140 MB and 28.5 MB for a two-hour
+    film with audio): it takes the wasm heap from 34 to 174 MB when a file opens, 250 MB once a run builds its own
+    (README "What the heap holds").
+  - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
+    [#23](https://github.com/bisforboman/shotdetector-web/pull/23): each track's samples filled once, a smaller
+    `Sample`, optionally only the tracks asked for. Then here: the submodule bumped, the steps measured again.
+  - Status: Waiting on the owner to file it (2026-10-25)
 
 - ManagedCodecs' license
   - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to

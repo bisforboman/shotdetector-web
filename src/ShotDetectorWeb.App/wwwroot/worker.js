@@ -27,14 +27,17 @@ async function start() {
 const api = start();
 onmessage = async ({ data }) => {
   try {
-    const { Open, Detect } = await api;
+    const { Open, Detect, ScenesCsv, StatsCsv } = await api;
     switch (data.type) {
       case 'open':
         postMessage({ type: 'opened', video: JSON.parse(Open(data.file)) });
         break;
-      case 'detect':
-        postMessage({ type: 'detected', result: JSON.parse(Detect(JSON.stringify(data.options ?? {}))) });
+      case 'detect': {
+        // The CSVs come as strings of their own, not inside Detect's JSON (README "Large files").
+        const result = JSON.parse(Detect(JSON.stringify(data.options ?? {})));
+        postMessage({ type: 'detected', result: { ...result, scenesCsv: ScenesCsv(), statsCsv: StatsCsv() } });
         break;
+      }
       default:
         throw new Error(`Unknown message type: ${data.type}`);
     }
