@@ -90,7 +90,7 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 | TimeBase | 1 / the 'mdhd' timescale |
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); full range is yuvj420p |
-| Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included |
+| Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
 ## Checks
 
@@ -136,8 +136,9 @@ the video; fades for detect-threshold; and six files to refuse.
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.14.0, the first with `Detect(YuvVideo, ...)`) and what they depend on come
-from nuget.org. Versions are central, in Directory.Packages.props.
+ShotDetector and ShotDetector.FastYuv (3.15.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.11.0,
+which ShotDetector depends on) and what they depend on come from nuget.org. Versions are central, in
+Directory.Packages.props.
 
 ManagedCodecs isn't on NuGet: it is a git submodule, `external/ManagedCodecs` (`git clone --recursive`, or
 `git submodule update --init`), referenced by project.
@@ -153,12 +154,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.14.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.15.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.14.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.15.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.14.0 -p:FrameReaderVersion=2.10.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.15.0 -p:FrameReaderVersion=2.11.0
 git clone --recursive https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \

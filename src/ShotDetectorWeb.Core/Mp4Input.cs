@@ -77,7 +77,7 @@ public sealed class Mp4Input
             StartPts = firstPts,
             FrameCount = header.SampleCount,
             Duration = FormatDuration() is long us
-                ? TimeSpan.FromSeconds(double.Parse((us * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture))
+                ? Seconds((us * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture))
                 : null,
             Codec = "h264",
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
@@ -194,6 +194,13 @@ public sealed class Mp4Input
         long duration = Math.Max(longest, last - first);
         return duration > 0 ? duration : null;
     }
+
+    /// <summary>
+    /// ffprobe's printed seconds as ShotDetector's file path reads them (3.15.0's VideoReader.Seconds): to the nearest
+    /// tick, not TimeSpan.FromSeconds's tick below (4.56 would be 4.5599999).
+    /// </summary>
+    static TimeSpan Seconds(string text) =>
+        TimeSpan.FromTicks((long)Math.Round(double.Parse(text, CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond));
 
     IEnumerable<VideoFrame> DecodedFrames()
     {

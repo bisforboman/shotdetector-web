@@ -145,9 +145,9 @@ static YuvVideo Oracle(string path)
         TimeBase = info.TimeBase,
         StartPts = info.StartPts ?? 0,
         FrameCount = info.FrameCount,
-        // As the file path reads it: ffprobe's "duration" (the format's, printed with six decimals) as a double.
+        // As the file path reads it: ffprobe's "duration" (the format's, printed with six decimals), to the nearest tick.
         Duration = probe.Duration is { } d
-            ? TimeSpan.FromSeconds(double.Parse((d.Ticks / 10 * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture))
+            ? TimeSpan.FromTicks((long)Math.Round(double.Parse((d.Ticks / 10 * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond))
             : null,
         Codec = info.Codec,
         Container = probe.Container,
