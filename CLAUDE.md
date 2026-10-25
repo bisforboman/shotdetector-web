@@ -18,9 +18,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 
 - `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose), `SpsInfo` (the SPS's format and VUI colour
-  fields), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs' `AacDecoder`: FrameReader's
-  `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and `Loudness.cs`'s BS.1770-4 meter;
-  `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the decoder refuses).
+  fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by `Mp4Input`'s
+  walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
+  `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
+  `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
+  decoder refuses).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`'s `[JSExport]`s `Open(JSObject)` (a `Blob`, the picked `File`, read through `BlobStream`; the `YuvVideo`
   as JSON), `Detect(string optionsJson)` (shots, frame count, rate, duration as JSON), `ScenesCsv()` and `StatsCsv()`
@@ -31,9 +33,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   (`FileReaderSync`); the page is
   `wwwroot/index.html`, `app.js`, `style.css` (no build step, no dependency; README "Running the page"). `Api` prefixes
   ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's
-  measures (FrameReader's `WaveformData.Read`, `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and
-  `samples/no-aac/` answered with a reason; `tools/app-check.mjs`: the App's published bundle
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
+  `ffprobe -show_packets`; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
+  `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
+  `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,

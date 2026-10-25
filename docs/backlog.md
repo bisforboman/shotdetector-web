@@ -39,15 +39,6 @@ for the first.
   - Not: no new panels (their rows); no bundler, no framework, no dependency.
   - Status: Open
 
-- Packets in the core: bitrate and keyframes
-  - Why: the core part of "Bitrate and keyframes", done now with its check.
-  - Where: `src/ShotDetectorWeb.Core`: for each video packet, its pts, size and keyframe flag, kept during the walk
-    `Mp4Input` already makes when it opens a file. `tools/NativeCheck` compares the list with
-    `ffprobe -show_packets` (pts, size, the K flag), exactly, on every sample.
-  - Done when: that check passes in CI.
-  - Not: no App export, no page (the row); no change to the scene and stats CSVs.
-  - Status: Open
-
 ### Unblocked by ShotDetector 3.15.0
 
 This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-25). It changes `Api.Detect` and
@@ -106,8 +97,8 @@ itself", which lists the first release's page, not every page there will be. Sin
 (decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
 module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
-panel; their core parts are the two core rows under "Now". Whatever the page derives for display is labelled as the
-page's own; the CSVs stay the only output the exactness check speaks for.
+panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
+derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
 
 - Warnings on the page
   - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.
@@ -217,12 +208,14 @@ page's own; the CSVs stay the only output the exactness check speaks for.
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
     on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each
     MP4 packet carries its size, its time and whether it is a keyframe.
-  - Where: the core keeps, for each video packet, its pts in seconds, its size and its keyframe flag, during the walk
-    over every packet `Mp4Input` already makes when it opens a file (a few numbers a packet). The App returns them
-    from an export of their own, as compact arrays. `app.js` draws bitrate per second as a graph under the strip,
-    puts keyframe ticks on the strip, and says how many cuts fall on a keyframe (labelled as the page's reading).
-    `tools/NativeCheck` compares the list with `ffprobe -show_packets` (pts, size, the K flag), exactly. Depends on
-    "Shot statistics and a timeline".
+  - Where: the core keeps, for each video packet, its pts, its size and its keyframe and discard flags, during the
+    walk over every packet `Mp4Input` already makes when it opens a file: `Mp4Input.Packets` (done, "Packets in the
+    core"; README "Using the library"). The App returns them from an export of their own, as compact arrays (leave
+    out or mark the discarded packets: an edit list's, decoded but not shown). `app.js` draws bitrate per second as a
+    graph under the strip, puts keyframe ticks on the strip, and says how many cuts fall on a keyframe (labelled as
+    the page's reading).
+    `tools/NativeCheck` already compares the list with `ffprobe -show_packets` (pts, size, the K and D flags),
+    exactly (`PacketCheck.cs`). Depends on "Shot statistics and a timeline".
   - Done when: the check is green on every sample, and the Sintel trailer's graph and ticks show on the page
     (screenshot in the PR).
   - Not: no I, P and B frame types (`VideoFrame` doesn't carry them; that is a Maybe); no audio bitrate.
