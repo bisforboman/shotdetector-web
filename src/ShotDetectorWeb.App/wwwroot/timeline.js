@@ -39,6 +39,7 @@ export function setDuration(seconds) {
 // Moves the video to a time: from a click on the timeline, or a panel's (a shot's row plays from there).
 export function seek(at, { play = false } = {}) {
   video.currentTime = at;
+  follow(); // now, not at the video's 'seeking'
   if (play) video.play().catch(() => {}); // a browser that can't play the file still shows where it is
 }
 

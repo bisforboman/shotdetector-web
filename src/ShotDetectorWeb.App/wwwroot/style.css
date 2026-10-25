@@ -139,7 +139,7 @@ video { display: block; width: 100%; background: #000; border-radius: 0.375rem; 
 #shots-card { max-height: 70vh; overflow: auto; padding-top: 0; }
 #shots-card h2 { position: sticky; top: 0; margin: 0; padding: 0.75rem 0 0.5rem; background: var(--panel); }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
-th, td { padding: 0.3rem 0.5rem; text-align: right; border-bottom: 1px solid var(--line); }
+th, td { padding: 0.3rem 0.5rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
 th { position: sticky; top: 2.75rem; background: var(--panel); }
 tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr:focus { background: var(--bg); outline: none; }
