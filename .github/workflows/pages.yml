@@ -1,6 +1,7 @@
 # The page on GitHub Pages (https://bisforboman.github.io/shotdetector-web/): after CI passes on a push to main, the App
 # published ahead of time, deployed as it is. README, "Status"; decision 2026-10-24-the-page.md, "Delivery". The
-# repository's Pages source is "GitHub Actions". workflow_dispatch redeploys main by hand.
+# repository's Pages source is "GitHub Actions". workflow_dispatch redeploys main by hand. With it, the demo clip:
+# Sintel's trailer re-encoded by tools/make-samples.sh, the same file CI's checks run (decision "The demo clip").
 name: Pages
 
 on:
@@ -28,6 +29,8 @@ jobs:
     timeout-minutes: 30
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      # Sintel's trailer, the original's SHA-256: the same pin as ci.yml's (keep the two the same).
+      SINTEL_SHA256: '34bbd52a4b89fdf63c8ace50b268da26653a59508288100cd3c23de276db7931'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -41,12 +44,53 @@ jobs:
       - name: Install the wasm-tools workload
         run: dotnet workload install wasm-tools
 
+      # The demo clip is made as CI makes the sample it checks: the same FFmpeg build (libx264), the same original and
+      # the same recipe, so the page serves the file the exactness check covered. These three steps are ci.yml's.
+      - name: Install FFmpeg 8.1
+        id: ffmpeg
+        uses: ./.github/actions/btbn-ffmpeg
+        with:
+          build: gpl-shared
+
+      - name: Cache Sintel's trailer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sintel
+          key: sintel-${{ env.SINTEL_SHA256 }}
+
+      - name: Download Sintel's trailer
+        id: sintel
+        env:
+          URL: https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4
+        run: |
+          f=$RUNNER_TEMP/sintel/sintel_trailer-1080p.mp4
+          if [ ! -f "$f" ]; then
+            mkdir -p "$(dirname "$f")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 30 -o "$f" "$URL" \
+              || { echo "::error::$URL didn't download"; exit 1; }
+          fi
+          got=$(sha256sum < "$f" | cut -d' ' -f1)
+          [ "$got" = "$SINTEL_SHA256" ] || { rm -f "$f"; echo "::error::$URL has SHA-256 $got, not the pinned $SINTEL_SHA256"; exit 1; }
+          echo "$(stat -c %s "$f") bytes, SHA-256 $got"
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+
+      # All of make-samples.sh (the recipe isn't split out): the trailer's re-encode, ffprobe-verified, is the demo.
+      - name: Make the demo clip
+        env:
+          FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
+          LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
+          SINTEL: ${{ steps.sintel.outputs.file }}
+        run: |
+          tools/make-samples.sh
+          sha256sum samples/sintel_trailer-480p.mp4 | tee -a "$GITHUB_STEP_SUMMARY"
+
       # As tools/check.sh wasm aot publishes it, which CI just checked against the native results.
       - name: Publish the App ahead of time
         run: dotnet publish src/ShotDetectorWeb.App -c Release -nologo -warnaserror -p:RunAOTCompilation=true
 
       # The bundle is the publish's wwwroot/. FastYuv's license (LGPL-2.1) is copied by the core csproj to the publish
-      # root, outside it, so it goes in here; .nojekyll so nothing on Pages' side touches the files.
+      # root, outside it, so it goes in here; .nojekyll so nothing on Pages' side touches the files. The demo clip goes
+      # in demo/, where index.html's "Try the demo" fetches it.
       - name: Make the site
         id: site
         run: |
@@ -54,6 +98,8 @@ jobs:
           site=$publish/wwwroot
           mkdir -p "$site/licenses/ShotDetector.FastYuv"
           cp "$publish/licenses/ShotDetector.FastYuv/COPYING.LGPL" "$site/licenses/ShotDetector.FastYuv/"
+          mkdir -p "$site/demo"
+          cp samples/sintel_trailer-480p.mp4 "$site/demo/sintel-trailer.mp4"
           touch "$site/.nojekyll"
           echo "path=$site" >> "$GITHUB_OUTPUT"
 
@@ -64,12 +110,12 @@ jobs:
           include-hidden-files: true
 
       # LGPL-2.1 (README, Licensing): checked in the archive just uploaded, the one Pages deploys. FastYuv must be its
-      # own file in _framework/ and its license must be there; the deploy job doesn't run if not.
+      # own file in _framework/ and its license must be there; the deploy job doesn't run if not. Nor without the demo.
       - name: Check the uploaded site
         run: |
           tar -tvf "$RUNNER_TEMP/artifact.tar" | tee "$RUNNER_TEMP/listing.txt" | wc -l | xargs echo "Files and folders:"
           status=0
-          for f in .nojekyll index.html _framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL; do
+          for f in .nojekyll index.html _framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL demo/sintel-trailer.mp4; do
             # A regular file (type -), not a link: tar's long listing starts with the type.
             if awk -v f="./$f" '$1 ~ /^-/ && $NF == f { found = 1 } END { exit !found }' "$RUNNER_TEMP/listing.txt"; then echo "In the site: $f"; else echo "::error::Not in the site as its own file: $f"; status=1; fi
           done
