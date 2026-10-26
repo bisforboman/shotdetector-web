@@ -7,12 +7,13 @@ namespace ShotDetectorWeb.Checks;
 /// The packet check (README, "Checks"): for each sample, <see cref="Mp4Input.Packets"/> against
 /// <c>ffprobe -show_packets -select_streams v:0</c> (the ffprobe beside SHOTDETECTOR_FFMPEG_LIBS, as BtbN's shared build
 /// has it, else the one on PATH): the same packets in the same order, each with the same pts, pts_time, size and K and D
-/// flags, exactly.
+/// flags, exactly. ffprobe's lines go to <c>&lt;sample&gt;.packets.txt</c> in the output folder, which the wasm check
+/// compares the App's <c>Packets()</c> with.
 /// </summary>
 internal static class PacketCheck
 {
     /// <summary>Prints a table with a row per sample; returns how many samples differ or failed.</summary>
-    public static int Run(IEnumerable<string> samples, string ffmpegDirectory)
+    public static int Run(IEnumerable<string> samples, string ffmpegDirectory, string outDir)
     {
         string ffprobe = Path.Combine(ffmpegDirectory, OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");
         if (!File.Exists(ffprobe))
@@ -30,7 +31,7 @@ internal static class PacketCheck
             try
             {
                 ours = Mp4Input.Open(sample).Packets;
-                theirs = Probe(ffprobe, sample);
+                theirs = Probe(ffprobe, sample, Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".packets.txt"));
             }
             catch (Exception e)
             {
@@ -58,8 +59,11 @@ internal static class PacketCheck
         return failures;
     }
 
-    /// <summary>Each video packet as ffprobe prints it: pts, pts_time, size, flags (K, D and C or '_').</summary>
-    static List<string[]> Probe(string ffprobe, string sample)
+    /// <summary>
+    /// Each video packet as ffprobe prints it: pts, pts_time, size, flags (K, D and C or '_'); its output written to
+    /// <paramref name="path"/> as it is.
+    /// </summary>
+    static List<string[]> Probe(string ffprobe, string sample, string path)
     {
         var start = new ProcessStartInfo(ffprobe)
         {
@@ -75,6 +79,7 @@ internal static class PacketCheck
         process.WaitForExit();
         if (process.ExitCode != 0)
             throw new InvalidOperationException($"ffprobe exited with {process.ExitCode}: {error.Result.Trim()}");
+        File.WriteAllText(path, output);
 
         var packets = new List<string[]>();
         foreach (string line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
