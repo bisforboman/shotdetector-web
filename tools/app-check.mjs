@@ -13,6 +13,8 @@
 // read; for a sample without audio, the core's words the page shows nothing for (NO_AUDIO); the tone sample's waveform
 // loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native:
 // <sample>.waveform.json), each value within 1; each file of --no-aac answered with why it isn't measured.
+// The video's packets (Api's Packets, the bitrate lane's): every sample's against ffprobe's, whose lines the native
+// check wrote (--native: <sample>.packets.txt), exactly.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -60,7 +62,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, Packets, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -107,6 +109,7 @@ for (const [i, sample] of samples.entries()) {
     await checkStop(sample, video, run, options, result, statsCsv);
   }
   checkAudio(sample, video);
+  checkPackets(sample);
 }
 
 // Detect's pauses against the runs' time: the pauses must cost under 1% of it (Api's PauseEvery).
@@ -301,4 +304,52 @@ function checkTone(name, track, w, frame) {
   const at = parts.map(p => p[0]).concat(end).join(', ');
   if (wrong.length > 0) fail(`${name}: the waveform isn't loud, silent, loud at ${at} s: ${wrong.slice(0, 5).join('; ')}`);
   else console.error(`${name}: the waveform is loud, silent, loud at ${at} s, within a frame (${frame} s)`);
+}
+
+// Packets()'s JSON for one opened sample against ffprobe -show_packets -select_streams v:0 (the native check's
+// PacketCheck.cs, which compares Mp4Input.Packets with the same lines): the same packets in the same order, each with
+// the same pts, pts_time (pts × num / den, as ffprobe prints it), size, and K and D flags; the keyframes and the
+// discarded packets as indexes, in order.
+function checkPackets(sample) {
+  const name = basename(sample);
+  const started = performance.now();
+  const json = Packets();
+  const p = JSON.parse(json);
+  const seconds = (performance.now() - started) / 1000;
+  const keys = ['timeBase', 'pts', 'sizes', 'keyframes', 'discarded'];
+  if (JSON.stringify(Object.keys(p)) !== JSON.stringify(keys))
+    return fail(`${name}: Packets() gives ${Object.keys(p).join(', ')}, not ${keys.join(', ')}`);
+  const { timeBase: { num, den }, pts, sizes, keyframes, discarded } = p;
+  const bytes = sizes.reduce((a, b) => a + b, 0);
+  console.error(`${name}: ${pts.length} video packets, ${keyframes.length} keyframes, ${discarded.length} discarded, ` +
+    `${bytes} bytes; Packets() ${json.length} characters, ${seconds.toFixed(3)} s`);
+  const native = nativeDir && join(nativeDir, `${basename(sample, extname(sample))}.packets.txt`);
+  if (!native || !existsSync(native)) {
+    if (nativeDir) fail(`${name}: no ffprobe packets from the native check (${native})`);
+    return;
+  }
+  const theirs = readFileSync(native, 'utf8').split('\n').filter(line => line.trim() !== '')
+    .map(line => Object.fromEntries(line.trim().split('|').map(f => f.split('=', 2))));
+  const isKey = new Set(keyframes), isDiscarded = new Set(discarded);
+  const differences = [];
+  if (pts.length !== theirs.length) differences.push(`${pts.length} packets vs ffprobe's ${theirs.length}`);
+  if (sizes.length !== pts.length) differences.push(`${sizes.length} sizes for ${pts.length} packets`);
+  for (const indexes of [keyframes, discarded]) {
+    if (indexes.some((i, j) => !Number.isInteger(i) || i < 0 || i >= pts.length || (j > 0 && i <= indexes[j - 1])))
+      differences.push(`indexes not increasing within the packets: ${indexes.slice(0, 10).join(', ')}`);
+  }
+  for (let i = 0; i < Math.min(pts.length, theirs.length); i++) {
+    const t = theirs[i];
+    const check = (what, ours, ffprobe) => { if (ours !== ffprobe) differences.push(`packet ${i}: ${what} ${ours} vs ffprobe's ${ffprobe}`); };
+    check('pts', String(pts[i]), t.pts);
+    check('pts_time', (pts[i] * (num / den)).toFixed(6), t.pts_time);
+    check('size', String(sizes[i]), t.size);
+    check('K', isKey.has(i) ? 'K' : '_', t.flags[0]);
+    check('D', isDiscarded.has(i) ? 'D' : '_', t.flags[1]);
+  }
+  if (differences.length > 0)
+    fail(`${name}: Packets() differs from ffprobe's: ${differences.slice(0, 3).join('; ')}` +
+      `${differences.length > 3 ? `; ${differences.length - 3} more` : ''}`);
+  else
+    console.error(`${name}: Packets() against ffprobe's ${theirs.length} packets: the same`);
 }

@@ -111,18 +111,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Not: no other fields beyond what the core returns.
   - Status: Open
 
-- Shot statistics and a timeline
-  - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
-    of shots under the player shows where the cuts are at a glance.
-  - Where: `app.js`, `index.html`, `style.css`: from the shots as `Detect` returns them, the number of shots, average and
-    median shot length, shortest and longest, cuts per minute, and how long the run took against the video's length
-    ("2.4 times real time"); a strip of shots in proportion to their length under the `<video>`, each one seeking to its
-    shot, with the playhead following `timeupdate` and the current shot's table row marked.
-  - Done when: the Sintel trailer's numbers match what the scenes CSV gives by hand, and the strip and the table follow
-    playback; screenshots in the PR.
-  - Not: no change to `Api`, no libraries.
-  - Status: Open
-
 - A graph of the scores
   - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
     a cut was found and what a different threshold would do. The stats are computed for every run already
@@ -137,23 +125,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
   - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
     languages is how results drift).
-  - Status: Open
-
-- Bitrate and keyframes
-  - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
-    on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each
-    MP4 packet carries its size, its time and whether it is a keyframe.
-  - Where: the core keeps, for each video packet, its pts, its size and its keyframe and discard flags, during the
-    walk over every packet `Mp4Input` already makes when it opens a file: `Mp4Input.Packets` (done, "Packets in the
-    core"; README "Using the library"). The App returns them from an export of their own, as compact arrays (leave
-    out or mark the discarded packets: an edit list's, decoded but not shown). `app.js` draws bitrate per second as a
-    graph under the strip, puts keyframe ticks on the strip, and says how many cuts fall on a keyframe (labelled as
-    the page's reading).
-    `tools/NativeCheck` already compares the list with `ffprobe -show_packets` (pts, size, the K and D flags),
-    exactly (`PacketCheck.cs`). Depends on "Shot statistics and a timeline".
-  - Done when: the check is green on every sample, and the Sintel trailer's graph and ticks show on the page
-    (screenshot in the PR).
-  - Not: no I, P and B frame types (`VideoFrame` doesn't carry them; that is a Maybe); no audio bitrate.
   - Status: Open
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle

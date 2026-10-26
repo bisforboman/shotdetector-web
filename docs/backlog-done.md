@@ -311,8 +311,38 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     interpreted on `with-audio-320x240-25.mp4` 22 s, 12 of 12 CSVs and "No FFmpeg assembly loaded at all.", AOT 3 min,
     132 of 132 CSVs on 11 samples); a temporary change of the last byte of the scenes CSV for runs over 1,000 frames
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
-    green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
-    docs-only pull request)
+    green, then reverted. After the merge, Pages run 40337621791 on the push: native, AOT 132 of 132 CSVs on the
+    bundle it then deployed, FastYuv replaced, the site's checks, and the deploy, 7 min 10 s instead of 29 min of CI
+    and 4 of Pages. A docs-only pull request, the one that added this, ran `build` without the checks)
+
+- Bitrate and keyframes
+  - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
+    on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each
+    MP4 packet carries its size, its time and whether it is a keyframe.
+  - Status: Done (2026-10-26: `Api.Packets()` (`Api.Packets.cs`) returns `Mp4Input.Packets` as JSON by column, the
+    keyframes and discarded packets as indexes: 2.26 MB, 20 to 33 ms (AOT, Node) on a two-hour film, called as soon as
+    the file is opened. `panels/bitrate.js`: a lane with the bitrate per second and a tick at each keyframe right
+    under the cuts, a card with how many cuts fall on a keyframe after a run (the page's own reading: Sintel's
+    trailer, 5 of 7). `tools/app-check.mjs` checks `Packets()` against ffprobe's packets on every sample, exactly
+    (the native check writes them to `out/native/<sample>.packets.txt`). The CSVs are unchanged)
+
+- Shot statistics and a timeline
+  - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
+    of shots under the player shows where the cuts are at a glance.
+  - Where: `app.js`, `index.html`, `style.css`: from the shots as `Detect` returns them, the number of shots, average and
+    median shot length, shortest and longest, cuts per minute, and how long the run took against the video's length
+    ("2.4 times real time"); a strip of shots in proportion to their length under the `<video>`, each one seeking to its
+    shot, with the playhead following `timeupdate` and the current shot's table row marked.
+  - Done when: the Sintel trailer's numbers match what the scenes CSV gives by hand, and the strip and the table follow
+    playback; screenshots in the PR.
+  - Not: no change to `Api`, no libraries.
+  - Status: Done (2026-10-26: `panels/stats.js`, a card beside the video, labelled the page's own figures, from the
+    shots `Detect` returns: on the Sintel trailer (adaptive) 8 shots, average 6.53 s, median 2.33 s, shortest 0.58 s
+    (shot 7), longest 24.21 s (shot 8), 8.0 cuts per minute, each equal to what its scenes CSV gives by hand, and the
+    same for the content detector's 12; the AOT bundle ran it at 2.7 times real time in headless Chromium. The strip is
+    the timeline's cuts lane (decision `2026-10-25-one-page.md`), where a click seeks into the shot clicked; the card
+    names the shot playing and the table marks its row, scrolling its own box, checked by clicking into every shot and
+    playing 13 s to 23 s. Firefox not run: its builds' hosts are outside the session's network policy)
 
 - Stop a run and keep what was read, without restarting the worker
   - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
