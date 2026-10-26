@@ -40,6 +40,7 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
 ### Decisions to make first
 
 The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
+The WebCodecs one is measured and done ([backlog-done.md](backlog-done.md)): the decision stands.
 
 - Long videos across several Web Workers
   - Why: [#19](https://github.com/bisforboman/shotdetector-web/issues/19). ShotDetector 3.16.0's
@@ -83,23 +84,6 @@ The owner chose (2026-10-26) to take these two up, each with its design question
   - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
   - Depends on: "Long videos across several Web Workers".
   - Status: Open
-
-- WebCodecs: are its frames ManagedCodecs' frames?
-  - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
-    and the browser's own `VideoDecoder`, often in hardware, could make a run 2.5 to 4 times faster. The page's
-    design ruled it out ("Not doing": its output may differ between browsers and from FFmpeg's). The owner reopened
-    that question (2026-10-26), proof first. H.264's decoding is defined exactly by the standard, so the same frames
-    are plausible but not yet shown.
-  - Where: measure only. Decode every sample, the Sintel trailer and the two-hour film with WebCodecs in headless
-    Chromium and Firefox, copy each frame's Y, U and V planes out (`VideoFrame.copyTo`, I420), and compare them with
-    ManagedCodecs' frames for the same file, frame by frame (a hash per plane, and the first differing frame and
-    position where they differ). Also time the decode and the copy against ManagedCodecs on wasm AOT. A tool under
-    `tools/`, not in the page. Write the numbers and the verdict in the decision's "Not doing" section.
-  - Done when: a table per browser and sample, either "every frame identical" or where it differs, and the timings.
-    The decision changes only if every frame is identical in both browsers; a later row would then build it, with
-    ManagedCodecs kept wherever WebCodecs isn't there or differs.
-  - Not: no change to the page or the checks.
-  - Status: Open (measure first)
 
 ### First release: the page on GitHub Pages
 
@@ -277,4 +261,7 @@ file out of `samples/reject/`, and passes the native check.
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
     identical results are the point. Decision "Not doing".
-  - Status: Reopened for measurement (2026-10-26): "WebCodecs: are its frames ManagedCodecs' frames?" under Next
+  - Status: Maybe. Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
+    decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
+    reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
+    question to open
