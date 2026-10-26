@@ -18,7 +18,8 @@ scope) are in shotdetector's
 ## Status
 
 The page is live at **https://bisforboman.github.io/shotdetector-web/**, compiled ahead of time and deployed by
-`.github/workflows/pages.yml` after CI passes on each push to `main` (it runs locally too: "Running the page").
+`.github/workflows/pages.yml` on each push to `main` once the checks pass on it (Checks; it runs locally too: "Running
+the page").
 `src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its scene and stats CSVs equal ShotDetector's
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
@@ -218,6 +219,7 @@ tools/make-samples.sh        # once: samples/ (FFMPEG=<an ffmpeg with libx264>; 
 export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # also put on LD_LIBRARY_PATH by the script
 tools/check.sh               # native, then wasm (interpreted); tools/check.sh wasm aot for the AOT build
 tools/check.sh replace       # FastYuv replaced from its source (needs github.com); add aot for the AOT build
+tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named (the files to refuse and without AAC all)
 ```
 
 - **native** (`tools/NativeCheck`): for each sample, first the core library's `YuvVideo` against FFmpeg's description
@@ -265,10 +267,28 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
 browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution).
-`.github/workflows/ci.yml` runs all of it on Linux; after it passes on a push to `main`,
-`.github/workflows/pages.yml` publishes the App ahead of time, adds FastYuv's license and `.nojekyll`, fails unless
-the uploaded site has `_framework/ShotDetector.FastYuv.wasm` and `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files
-of their own, and deploys it to GitHub Pages.
+What runs when, on Linux (measured 2026-10-26, before these runs were split: one run of everything took 29 min, of
+which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1 min 47 s):
+
+- **A pull request** (`.github/workflows/ci.yml`, job `build`, the check `main` requires): native on every sample;
+  wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
+  shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly
+  loaded at all"; wasm AOT, the build the page deploys, on every sample. About 5 minutes (5 min 21 s on 2026-10-26).
+  A newer push to the pull request cancels its run in progress. A pull request that changes only `docs/`, `*.md` or
+  `LICENSE` (git diff against its base) runs `build` too, which passes without running any check: the checks can't
+  see those files.
+- **Every day on `main`, and by hand** (`ci.yml`, `schedule` and `workflow_dispatch`): all of it, wasm interpreted on
+  every sample and replace with AOT included.
+- **A push to `main`** (`.github/workflows/pages.yml`; `ci.yml` doesn't run on it): `main` needn't be up to date with a
+  pull request before it merges, so this checks the merged tree before it deploys. Native on every sample, wasm AOT on
+  every sample (that publish is the bundle deployed, copied out as it is, not a second one), and replace with AOT.
+  Then it adds FastYuv's license, the demo clip and `.nojekyll`, fails unless the uploaded site has
+  `_framework/ShotDetector.FastYuv.wasm` and `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files of their own, and
+  deploys it to GitHub Pages only if all of that passed. `workflow_dispatch` does the same for `main` by hand.
+
+So wasm interpreted on every sample, the one place that proves nothing of FFmpeg is touched on every sample's path,
+runs once a day rather than on each pull request; the AOT build, what visitors run, is checked on every sample on
+every pull request and before every deploy.
 
 The samples (tools/make-samples.sh) each isolate something the description must get right: 25, 29.97 and 23.976 fps;
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
