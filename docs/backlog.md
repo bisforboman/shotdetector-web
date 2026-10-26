@@ -137,18 +137,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Not: no other fields beyond what the core returns.
   - Status: Open
 
-- Shot statistics and a timeline
-  - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
-    of shots under the player shows where the cuts are at a glance.
-  - Where: `app.js`, `index.html`, `style.css`: from the shots as `Detect` returns them, the number of shots, average and
-    median shot length, shortest and longest, cuts per minute, and how long the run took against the video's length
-    ("2.4 times real time"); a strip of shots in proportion to their length under the `<video>`, each one seeking to its
-    shot, with the playhead following `timeupdate` and the current shot's table row marked.
-  - Done when: the Sintel trailer's numbers match what the scenes CSV gives by hand, and the strip and the table follow
-    playback; screenshots in the PR.
-  - Not: no change to `Api`, no libraries.
-  - Status: Open
-
 - A graph of the scores
   - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
     a cut was found and what a different threshold would do. The stats are computed for every run already
