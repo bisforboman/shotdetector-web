@@ -189,7 +189,8 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Done when: the check is green on every sample, and the Sintel trailer's graph and ticks show on the page
     (screenshot in the PR).
   - Not: no I, P and B frame types (`VideoFrame` doesn't carry them; that is a Maybe); no audio bitrate.
-  - Status: Open
+  - Status: In progress (2026-10-26): the page part (the export, the lane, the check); the core part is done
+    ("Packets in the core")
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships (the trimmer keeps whole assemblies that don't opt in:
