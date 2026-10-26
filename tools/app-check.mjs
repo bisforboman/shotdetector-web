@@ -118,7 +118,10 @@ console.error(`Pauses: ${(pauseSeconds * 1000).toFixed(0)} ms of ${runSeconds.to
 if (!(share < 0.01)) fail(`Detect's pauses took ${(share * 100).toFixed(2)}% of the runs' time, not under 1%`);
 
 for (const file of noAac) {
-  Open(fileBlob(file));
+  // Open names the codec as ffprobe does (make-samples.sh: mp3.mp4, opus.mp4, and aac-main.mp4, AAC its decoder refuses).
+  const { audio: track } = JSON.parse(Open(fileBlob(file)));
+  if (track?.codec !== basename(file).split(/[-.]/)[0])
+    fail(`${basename(file)}: Open's audio is ${JSON.stringify(track)}`);
   const audio = JSON.parse(Audio());
   if (typeof audio.notMeasured !== 'string' || audio.track !== null)
     fail(`${basename(file)}: measured (${JSON.stringify(audio).slice(0, 200)}), not answered with a reason`);
@@ -244,10 +247,15 @@ function checkAudio(sample, video) {
   if (track === null) {
     // The samples have AAC or no audio at all.
     if (audio.notMeasured !== NO_AUDIO || w !== null) fail(`${name}: no track, but ${JSON.stringify(audio).slice(0, 200)}`);
+    if (video.audio !== null) fail(`${name}: Open's audio is ${JSON.stringify(video.audio)}, but the file has none`);
     console.error(`${name}: no audio, ${seconds.toFixed(2)} s`);
     return;
   }
   if (audio.notMeasured !== null) fail(`${name}: a track, and not measured: ${audio.notMeasured}`);
+  // Open's audio track, from the headers (NativeCheck checks it against ffprobe's), is the one the decoder measured.
+  const said = video.audio && [video.audio.codec, video.audio.sampleRate, video.audio.channels].join(', ');
+  if (said !== [track.codec, track.sampleRate, track.channels].join(', '))
+    fail(`${name}: Open's audio is ${JSON.stringify(video.audio)}, the measured track ${track.codec}, ${track.sampleRate} Hz, ${track.channels} ch`);
   const points = w.min[0].length;
   console.error(`${name}: ${track.codec}, ${track.sampleRate} Hz, ${track.channels} ch, ${track.duration.toFixed(3)} s ` +
     `from ${track.start.toFixed(3)} s; ${points} points of ${w.samplesPerPoint} samples, ` +

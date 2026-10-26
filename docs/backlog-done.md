@@ -344,6 +344,43 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     names the shot playing and the table marks its row, scrolling its own box, checked by clicking into every shot and
     playing 13 s to 23 s. Firefox not run: its builds' hosts are outside the session's network policy)
 
+- About this file
+  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
+    already returns that description as JSON, but the page shows none of it.
+  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
+    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
+    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
+    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
+  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
+    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
+  - Not: no other fields beyond what the core returns.
+  - Status: Done (2026-10-26: `panels/about.js`, on the `opened` event, the codec, size, frame rate, pixel format,
+    colour space and range, frames, duration and audio track, each field's own value in its tooltip and Open's JSON
+    folded under them; `Mp4Input.Audio` names the codec as ffprobe does from the headers (ManagedCodecs calls an MP3
+    in 'mp4a' 'mp4a') with the demuxer's rate and channels, NativeCheck's `AudioStreamCheck.cs` equal to ffprobe's on
+    all 14 samples and no-aac files, app-check.mjs: Open's track is the one `Audio()` measures; every sample shown in
+    headless Chromium on the AOT bundle, as its name says. Firefox not run: this session's network policy blocks
+    Playwright's Firefox and Mozilla's hosts, and a Firefox from conda-forge was refused by its permissions)
+
+- A graph of the scores
+  - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
+    a cut was found and what a different threshold would do. The stats are computed for every run already
+    (`statsCsv`), and the page only offers them as a download.
+  - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
+    threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
+    differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
+    CSV header, not by position, and say in the row's PR which column each detector's graph shows. Where a
+    frame-difference score (`content_val`, `delta_*`) stays near zero for a second or more, mark the span as a still
+    picture, labelled as the page's reading.
+  - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
+    threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
+  - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
+    languages is how results drift).
+  - Status: Done (2026-10-26, #36: `panels/scores.js`, a canvas lane of the column each detector cuts on, picked by
+    the header (`adaptive_ratio`, `content_val`, `average_rgb`, `hist_diff`, `hash_dist`), against the threshold the run
+    used, a dot on each cut's score; still pictures where `content_val` stays under 1 for 1 s; every cut of the five
+    detectors on the Sintel trailer past its line; a two-hour stats CSV read in under 0.1 s, each draw under 50 ms)
+
 - Stop a run and keep what was read, without restarting the worker
   - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
     two on a trailer, plus opening the file again (streamed since "Large files": seconds on a film). The owner chose (2026-10-24)
