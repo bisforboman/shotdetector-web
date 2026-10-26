@@ -35,7 +35,7 @@ The page's structure, packets in the core and audio in the core are done ([backl
   - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
     unchanged, and the new heap numbers in the README.
   - Not: no use of `ScoreRange` or `Merge` yet (their row).
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 ### Unblocked by ShotDetector 3.15.0
 
