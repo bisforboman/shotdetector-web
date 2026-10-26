@@ -3,7 +3,7 @@
 //
 //   node tools/webcodecs/serve.mjs --data out/webcodecs/data --results out/webcodecs/results
 //     [--wasm tools/WebCodecsWasm/bin/Release/net10.0/publish/wwwroot]   ManagedCodecs on wasm, for the timings
-//     [--reference tools/WebCodecsCheck/bin/Release/net10.0/WebCodecsCheck.dll --samples samples]   where a frame differs
+//     [--reference tools/WebCodecsCheck/bin/Release/net10.0/WebCodecsCheck.dll]   where a frame differs
 //     [--port 8090]
 //   node tools/webcodecs/serve.mjs --results out/webcodecs/results --report    the tables, from the results so far
 //
@@ -82,7 +82,7 @@ createServer(async (req, res) => {
         return;
       }
       const meta = JSON.parse(readFileSync(join(options.data, url.searchParams.get('sample') + '.json'), 'utf8'));
-      const out = execFileSync('dotnet', [options.reference, 'diff', join(options.samples ?? 'samples', meta.file),
+      const out = execFileSync('dotnet', [options.reference, 'diff', meta.file,
         url.searchParams.get('frame'), yuv], { encoding: 'utf8', maxBuffer: 1 << 26 });
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(out);

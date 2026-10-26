@@ -78,7 +78,7 @@ static void Prepare(string sample, string outDir)
     // avcC's bytes 1 to 3 are the profile, its constraint flags and the level: the codec string RFC 6381 gives them.
     var avcC = info.CodecPrivate.Span;
     var meta = new Meta(
-        File: Path.GetFileName(sample),
+        File: Path.GetFullPath(sample),
         Bytes: new FileInfo(sample).Length,
         Codec: $"avc1.{avcC[1]:x2}{avcC[2]:x2}{avcC[3]:x2}",
         Description: Convert.ToBase64String(avcC),
