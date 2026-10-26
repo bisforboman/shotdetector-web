@@ -5,6 +5,10 @@
 // to the page as they come) must be the result's shots, exactly. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
 // through the published blob-read.js (tools/node-host.mjs). Fails if the runs load an assembly of FFmpeg's; says whether one was
 // loaded at all (interpreted: none), the audio pass included.
+// Stop and cancel (Api's Stop and Cancel, which the worker calls on the page's 'stop' and 'cancel' messages, between
+// Detect's pauses): every run stopped half-way again, its result the whole run's up to there (checkStop); the first
+// sample's first run cancelled half-way, with no result. Detect's pauses (the 'pause' import, the published pause.js as
+// in the worker) must take under 1% of the runs' time.
 // The sound (Api's Audio, after the runs as the page calls it): every sample's, in the JSON's names the page's panels
 // read; for a sample without audio, the core's words the page shows nothing for (NO_AUDIO); the tone sample's waveform
 // loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native:
@@ -36,14 +40,27 @@ for (const arg of rest) {
 const { samples, '--reject': rejects, '--no-aac': noAac, '--native': [nativeDir] } = lists;
 
 let progress = [], told = [], toldAt = [];
+// Detect's pauses (the 'pause' import, pause.js as in the worker): how many, and how long they took in all, and the
+// frame to stop the run at, at the first pause from there (as the worker does on a 'stop' message: Api's Stop, between
+// two pauses), or to cancel it (Api's Cancel).
+let pauses = 0, pausing = 0, stopAt = null, cancelAt = null;
 const { dotnet } = await import(pathToFileURL(resolve(wwwroot, '_framework/dotnet.js')).href);
 const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
+const hostImports = await host(wwwroot);
 setModuleImports('host', {
-  ...await host(wwwroot),
+  ...hostImports,
   progress: (done, expected) => progress.push([done, expected]),
   shot: json => { told.push(JSON.parse(json)); toldAt.push(progress.at(-1)?.[0] ?? 0); },
+  pause: async framesRead => {
+    const started = performance.now();
+    await hostImports.pause();
+    pauses++;
+    pausing += performance.now() - started;
+    if (stopAt !== null && framesRead >= stopAt) Stop();
+    if (cancelAt !== null && framesRead >= cancelAt) Cancel();
+  },
 });
-const { Open, Detect, ScenesCsv, StatsCsv, Audio, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -52,26 +69,34 @@ const ffmpeg = () => LoadedAssemblies().filter(name => name.startsWith('FFmpeg')
 const atStart = ffmpeg();
 let failed = false;
 const fail = message => { console.error(message); failed = true; };
+let runSeconds = 0, pauseSeconds = 0;
 
 mkdirSync(outDir, { recursive: true });
-for (const sample of samples) {
+for (const [i, sample] of samples.entries()) {
   const video = JSON.parse(Open(fileBlob(sample)));
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frameCount} frames, ${video.duration} s`);
+  // Once: a run cancelled half-way fails as cancelled, keeps no result, and the next run goes on as if it hadn't been.
+  if (i === 0) await checkCancel(sample, video);
   for (const [run, options] of Object.entries(RUNS)) {
     progress = [];
     told = [];
     toldAt = [];
+    pauses = pausing = 0;
     const started = performance.now();
-    const result = JSON.parse(Detect(JSON.stringify(options)));
+    const result = JSON.parse(await Detect(JSON.stringify(options)));
     const seconds = (performance.now() - started) / 1000;
+    runSeconds += seconds;
+    pauseSeconds += pausing / 1000;
     const name = join(outDir, `${basename(sample, extname(sample))}.${run}`);
-    writeFileSync(`${name}.scenes.csv`, ScenesCsv());
-    writeFileSync(`${name}.stats.csv`, StatsCsv());
+    const scenesCsv = ScenesCsv(), statsCsv = StatsCsv();
+    writeFileSync(`${name}.scenes.csv`, scenesCsv);
+    writeFileSync(`${name}.stats.csv`, statsCsv);
     // How many shots were told before the last frame's progress: with one detector, all but the last, give or take
     // the progress reports' spacing (about ten a second).
     const early = toldAt.filter(done => done < result.frameCount).length;
     console.error(`${basename(sample)} ${run}: ${result.frameCount} frames, ${result.shots.length} shots ` +
-      `(${early} told before the last frame), ${seconds.toFixed(2)} s`);
+      `(${early} told before the last frame), ${seconds.toFixed(2)} s, ${pauses} pauses ${pausing.toFixed(1)} ms`);
+    if (result.stopped !== false) fail(`${basename(sample)} ${run}: a whole run says stopped: ${result.stopped}`);
     // The worker turns these into the page's progress bar: they must come, and the last one says every frame is done.
     const last = progress.at(-1);
     if (last?.[0] !== result.frameCount)
@@ -79,9 +104,15 @@ for (const sample of samples) {
     // The page shows these as they come and keeps them when a run is cancelled: they are the result's shots.
     if (JSON.stringify(told) !== JSON.stringify(result.shots))
       fail(`${basename(sample)} ${run}: the shots told were ${JSON.stringify(told)}, the result's ${JSON.stringify(result.shots)}`);
+    await checkStop(sample, video, run, options, result, statsCsv);
   }
   checkAudio(sample, video);
 }
+
+// Detect's pauses against the runs' time: the pauses must cost under 1% of it (Api's PauseEvery).
+const share = pauseSeconds / runSeconds;
+console.error(`Pauses: ${(pauseSeconds * 1000).toFixed(0)} ms of ${runSeconds.toFixed(1)} s of runs, ${(share * 100).toFixed(2)}%`);
+if (!(share < 0.01)) fail(`Detect's pauses took ${(share * 100).toFixed(2)}% of the runs' time, not under 1%`);
 
 for (const file of noAac) {
   Open(fileBlob(file));
@@ -114,6 +145,88 @@ if (byRuns.length > 0) {
     : `No FFmpeg assembly loaded by the runs (loaded at start: ${atStart.join(', ')}).`);
 }
 process.exit(failed ? 1 : 0);
+
+// The run stopped half-way (at the first pause from half its frames): Detect's result for the frames read, as if the
+// file ended there. Its stats CSV is the whole run's rows up to there, since a frame's stats depend only on the frames
+// before it, but for the adaptive detector's ratio, which waits for its window of frames after it: None in the stopped
+// run's last rows. Its shots are the whole run's that end before the stop, then the next one cut short at the stop. A cut
+// decided only on frames past the stop is the one difference allowed: a few frames before it, within the adaptive window
+// and the minimum shot length (FlashFilter's merge decides a cut that late). (The threshold detector would also end a
+// fade-out the stop falls in with a cut, as at a file's end: no sample stops in one.)
+async function checkStop(sample, video, run, options, whole, wholeStats) {
+  const name = `${basename(sample)} ${run} stopped`;
+  const half = Math.floor(video.frameCount / 2);
+  progress = [];
+  told = [];
+  stopAt = half;
+  let result;
+  try {
+    result = JSON.parse(await Detect(JSON.stringify(options)));
+  } finally {
+    stopAt = null;
+  }
+  const n = result.frameCount, rate = video.frameRate.num / video.frameRate.den;
+  if (result.stopped !== true || n < half || n >= whole.frameCount) {
+    fail(`${name}: at ${half} of ${whole.frameCount} frames, the result has ${n} frames, stopped ${result.stopped}`);
+    return;
+  }
+  if (progress.at(-1)?.[0] !== n) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}, not at ${n}`);
+  if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots told aren't the result's`);
+
+  // The stats: the whole run's rows for frames 1 to n, but None for the adaptive ratio in the last w.
+  const lines = csv => csv.split(/\r?\n/).filter(line => line !== '');
+  const ours = lines(StatsCsv()), theirs = lines(wholeStats);
+  const header = ours[0].split(',');
+  const ratios = header.flatMap((h, i) => /^adaptive_ratio.*\(w=(\d+)\)$/.test(h) ? [i] : []);
+  const window = ratios.length > 0 ? Number(/\(w=(\d+)\)$/.exec(header[ratios[0]])[1]) : 0;
+  const rows = theirs.filter((line, i) => i === 0 || Number(line.split(',')[0]) <= n).length;
+  const wrong = [];
+  for (let i = 0; i < Math.max(ours.length, rows); i++) {
+    if (ours[i] === theirs[i]) continue;
+    const a = ours[i]?.split(','), b = theirs[i]?.split(',');
+    const late = a && b && i < rows && Number(a[0]) > n - window && a.length === b.length &&
+      a.every((cell, c) => cell === b[c] || (ratios.includes(c) && cell === 'None'));
+    if (!late) wrong.push(i);
+  }
+  if (ours.length !== rows || wrong.length > 0)
+    fail(`${name}: ${ours.length - 1} stats rows, not the whole run's ${rows - 1} up to frame ${n}; differing: ` +
+      `${wrong.slice(0, 5).map(i => `"${ours[i]}" for "${theirs[i]}"`).join(', ')}`);
+
+  // The shots: the whole run's before the stop, the last one cut short there, but for a cut decided after it.
+  const cuts = shots => shots.slice(1).map(s => s.startFrame);
+  const lag = window + Math.ceil(0.6 * rate) + 1;
+  const kept = result.shots.slice(0, -1), last = result.shots.at(-1);
+  const prefix = JSON.stringify(kept) === JSON.stringify(whole.shots.slice(0, kept.length));
+  const cutShort = last.startFrame === whole.shots[kept.length]?.startFrame && last.endFrame === n;
+  const missed = cuts(whole.shots).filter(c => c > last.startFrame && c <= n);
+  if (!prefix || !cutShort || missed.some(c => c <= n - lag)) {
+    fail(`${name} at ${n}: shots ${JSON.stringify(result.shots.map(s => [s.startFrame, s.endFrame]))}, the whole ` +
+      `run's ${JSON.stringify(whole.shots.map(s => [s.startFrame, s.endFrame]))}`);
+  }
+  console.error(`${name} at ${n} of ${whole.frameCount} frames: ${result.shots.length} shots, ` +
+    `the whole run's ${kept.length} and the next cut short; ${ours.length - 1} stats rows, the whole run's` +
+    `${window > 0 ? `, the adaptive ratio None in the last ${window}` : ''}` +
+    `${missed.length > 0 ? `; cuts decided after the stop: ${missed.join(', ')}` : ''}`);
+}
+
+// A run cancelled half-way (Api's Cancel at a pause, as the worker does on a 'cancel' message) fails and keeps no
+// result; the file stays open for the next run.
+async function checkCancel(sample, video) {
+  cancelAt = Math.floor(video.frameCount / 2);
+  let message = null;
+  try {
+    await Detect(JSON.stringify(RUNS.adaptive));
+  } catch (e) {
+    message = e.message.split('\n')[0];
+  } finally {
+    cancelAt = null;
+  }
+  let kept = null;
+  try { kept = ScenesCsv(); } catch { /* no result: as it should be */ }
+  if (message !== 'The run was cancelled.' || kept !== null)
+    fail(`${basename(sample)}: a run cancelled half-way ended with ${message}, a scenes CSV of ${kept?.length} characters`);
+  else console.error(`${basename(sample)}: cancelled half-way: "${message}", no result kept`);
+}
 
 // Audio()'s JSON for one opened sample (README "Checks", wasm).
 function checkAudio(sample, video) {
