@@ -51,7 +51,7 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
   - Not: no shared memory.
   - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
     (done).
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 ### Decisions to make first
 
