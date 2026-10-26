@@ -258,8 +258,8 @@ measures; six files to refuse; and three whose audio isn't measured.
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.15.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.11.0,
-which ShotDetector depends on) and what they depend on come from nuget.org. Versions are central, in
+ShotDetector and ShotDetector.FastYuv (3.16.1; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.11.0,
+which ShotDetector 3.16.1 depends on) and what they depend on come from nuget.org. Versions are central, in
 Directory.Packages.props.
 
 ManagedCodecs isn't on NuGet: it is a git submodule, `external/ManagedCodecs` (`git clone --recursive`, or
@@ -276,12 +276,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.15.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.16.1, Directory.Packages.props):
 
 ```
-git clone --branch v3.15.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.16.1 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.15.0 -p:FrameReaderVersion=2.11.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.16.1 -p:FrameReaderVersion=2.11.0
 git clone --recursive https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
