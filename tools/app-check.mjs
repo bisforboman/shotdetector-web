@@ -106,6 +106,10 @@ for (const [i, sample] of samples.entries()) {
     // The page shows these as they come and keeps them when a run is cancelled: they are the result's shots.
     if (JSON.stringify(told) !== JSON.stringify(result.shots))
       fail(`${basename(sample)} ${run}: the shots told were ${JSON.stringify(told)}, the result's ${JSON.stringify(result.shots)}`);
+    // The page shows these (panels/warnings.js): ShotDetector's sentences, an empty list when it has none.
+    if (!Array.isArray(result.warnings) || result.warnings.some(w => typeof w !== 'string'))
+      fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
+    for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
     await checkStop(sample, video, run, options, result, statsCsv);
   }
   checkAudio(sample, video);

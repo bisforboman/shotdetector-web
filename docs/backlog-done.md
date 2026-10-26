@@ -421,6 +421,27 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     picked mid-run abandons it on the same worker; a worker that doesn't answer is terminated after 1.5 s. A
     `[JSExport]`'s cancelled task never settles its promise in .NET 10: `Detect` fails instead, CLAUDE.md "Gotchas")
 
+- Warnings on the page
+  - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.
+  - Where: `src/ShotDetectorWeb.App/Api.cs`: `warnings` (the strings as they are) added to `DetectResponse`;
+    `app.js` shows them under the summary when there are any.
+  - Done when: a run that produces a warning shows it on the page (find which input does, or say none of the samples
+    does and show it with a made-up response in the PR); `tools/check.sh wasm` and `wasm aot` green, CSVs unchanged.
+  - Not: no new warnings of our own.
+  - Status: Done (2026-10-26: `DetectResponse.Warnings`, `DetectionResult.Warnings`' sentences as they are, an empty
+    list when none; `panels/warnings.js` a card under the run's, shown only when a finished run has any, gone on a new
+    file or run. No sample warns, nor can one: on the frames path (`Detect(YuvVideo, IEnumerable<YuvFrame>, ...)`)
+    ShotDetector 3.16.1's only warning is "read sequentially, not in chunks: frames from the caller", for
+    `DetectionMode.Parallel`, an option the page doesn't send (every sample in Auto, Sequential and Parallel, natively;
+    the HLS and chunk-fallback warnings are the file path's). A frame source that ends before `YuvVideo.FrameCount`
+    (the trailer's first 600 of 1253 frames) gives none either. So the PR shows that sentence in a made-up response
+    (worker.js patched in the test's route), in headless Chromium, interpreted and AOT, wide and at 390 px; screenshots
+    in the PR. `DetectionOptions.Warnings` isn't used: Parallel's is told before the first frame, the same sentence as
+    the result's, and telling it live would need an import in `worker.js` and an event in `app.js` for a warning the
+    page can't cause. `tools/app-check.mjs` checks the field is a list of strings on every run. `tools/check.sh wasm`
+    and `wasm aot`: 132 of 132 CSVs identical. Firefox wasn't run: Playwright's and Mozilla's downloads are blocked by
+    the session's network policy. The card is a panel of its own, not in `app.js`: the page's structure row)
+
 - WebCodecs: are its frames ManagedCodecs' frames?
   - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
     and the browser's own `VideoDecoder`, often in hardware, could make a run 2.5 to 4 times faster. The page's
@@ -441,6 +462,6 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     unsupported), and every frame of every sample and of the two-hour film (172,800) is identical to ManagedCodecs',
     every plane and timestamp; Firefox 136 decodes with the system's FFmpeg in software but hands every frame to the
     page as BGRX, so there are no Y, U and V planes to compare. Decode plus copy against ManagedCodecs on wasm AOT:
-    Chromium 1.71 s against 16.65 s on the trailer, 243 s against 1,656 s on the film; Firefox 12.92 s against 20.57 s on the trailer,
-    410 s against 1,929 s on the film. Not every frame identical in both browsers, so the decision's "Not doing" stands and no row
-    builds it; the numbers are there)
+    Chromium 1.71 s against 16.65 s on the trailer, 243 s against 1,656 s on the film; Firefox 12.92 s against
+    20.57 s on the trailer, 410 s against 1,929 s on the film. Not every frame identical in both browsers, so the
+    decision's "Not doing" stands and no row builds it; the numbers are there)

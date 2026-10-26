@@ -47,9 +47,10 @@ public static partial class Api
 
     /// <summary>
     /// Detects on the opened file with the page's options (<see cref="DetectRequest"/>), stats always collected: the
-    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate and duration, and whether it was stopped; scenedetect's
-    /// scene and stats CSVs come from <see cref="ScenesCsv"/> and <see cref="StatsCsv"/>. Reports progress through
-    /// <see cref="Progress"/> while it runs, and each shot through <see cref="ShotFound"/> as soon as ShotDetector knows it
+    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate and duration, whether it was stopped, and
+    /// ShotDetector's warnings; scenedetect's scene and stats CSVs come from <see cref="ScenesCsv"/> and
+    /// <see cref="StatsCsv"/>. Reports progress through <see cref="Progress"/> while it runs, and each shot through
+    /// <see cref="ShotFound"/> as soon as ShotDetector knows it
     /// (<see cref="DetectionOptions.OnShot"/>). A promise to the worker: every <see cref="PauseEvery"/> frames the run
     /// waits for the worker's next task (<see cref="Pause"/>), so <see cref="Stop"/> and <see cref="Cancel"/> can come in.
     /// </summary>
@@ -82,7 +83,8 @@ public static partial class Api
         _result = result;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration, _stopped),
+            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration, _stopped,
+                result.Warnings),
             ApiJson.Default.DetectResponse);
     }
 
@@ -208,8 +210,11 @@ sealed class RunCancelledException(OperationCanceledException inner) : Exception
 /// <summary>
 /// What <see cref="Api.Detect"/> returns. Stopped: the run was stopped (<see cref="Api.Stop"/>) and its frames ended at
 /// <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is still the file's.
+/// Warnings: <see cref="DetectionResult.Warnings"/>' sentences as ShotDetector words them (empty when there are none),
+/// what the user should know about how the video was read.
 /// </summary>
-sealed record DetectResponse(JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration, bool Stopped);
+sealed record DetectResponse(
+    JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration, bool Stopped, IReadOnlyList<string> Warnings);
 
 /// <summary>Durations as seconds, which JavaScript can use as they are.</summary>
 sealed class SecondsConverter : JsonConverter<TimeSpan>
