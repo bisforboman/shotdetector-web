@@ -325,6 +325,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     trailer, 5 of 7). `tools/app-check.mjs` checks `Packets()` against ffprobe's packets on every sample, exactly
     (the native check writes them to `out/native/<sample>.packets.txt`). The CSVs are unchanged)
 
+- Shot statistics and a timeline
+  - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
+    of shots under the player shows where the cuts are at a glance.
+  - Where: `app.js`, `index.html`, `style.css`: from the shots as `Detect` returns them, the number of shots, average and
+    median shot length, shortest and longest, cuts per minute, and how long the run took against the video's length
+    ("2.4 times real time"); a strip of shots in proportion to their length under the `<video>`, each one seeking to its
+    shot, with the playhead following `timeupdate` and the current shot's table row marked.
+  - Done when: the Sintel trailer's numbers match what the scenes CSV gives by hand, and the strip and the table follow
+    playback; screenshots in the PR.
+  - Not: no change to `Api`, no libraries.
+  - Status: Done (2026-10-26: `panels/stats.js`, a card beside the video, labelled the page's own figures, from the
+    shots `Detect` returns: on the Sintel trailer (adaptive) 8 shots, average 6.53 s, median 2.33 s, shortest 0.58 s
+    (shot 7), longest 24.21 s (shot 8), 8.0 cuts per minute, each equal to what its scenes CSV gives by hand, and the
+    same for the content detector's 12; the AOT bundle ran it at 2.7 times real time in headless Chromium. The strip is
+    the timeline's cuts lane (decision `2026-10-25-one-page.md`), where a click seeks into the shot clicked; the card
+    names the shot playing and the table marks its row, scrolling its own box, checked by clicking into every shot and
+    playing 13 s to 23 s. Firefox not run: its builds' hosts are outside the session's network policy)
+
 - About this file
   - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
     already returns that description as JSON, but the page shows none of it.

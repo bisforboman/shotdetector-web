@@ -53,10 +53,12 @@ as the file is opened the bitrate per second and a tick at each keyframe, from t
 the library, below), and, once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
 the player are cards, today the bitrate's numbers and how many cuts fall on a keyframe, the run's summary and
-downloads, the sound's measures and, as soon as the file is opened, "About this file": the core's description of it
+downloads, the shots' statistics (the number of shots, average and median shot length, shortest and longest, cuts per
+minute, the run's speed against real time: the page's own figures, worked out from the shots, and the shot playing
+now), the sound's measures and, as soon as the file is opened, "About this file": the core's description of it
 (`Api.Open`: the `YuvVideo` below and the audio track) in a viewer's words, "BT.709" for `bt709`, each field's own value
-in its tooltip and Open's JSON one click away; below, the shots as a table whose rows play the video from
-the shot, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
+in its tooltip and Open's JSON one click away; below, the shots as a table whose rows play the video from the shot, the
+row of the shot playing marked, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
 `DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
