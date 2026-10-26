@@ -188,7 +188,8 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     trailer's numbers (screenshot in the PR); the PR gives the time the measures add.
   - Not: no loudness correction or normalising; no codecs other than AAC; no colour bars detection (the Maybe row on
     picture measures has it).
-  - Status: Open
+  - Status: In progress (2026-10-26): the core landed in #26 (backlog-done.md, "Audio in the core"); the page part,
+    `panels/sound.js` on the waveform row's `audio` event.
 
 - Bitrate and keyframes
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
