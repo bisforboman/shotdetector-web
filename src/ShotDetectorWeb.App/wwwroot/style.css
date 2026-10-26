@@ -10,6 +10,7 @@
   --error-fg: #991b1b;
   --playhead: #dc2626;
   --tone: #059669;
+  --keyframe: #c2410c;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
 }
@@ -26,6 +27,7 @@
     --error-fg: #fecaca;
     --playhead: #f87171;
     --tone: #34d399;
+    --keyframe: #fb923c;
   }
 }
 
@@ -167,6 +169,18 @@ video { display: block; width: 100%; background: #000; border-radius: 0.375rem; 
 .peaks tbody tr:hover { background: none; }
 .peaks th { position: static; white-space: normal; }
 .peaks th, .peaks td { padding-inline: 0.25rem; }
+
+/* Bitrate and keyframes: the bitrate per second as a filled step graph, the keyframes as ticks over it (an SVG
+   stretched over the video's span, the ticks a pixel wide whatever the stretch); the card's own readings underlined. */
+.track.bitrate, .lane-label.bitrate { height: 3.5rem; }
+.lane-label.bitrate { line-height: 3.5rem; }
+.track.bitrate svg { position: absolute; top: 0; height: 100%; }
+.track.bitrate .rate { fill: color-mix(in srgb, var(--muted) 45%, transparent); }
+.track.bitrate .keyframes { stroke: var(--keyframe); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+#bitrate p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
+#bitrate .own { text-decoration: underline dotted; cursor: help; }
+#bitrate .note { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+#bitrate code { white-space: nowrap; }
 
 /* The shots table. */
 #shots-card { max-height: 70vh; overflow: auto; padding-top: 0; }
