@@ -16,8 +16,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 
 ## Layout
 
-- `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect),
-  `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose), `SpsInfo` (the SPS's format and VUI colour
+- `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect;
+  `Audio`, the audio track as ffprobe describes it), `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
+  expose, the audio codec's FFmpeg name among them), `SpsInfo` (the SPS's format and VUI colour
   fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by `Mp4Input`'s
   walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
   `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
@@ -25,7 +26,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   decoder refuses).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
-  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON) and `Detect(string optionsJson)` (shots, frame
+  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `audio`: `{ codec, sampleRate,
+  channels }` from `Mp4Input.Audio`, or null) and `Detect(string optionsJson)` (shots, frame
   count, rate, duration as JSON), and the `[JSImport]`s `progress(done, expected)` and `shot(json)`
   (`DetectionOptions.OnShot`: each shot as soon as it is known, one object of `Shots.Json`'s array); `Api.Csv.cs` has
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
@@ -49,7 +51,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `seek()`) and `panels/`: `cuts.js` (a lane), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
   (the table below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
-  sound's measures, labelled measured, what the page derives labelled as its own). `Api` prefixes ManagedCodecs'
+  sound's measures, labelled measured, what the page derives labelled as its own), `about.js` (a card on the `opened` event: Open's
+  description in a viewer's words, its JSON folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
     under the video, as the table). A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
@@ -59,7 +62,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
-  `ffprobe -show_packets`; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
+  `ffprobe -show_packets`; `AudioStreamCheck.cs`: `Mp4Input.Audio` vs ffprobe's first audio stream; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`

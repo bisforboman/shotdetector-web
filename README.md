@@ -51,7 +51,9 @@ is a timeline: one time axis, a playhead that follows the video, a click anywher
 over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded) and,
 once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
-the player are cards, today the run's summary and downloads; below, the shots as a table whose rows play the video from
+the player are cards, today the run's summary and downloads and, as soon as the file is opened, "About this file": the
+core's description of it (`Api.Open`: the `YuvVideo` below and the audio track) in a viewer's words, "BT.709" for
+`bt709`, each field's own value in its tooltip and Open's JSON one click away; below, the shots as a table whose rows play the video from
 the shot, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
 `DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
@@ -186,6 +188,11 @@ duration, with their data skipped; the list is kept on the way, by column, 13 by
 once at the track's sample count. Measured 2026-10-25 natively against `main` on a two-hour file (172,800 frames at
 24 fps, 337,501 AAC packets): `Open` keeps 2.25 MB more and allocates 2.25 MB more, in the same time (0.9 s).
 
+`Mp4Input.Audio` is the first audio track as ffprobe describes it (`AudioStream`: `codec_name`, `sample_rate`,
+`channels`; null without one), nothing decoded: the rate and channels from ManagedCodecs' demuxer (an AAC track's from
+its AudioSpecificConfig), the codec's FFmpeg name from the headers, its sample entry and, for 'mp4a', the 'esds' object
+type (ManagedCodecs names an MP3 in 'mp4a' 'mp4a'; FFmpeg says mp3).
+
 ### The sound
 
 ```csharp
@@ -226,7 +233,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   frame count, frame rate, length, duration, processed size, cuts, scene CSV and stats CSV must be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
-  same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`). Markdown
+  same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`); and each
+sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio stream, codec
+name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`). Markdown
   tables go to `out/native-report.md`, (a)'s CSVs to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
@@ -245,7 +254,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   gives Node the `FileReaderSync` it lacks);
   its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
-  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, that `Audio()` (the
+  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, that `Open`'s `audio` is the track `Audio()` measures (none
+where it says the file has none; for `samples/no-aac/`, the codec in the file's name), that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
   "The file has no audio track." (which the page shows nothing for) for a sample without audio and a reason for each of
   `samples/no-aac/`, that the tone sample's waveform is loud, silent, loud where make-samples.sh puts the tone and the
