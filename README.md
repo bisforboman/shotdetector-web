@@ -47,7 +47,9 @@ page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeli
 exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
 is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
-over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded). Beside
+over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded) and,
+once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
+"The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
 the player are cards, today the run's summary and downloads; below, the shots as a table whose rows play the video from
 the shot, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
 `DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
@@ -128,6 +130,11 @@ every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path run
 103 KB transferred (447 KB raw); FrameReader 26 KB (80 KB). Pages answers with `cache-control: max-age=600` and an
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
+The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's
+`_framework/` against `main` before it, files through `gzip -6`: 17.03 to 17.92 MB raw (+889 KB, 5.2%), 5.08 to 5.34 MB
+compressed (+258 KB, 5.1%). `ManagedCodecs.Aac.wasm` is 168 KB raw (43 KB compressed); the rest is mostly its AOT code
+in `dotnet.native.wasm` (+639 KB, +195 KB compressed), then the core's and the App's new code (+67 KB, +16 KB).
+
 ## Using the library
 
 ```csharp
@@ -178,6 +185,12 @@ full scale, and loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, l
 from the signal oversampled 4 times). Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
 pass takes about 0.6 s natively. Checked against FFmpeg within tolerances (Checks, audio).
 
+On the page it is `Api.Audio()`, called once a file's first run is done ("Running the page"), whose JSON
+(CLAUDE.md, "Layout") the timeline's Sound lane reads, and the other sound panels with it. Measured 2026-10-26 on the
+AOT bundle in headless Chromium (4-core cloud VM): 0.63 s on the Sintel trailer (0.54 s in Firefox 136); 72 s on a
+two-hour MP4 (the trailer looped, 640x360 at 2.5 Mbit/s with 128 kbit/s AAC, 2.37 GB, 7,169 s of stereo 48 kHz audio),
+whose JSON is 13.5 KB. Under Node, the trailer's pass takes 0.46 s compiled ahead of time and 2.6 s interpreted.
+
 ## Checks
 
 ```
@@ -213,10 +226,16 @@ tools/check.sh replace       # FastYuv replaced from its source (needs github.co
   gives Node the `FileReaderSync` it lacks);
   its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
-  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, and that the publish
+  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, that `Audio()` (the
+  sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
+  "The file has no audio track." (which the page shows nothing for) for a sample without audio and a reason for each of
+  `samples/no-aac/`, that the tone sample's waveform is loud, silent, loud where make-samples.sh puts the tone and the
+  gap, each edge within a video frame, and that each waveform's values are within 1 of the
+  native check's (`out/native/<sample>.waveform.json`: the same managed code, another runtime), and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
-  Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it) is loaded at all
-  (`LoadedAssemblies()`): the runtime loads an assembly only when code needs it, so nothing on the path touches
+  Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it, and FrameReader, whose
+  waveform and tone code the audio pass runs) is loaded at all, the audio pass included (`LoadedAssemblies()`): the
+  runtime loads an assembly only when code needs it, so nothing on the path touches
   FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads some assemblies at start that
   the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only if the runs load one. No FFmpeg
   library exists in the browser either way.

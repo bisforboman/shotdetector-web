@@ -29,17 +29,28 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   count, rate, duration as JSON), and the `[JSImport]`s `progress(done, expected)` and `shot(json)`
   (`DetectionOptions.OnShot`: each shot as soon as it is known, one object of `Shots.Json`'s array); `Api.Csv.cs` has
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
-  `Api.Assemblies.cs` `LoadedAssemblies()`. `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
+  `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
+  `BlobStream` of its own), called by `app.js` after the file's first `Detect` and told to the panels as the `audio`
+  event, its JSON camelCase with times in seconds: `notMeasured` (why not, the core's words: no audio, which the page
+  shows nothing for, "The file has no audio track.", checked by app-check.mjs; not AAC; refused by the decoder; null
+  when measured), `track`
+  (`{ codec, sampleRate, channels, start, duration }` or null), `waveform` (`{ start, sampleRate, samplesPerPoint,
+  pointsPerSecond, channels, min, max }`: point `i` from `start + i / pointsPerSecond`, `min` and `max` one array per
+  waveform, one unless split, of audiowaveform's 16-bit values, full scale 32767; or null), `referenceTone` (`[{ start,
+  end, level }]`), `silences` (`[{ start, end }]`), `peaks` (`[{ sample, true, fullScale }]` per channel, dBFS and
+  dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
+  null). `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
   the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order; `progress` and `shot` posted while `Detect` runs), `wwwroot/blob-read.js` is its
   `read` (`FileReaderSync`). The page (no build step, no dependency, native ES modules; README "Running the page";
   decision `2026-10-25-one-page.md`): `index.html` (the layout and the list of panels), `style.css`, `app.js` (the
   states, the options, the estimate, cancel, the demo; the events panels listen to, `call(name, ...args)` and
-  `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)` with its `show(on)`,
-  `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `run.js` (a card: the summary and downloads), `shots.js` (the table
-  below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the sound's
-  measures, labelled measured, what the page derives labelled as its own). `Api` prefixes ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach
-  JavaScript).
+  `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
+  `seek()`) and `panels/`: `cuts.js` (a lane), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
+  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
+  (the table below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
+  sound's measures, labelled measured, what the page derives labelled as its own). `Api` prefixes ManagedCodecs'
+  `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
     under the video, as the table). A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
     `call` and `card` from `../app.js` and `lane`, `x`, `seek` from `../timeline.js`, plus one `<script

@@ -13,6 +13,9 @@
 //                                                                scenesCsv and statsCsv); name: the file's, without its
 //                                                                extension, for downloads
 //                        'cancelled' { video, done, expected }   the run was cancelled at frame done
+//                        'audio'    { video, audio }             the file's sound, after its first finished run: Api's
+//                                                                Audio (CLAUDE.md "Layout" has its JSON), once per
+//                                                                opened file; a failure as notMeasured
 //   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns
 //   card(title, { below }) a card beside the video (below: under it, full width), for the panel to fill
 import { setDuration } from './timeline.js';
@@ -44,6 +47,7 @@ let state = 'idle';
 let started = 0;        // when the current detection started (performance.now())
 let framesDone = 0;     // frames the current run has done, as its last progress report said
 let framesExpected = 0; // and how many it expects (0 when unknown)
+let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
 
 const listeners = {};
 export function on(event, f) {
@@ -189,6 +193,27 @@ async function detect() {
   r.scenesCsv = await call('ScenesCsv');
   r.statsCsv = await call('StatsCsv');
   show(r, (performance.now() - started) / 1000);
+  await sound();
+}
+
+// The file's sound, after its first run, so detection's time and results stay as they are (decision 2026-10-24-audio.md):
+// one pass over the audio packets in the worker. Not the page's error state if it fails: the run's results stand, and
+// the panels say why there is no sound.
+async function sound() {
+  if (measured === opened) return;
+  const video = opened, said = statusText.textContent;
+  measured = video;
+  statusText.textContent = `${said} Measuring the sound…`;
+  let audio;
+  try {
+    audio = JSON.parse(await call('Audio'));
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    audio = { notMeasured: e.message, track: null, waveform: null, referenceTone: [], silences: [], peaks: [], loudness: null };
+  }
+  if (opened !== video) return;
+  if (state === 'done') statusText.textContent = said;
+  emit('audio', { video, audio });
 }
 
 // How long the run will take, from the frame count and picture size: this browser's own rate from its last run, or the

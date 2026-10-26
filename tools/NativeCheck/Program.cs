@@ -119,7 +119,7 @@ foreach (string reject in rejects)
     }
 }
 
-failures += AudioCheck.Run(samples, libs);
+failures += AudioCheck.Run(samples, libs, outDir);
 
 Console.WriteLine(failures == 0 ? "All agree." : $"{failures} differences or failures.");
 return failures == 0 ? 0 : 1;
