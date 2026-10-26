@@ -50,7 +50,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   decision `2026-10-25-one-page.md`): `index.html` (the layout and the list of panels), `style.css`, `app.js` (the
   states, the options, the estimate, cancel, the demo; the events panels listen to, `call(name, ...args)` and
   `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
-  `seek()`) and `panels/`: `cuts.js` (a lane), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
+  `seek()`) and `panels/`: `cuts.js` (a lane), `scores.js` (a lane: a `<canvas>` of the run's score column from
+  `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
+  as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
   (the table below), `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots; it names
   the shot playing and marks its row in the table, found by `#shots`), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the

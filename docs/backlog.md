@@ -173,20 +173,17 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Not: no new warnings of our own.
   - Status: Open
 
-- A graph of the scores
-  - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
-    a cut was found and what a different threshold would do. The stats are computed for every run already
-    (`statsCsv`), and the page only offers them as a download.
-  - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
-    threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
-    differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
-    CSV header, not by position, and say in the row's PR which column each detector's graph shows. Where a
-    frame-difference score (`content_val`, `delta_*`) stays near zero for a second or more, mark the span as a still
-    picture, labelled as the page's reading.
-  - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
-    threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
-  - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
-    languages is how results drift).
+- The form's default thresholds for histogram and hash
+  - Why: `app.js`'s `DEFAULT_THRESHOLDS` prefills histogram 0.05 and hash 0.395, scenedetect 0.7.1's defaults, and
+    sends a threshold equal to its default as none. ShotDetector's defaults follow `DetectionOptions.Compatibility`,
+    0.7.2 unless set, whose are 0.2 and 0.35 (`ShotDetection`'s detector setup). So the form says 0.05 while the run
+    compares against 0.2, and a visitor who types 0.05 gets 0.2. Found 2026-10-26 by "A graph of the scores": the
+    lane draws the threshold the run used, and Sintel's histogram cuts all sit under 0.8, not 0.95.
+  - Where: `app.js`'s `DEFAULT_THRESHOLDS` (histogram 0.2, hash 0.35) and its comment; `panels/scores.js` keeps the
+    same defaults to draw the line (its `DETECTORS`).
+  - Done when: the form prefills 0.2 and 0.35, and a histogram run with 0.05 typed in compares against 0.05 (the
+    scores lane's line at 0.95, and more cuts than the default's on the Sintel trailer).
+  - Not: no other compatibility than ShotDetector's default.
   - Status: Open
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle

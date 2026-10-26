@@ -48,9 +48,12 @@ page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeli
 exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
 is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
-over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), as soon
-as the file is opened the bitrate per second and a tick at each keyframe, from the MP4's packets (`Api.Packets`; Using
-the library, below), and, once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
+over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), the
+scores (each frame's score from the stats CSV, the column the detector cuts on, against the threshold the run used, a
+dot where each cut sits on it, and the spans where `content_val` stays under 1 for a second or more marked as still
+pictures, the page's reading), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
+the MP4's packets (`Api.Packets`; Using the library, below), and, once the first run is done, the sound: its waveform,
+decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
 the player are cards, today the bitrate's numbers and how many cuts fall on a keyframe, the run's summary and
 downloads, the shots' statistics (the number of shots, average and median shot length, shortest and longest, cuts per
