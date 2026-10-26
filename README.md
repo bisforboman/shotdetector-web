@@ -47,7 +47,10 @@ page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeli
 exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
 is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
-over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded) and,
+over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), the
+scores (each frame's score from the stats CSV, the column the detector cuts on, against the threshold the run used, a
+dot where each cut sits on it, and the spans where `content_val` stays under 1 for a second or more marked as still
+pictures, the page's reading) and,
 once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
 the player are cards, today the run's summary and downloads; below, the shots as a table whose rows play the video from
