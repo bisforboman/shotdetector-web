@@ -58,12 +58,35 @@ the shot, each row as soon as ShotDetector knows the shot (a few frames after th
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
-run, else `REFERENCE_FPS` at the top of `app.js`); Cancel stops the worker and starts a new one, and keeps the shots
-found so far, with one more line, marked unfinished, from the last cut to where the run stopped (no downloads for a
-cancelled run). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
+run, else `REFERENCE_FPS` at the top of `app.js`); Stop ends the run where it has got to and shows the result for the
+part read, its shots and both CSVs, as a finished run's, labelled "stopped at", and a run with other options then
+starts at once on the opened file (Stopping a run, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
 page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
 `pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
 `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
+
+## Stopping a run
+
+`Api.Detect` runs ShotDetector's `DetectAsync` over `Mp4Input.FramesAsync`, which every 8 frames (`PauseEvery` in
+`Api.cs`) awaits the worker's next task (`[JSImport] pause`, `wwwroot/pause.js`: a `MessageChannel` message). Between
+two pauses the worker handles the page's `stop`, which makes the frames end there as if the file did, so `Detect`
+answers with the result for the frames read: the frame count read, its shots (the last one ending where the run
+stopped) and both CSVs, and `stopped: true`. A file picked during a run abandons it with `cancel` (the token: no
+result), and only a worker that doesn't answer a stop within a second and a few pauses is terminated, losing the run
+but for the shots the page was told. ShotDetector 3.16.1 neither warns nor refuses when the frames end before
+`YuvVideo.FrameCount`.
+
+A stopped run is the run of a file that ends there. Its stats CSV is the whole run's up to there (a frame's stats
+depend only on the frames before it), but for the adaptive ratio of the last 2 frames, `None`, which waits for 2 frames
+after them; its shots are the whole run's up to the stop, the next one cut short there, but for a cut decided on frames
+past the stop (FlashFilter's merge decides one up to the minimum shot length late). The threshold detector would end a
+fade-out the stop falls in with a cut, as at a file's end. `tools/app-check.mjs` checks this on every sample and run.
+
+Measured 2026-10-26 on a 4-core cloud VM: a pause takes 6 µs in Chromium's worker (2,000 in a row through
+`pause.js`), so 8 frames of the Sintel trailer at 60 frames per second (133 ms) pay 0.005% for it; under Node, where a
+pause takes about 0.3 ms, the pauses were 0.25% of app-check's runs AOT and 0.05% interpreted (it fails above 1%). On
+the Sintel trailer, AOT, stopped at frame 600: Detect answered the stop in 201 ms in headless Chromium and 136 ms in
+Firefox 136, and the next run's first progress came 98 and 129 ms after its click, without opening the file again.
 
 ## Large files
 
@@ -245,7 +268,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   gives Node the `FileReaderSync` it lacks);
   its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
-  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, that `Audio()` (the
+  to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
+  the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), that a run cancelled
+  half-way keeps no result, that the pauses take under 1% of the runs' time, that `samples/reject/` is refused through `Open`, that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
   "The file has no audio track." (which the page shows nothing for) for a sample without audio and a reason for each of
   `samples/no-aac/`, that the tone sample's waveform is loud, silent, loud where make-samples.sh puts the tone and the
