@@ -135,35 +135,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     languages is how results drift).
   - Status: Open
 
-- A waveform from ManagedCodecs' AAC
-  - Why: a waveform under the player shows where the sound changes against the cuts. The owner chose (2026-10-24) to
-    decode it with ManagedCodecs' `AacDecoder` (AAC LC and HE-AAC, within 3e-7 of FFmpeg's float output) rather than
-    the browser's Web Audio, so every decoder on the page is managed code. Decision
-    [2026-10-24-audio.md](decisions/2026-10-24-audio.md) says how.
-  - Where: the core: a reference to `ManagedCodecs.Aac` and a way to read the MP4's audio track packet by packet
-    into a loudness envelope (peak per bucket, a thousand buckets or so, with each bucket's time in seconds), without
-    holding the decoded audio. Make the envelope with FrameReader 2.11.0's `WaveformBuilder` (`Add` each chunk of
-    samples, then `Finish`: the points `WaveformData.Read` gives, without FFmpeg,
-    [shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)).
-    `Mp4Input` already reads the audio packets for the format's duration; see CLAUDE.md's
-    gotcha on priming and `SkipSamples`, and apply the edit list. The App: its own `[JSExport]` (not part of `Detect`,
-    so detection's time and results stay as they are), called by `worker.js` after `Detect`. `app.js` draws it on the
-    shots strip from "Shot statistics and a timeline" (depends on that row). A file without an audio track draws
-    nothing and says nothing. A track that isn't AAC, or that `AacDecoder` refuses (HE-AAC v2 with 34-band parametric
-    stereo, for example), gets one line saying why there's no waveform, not an error. A sample in
-    `tools/make-samples.sh` with 6 s of a 1 kHz tone at -20 dBFS, 2 s of silence, then 6 s of the tone again (`sine`,
-    `volume`, `anullsrc`; the "Audio measures" row reuses it), plus a check in `tools/app-check.mjs` that the envelope
-    is loud, silent, loud at those times, within a video frame. FrameReader references FFmpeg.AutoGen: after the audio
-    pass, `LoadedAssemblies()` must still show no FFmpeg assembly (the interpreted check is strict). The export brings
-    ManagedCodecs.Aac into the trimmed bundle: add it to THIRD-PARTY-NOTICES.md's ManagedCodecs row. Depends on the
-    3.15.0 row (FrameReader 2.11.0) and on large files (the stream it reads through).
-  - Done when: that check passes interpreted and AOT. The Sintel trailer's waveform lines up with its sound in
-    Chromium and Firefox (screenshots in the PR). The PR gives how much the bundle grew and how much time the decode
-    adds on the trailer.
-  - Not: no Web Audio; no change to playback (the `<video>` still plays the sound); no audio-based cut detection
-    (ShotDetector has none); no exactness check against FFmpeg's audio, since a waveform has nothing to be exact about.
-  - Status: In progress (2026-10-26)
-
 - Audio measures: reference tone, silence, peaks, loudness
   - Why: someone checking a master before delivery asks these first. Is there bars and tone at the head (a steady
     1 kHz sine at -18 or -20 dBFS)? Where is it silent? Does it clip? How loud is it, as EBU R128 measures loudness
