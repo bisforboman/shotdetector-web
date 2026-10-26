@@ -313,3 +313,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
     green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
     docs-only pull request)
+
+- Bitrate and keyframes
+  - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
+    on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each
+    MP4 packet carries its size, its time and whether it is a keyframe.
+  - Status: Done (2026-10-26: `Api.Packets()` (`Api.Packets.cs`) returns `Mp4Input.Packets` as JSON by column, the
+    keyframes and discarded packets as indexes: 2.26 MB, 20 to 33 ms (AOT, Node) on a two-hour film, called as soon as
+    the file is opened. `panels/bitrate.js`: a lane with the bitrate per second and a tick at each keyframe right
+    under the cuts, a card with how many cuts fall on a keyframe after a run (the page's own reading: Sintel's
+    trailer, 5 of 7). `tools/app-check.mjs` checks `Packets()` against ffprobe's packets on every sample, exactly
+    (the native check writes them to `out/native/<sample>.packets.txt`). The CSVs are unchanged)
