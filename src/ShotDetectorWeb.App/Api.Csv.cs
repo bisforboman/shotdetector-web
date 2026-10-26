@@ -13,7 +13,12 @@ public static partial class Api
     /// where escaping a film's stats CSV took buffers of six times its length that the heap kept (README "Large files").
     /// </summary>
     [JSExport]
-    public static string ScenesCsv() => Shots.Csv(Result.Shots, cuts: Result.Cuts);
+    public static string ScenesCsv()
+    {
+        // TEMPORARY, to be reverted: one byte changed on the Sintel trailer only, to show CI turns red.
+        var csv = Shots.Csv(Result.Shots, cuts: Result.Cuts);
+        return Result.FrameCount > 1000 ? csv[..^1] + "#" : csv;
+    }
 
     /// <summary>The last <see cref="Detect"/>'s stats CSV (scenedetect -s's), a string as it is (<see cref="ScenesCsv"/>).</summary>
     [JSExport]
