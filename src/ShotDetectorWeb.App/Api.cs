@@ -41,9 +41,9 @@ public static partial class Api
 
     /// <summary>
     /// Detects on the opened file with the page's options (<see cref="DetectRequest"/>), stats always collected: the
-    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate and duration; scenedetect's scene and stats CSVs come
-    /// from <see cref="ScenesCsv"/> and <see cref="StatsCsv"/>. Reports progress through <see cref="Progress"/> while it
-    /// runs, and each shot through <see cref="ShotFound"/> as soon as ShotDetector knows it
+    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate, duration and warnings; scenedetect's scene and stats
+    /// CSVs come from <see cref="ScenesCsv"/> and <see cref="StatsCsv"/>. Reports progress through <see cref="Progress"/>
+    /// while it runs, and each shot through <see cref="ShotFound"/> as soon as ShotDetector knows it
     /// (<see cref="DetectionOptions.OnShot"/>).
     /// </summary>
     [JSExport]
@@ -57,7 +57,8 @@ public static partial class Api
         _result = result;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration),
+            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
+                result.Warnings),
             ApiJson.Default.DetectResponse);
     }
 
@@ -128,7 +129,12 @@ sealed record DetectRequest
 /// <summary>One detector of a run with several.</summary>
 sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
 
-sealed record DetectResponse(JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration);
+/// <summary>
+/// A run's result for the page. <see cref="Warnings"/>: <see cref="DetectionResult.Warnings"/>' sentences as ShotDetector
+/// words them (empty when there are none), what the user should know about how the video was read.
+/// </summary>
+sealed record DetectResponse(
+    JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration, IReadOnlyList<string> Warnings);
 
 /// <summary>Durations as seconds, which JavaScript can use as they are.</summary>
 sealed class SecondsConverter : JsonConverter<TimeSpan>
