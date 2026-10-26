@@ -165,23 +165,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     languages is how results drift).
   - Status: Open
 
-- Bitrate and keyframes
-  - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
-    on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each
-    MP4 packet carries its size, its time and whether it is a keyframe.
-  - Where: the core keeps, for each video packet, its pts, its size and its keyframe and discard flags, during the
-    walk over every packet `Mp4Input` already makes when it opens a file: `Mp4Input.Packets` (done, "Packets in the
-    core"; README "Using the library"). The App returns them from an export of their own, as compact arrays (leave
-    out or mark the discarded packets: an edit list's, decoded but not shown). `app.js` draws bitrate per second as a
-    graph under the strip, puts keyframe ticks on the strip, and says how many cuts fall on a keyframe (labelled as
-    the page's reading).
-    `tools/NativeCheck` already compares the list with `ffprobe -show_packets` (pts, size, the K and D flags),
-    exactly (`PacketCheck.cs`). Depends on "Shot statistics and a timeline".
-  - Done when: the check is green on every sample, and the Sintel trailer's graph and ticks show on the page
-    (screenshot in the PR).
-  - Not: no I, P and B frame types (`VideoFrame` doesn't carry them; that is a Maybe); no audio bitrate.
-  - Status: Open
-
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships (the trimmer keeps whole assemblies that don't opt in:
     ShotDetector's package isn't marked `IsTrimmable`), and THIRD-PARTY-NOTICES.md has to list it.
