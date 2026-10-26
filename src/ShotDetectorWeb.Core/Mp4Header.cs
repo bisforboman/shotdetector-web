@@ -4,7 +4,8 @@ namespace ShotDetectorWeb;
 
 /// <summary>
 /// What FFmpeg's MP4 demuxer (mov.c) reads from the headers that ManagedCodecs' <c>Mp4Demuxer</c> doesn't expose: the
-/// video track's 'stts' totals (FFmpeg's nb_frames and avg_frame_rate), 'mdhd' timescale, 'tkhd' matrix (rotation), the 'colr' box and the 'avcC' record of its 'avc1' sample entry.
+/// video track's 'stts' totals (FFmpeg's nb_frames and avg_frame_rate), 'mdhd' timescale, 'tkhd' matrix (rotation), the 'colr' box and the 'avcC' record of its 'avc1' sample entry;
+/// the first audio track's codec as FFmpeg names it.
 /// </summary>
 internal sealed class Mp4Header
 {
@@ -38,12 +39,19 @@ internal sealed class Mp4Header
     /// <summary>Whether the file is fragmented ('mvex' in 'moov').</summary>
     public bool Fragmented { get; private init; }
 
+    /// <summary>
+    /// The first audio track's codec as FFmpeg names it (codec_name: "aac", "mp3", "opus", ...), from its sample entry
+    /// and, for 'mp4a', the 'esds' object type; the sample entry's four characters where this doesn't know FFmpeg's name.
+    /// Null without an audio track.
+    /// </summary>
+    public string? AudioCodec { get; private init; }
+
     /// <summary>Reads the headers, or explains why the file isn't an MP4 with a video track.</summary>
     public static Mp4Header Read(Stream stream)
     {
         var moov = FindMoov(stream) ?? throw new UnsupportedVideoException("This isn't an MP4 file (no 'moov' box found).");
         bool fragmented = false;
-        ReadOnlyMemory<byte>? video = null;
+        ReadOnlyMemory<byte>? video = null, audio = null;
         foreach (var (type, payload) in Boxes(moov))
         {
             switch (type)
@@ -53,6 +61,9 @@ internal sealed class Mp4Header
                     break;
                 case "trak" when video is null && HandlerType(payload) == "vide":
                     video = payload;
+                    break;
+                case "trak" when audio is null && HandlerType(payload) == "soun":
+                    audio = payload;
                     break;
             }
         }
@@ -129,7 +140,96 @@ internal sealed class Mp4Header
             ColrFullRange = colrFull,
             Transformed = Child(trak, "tkhd") is { } tkhd && IsTransformed(tkhd.Span),
             Fragmented = fragmented,
+            AudioCodec = audio is { } a ? AudioCodecName(a) : null,
         };
+    }
+
+    /// <summary>
+    /// FFmpeg's name for an audio track's codec (mov.c): its first sample entry's code through ff_codec_movaudio_tags,
+    /// then for 'mp4a' the 'esds' DecoderConfigDescriptor's objectTypeIndication through ff_mp4_obj_type (AAC when it
+    /// has none, or one FFmpeg doesn't map).
+    /// </summary>
+    static string AudioCodecName(ReadOnlyMemory<byte> trak)
+    {
+        var stbl = Child(Child(Child(trak, "mdia") ?? default, "minf") ?? default, "stbl");
+        var stsd = stbl is { } b ? Child(b, "stsd") : null;
+        if (stsd is not { Length: >= 16 } d)
+            return "";
+        var first = d[8..];
+        uint size = BinaryPrimitives.ReadUInt32BigEndian(first.Span);
+        string entry = System.Text.Encoding.Latin1.GetString(first.Span.Slice(4, 4));
+        if (entry != "mp4a")
+        {
+            return entry switch
+            {
+                "Opus" => "opus",
+                "fLaC" => "flac",
+                "ac-3" => "ac3",
+                "ec-3" => "eac3",
+                ".mp3" => "mp3",
+                "alac" => "alac",
+                "samr" => "amr_nb",
+                "sawb" => "amr_wb",
+                _ => entry,
+            };
+        }
+
+        // An audio sample entry's 28 bytes (ISO/IEC 14496-12, 12.2.3), 16 or 36 more for QuickTime's versions 1 and 2,
+        // then its child boxes.
+        var e = first.Span;
+        if (size < 8 + 28 || size > first.Length)
+            return "aac";
+        int version = BinaryPrimitives.ReadUInt16BigEndian(e[16..]);
+        int children = 8 + 28 + version switch { 1 => 16, 2 => 36, _ => 0 };
+        if (children > size || Child(first[children..(int)size], "esds") is not { } esds)
+            return "aac";
+        return ObjectType(esds.Span) switch
+        {
+            0x69 or 0x6B => "mp3",
+            0xA5 => "ac3",
+            0xA6 => "eac3",
+            0xA9 => "dts",
+            0xAD => "opus",
+            0xDD => "vorbis",
+            _ => "aac",
+        };
+    }
+
+    /// <summary>
+    /// An 'esds' box's objectTypeIndication (ISO/IEC 14496-1, 7.2.6.5 and 7.2.6.6): after its version and flags, the
+    /// ES_Descriptor (tag 3) and its optional fields, the DecoderConfigDescriptor (tag 4) starts with it; null if malformed.
+    /// </summary>
+    static int? ObjectType(ReadOnlySpan<byte> esds)
+    {
+        int pos = 4;
+        if (Descriptor(esds, ref pos) != 3 || pos + 3 > esds.Length)
+            return null;
+        int flags = esds[pos + 2];
+        pos += 3;
+        if ((flags & 0x80) != 0)
+            pos += 2; // dependsOn_ES_ID
+        if ((flags & 0x40) != 0 && pos < esds.Length)
+            pos += 1 + esds[pos]; // URL
+        if ((flags & 0x20) != 0)
+            pos += 2; // OCR_ES_Id
+        return pos < esds.Length && Descriptor(esds, ref pos) == 4 && pos < esds.Length ? esds[pos] : null;
+    }
+
+    /// <summary>A descriptor's tag, moving <paramref name="pos"/> past its tag and length to its payload; -1 if cut short.</summary>
+    static int Descriptor(ReadOnlySpan<byte> data, ref int pos)
+    {
+        if (pos >= data.Length)
+            return -1;
+        int tag = data[pos++];
+        for (int i = 0; i < 4; i++)
+        {
+            if (pos >= data.Length)
+                return -1;
+            if ((data[pos++] & 0x80) == 0)
+                break;
+        }
+
+        return tag;
     }
 
     /// <summary>a × b / c rounded to the nearest, halves away from zero (FFmpeg's av_rescale).</summary>
