@@ -270,9 +270,10 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
 - **A pull request** (`.github/workflows/ci.yml`, job `build`, the check `main` requires): native on every sample;
   wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
   shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly
-  loaded at all"; wasm AOT, the build the page deploys, on every sample. About 10 minutes. A newer push to the pull
-  request cancels its run in progress. A pull request that changes only `docs/`, `*.md` or `LICENSE` (git diff
-  against its base) runs `build` too, which passes without running any check: the checks can't see those files.
+  loaded at all"; wasm AOT, the build the page deploys, on every sample. About 5 minutes (5 min 21 s on 2026-10-26).
+  A newer push to the pull request cancels its run in progress. A pull request that changes only `docs/`, `*.md` or
+  `LICENSE` (git diff against its base) runs `build` too, which passes without running any check: the checks can't
+  see those files.
 - **Every day on `main`, and by hand** (`ci.yml`, `schedule` and `workflow_dispatch`): all of it, wasm interpreted on
   every sample and replace with AOT included.
 - **A push to `main`** (`.github/workflows/pages.yml`; `ci.yml` doesn't run on it): `main` needn't be up to date with a

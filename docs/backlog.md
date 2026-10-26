@@ -18,29 +18,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Now
-
-- CI: the slow checks once
-  - Why: a CI run took 29 min (measured 2026-10-26): the WebAssembly check interpreted 19 min 10 s, AOT 5 min,
-    FastYuv replaced 2 min 10 s, native 1 min 47 s, the rest about 1 min. Every merge ran all of it again on `main`,
-    then Pages published AOT again and deployed (4 min), and docs-only pull requests paid the full run. Several
-    sessions merge every day.
-  - Where: `.github/workflows/ci.yml`, `.github/workflows/pages.yml`, `tools/check.sh`, README "Checks". The owner
-    chose four changes: (1) a docs-only pull request (`docs/**`, `*.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md`) still
-    runs `build`, the required check, and skips every heavy step (`git diff --name-only` against the base, `if:` on each
-    step; not `paths-ignore`, which never reports); (2) `concurrency` cancels a pull request's superseded runs, never
-    `main`'s; (3) the interpreted check on pull requests runs one short sample with audio (`tools/check.sh` takes the
-    samples to run), the strict "No FFmpeg assembly loaded at all." kept, and the full interpreted check runs once a
-    day on `main` (`schedule`) and by hand; the AOT check stays on every sample on every pull request; (4) the push to
-    `main` is tested by `pages.yml` itself: the native check, the AOT check on the very bundle it deploys (one
-    publish) and FastYuv replaced, deploying only if all pass; `ci.yml` no longer runs on that push.
-  - Done when: a docs-only pull request goes green in under 2 minutes; a code pull request's CI takes about 10
-    minutes with the AOT check on every sample; a deliberate one-byte CSV break turns the run red (then reverted); after
-    the merge, the push to `main` runs Pages with the checks, and it deploys.
-  - Not: no check weakened for what the page deploys: the AOT check stays on every sample, on every pull request and
-    before every deploy; the deploy's own checks (FastYuv's `.wasm` and its license in the artifact) stay.
-  - Status: In progress (2026-10-26)
-
 ### Unblocked by ShotDetector 3.15.0
 
 This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-25). It changes `Api.Detect` and
