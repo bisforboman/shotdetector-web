@@ -62,6 +62,11 @@ public sealed class Mp4Input
         // the stream's start (FFmpeg's start_time for an MP4 video track, edit list applied).
         var (width, height, firstPts) = FirstFrame(demuxer);
 
+        // The audio track as FFmpeg's demuxer describes it: its codec's name from the headers, the rate and channels the
+        // demuxer read from the sample entry (an AAC track's from its AudioSpecificConfig). Nothing is decoded.
+        if (demuxer.Audio is { } audio)
+            Audio = new AudioStream(header.AudioCodec ?? audio.Codec, audio.SampleRate, audio.Channels);
+
         // Only the packets' timing and sizes count for the duration and the packet list: from here on the packets' data
         // is not read (on a film in the browser that would read gigabytes just to throw them away).
         stream.SkipReads = true;
@@ -98,6 +103,9 @@ public sealed class Mp4Input
 
     /// <summary>The video as FFmpeg's demuxer and decoder report it (average frame rate, time base, start pts, colour tags, frame count).</summary>
     public YuvVideo Video { get; }
+
+    /// <summary>The first audio track as FFmpeg's demuxer describes it (ffprobe's codec_name, sample_rate, channels); null without one.</summary>
+    public AudioStream? Audio { get; }
 
     /// <summary>The video track's packets as FFmpeg's demuxer gives them (pts, size, keyframe), from the walk opening made.</summary>
     public VideoPackets Packets { get; }
@@ -311,6 +319,12 @@ sealed class TimingOnlyStream(Stream inner) : Stream
         base.Dispose(disposing);
     }
 }
+
+/// <summary>
+/// An audio track as ffprobe describes it: its codec's FFmpeg name (codec_name: "aac", "mp3", "opus", ...), samples per
+/// second and channels. Whether it is measured is <see cref="Mp4Audio"/>'s business: only AAC is.
+/// </summary>
+public sealed record AudioStream(string Codec, int SampleRate, int Channels);
 
 /// <summary>A video this library can't take (yet): the message says what and why.</summary>
 public sealed class UnsupportedVideoException(string message) : NotSupportedException(message);

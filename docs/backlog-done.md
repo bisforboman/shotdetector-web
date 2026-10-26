@@ -343,3 +343,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the timeline's cuts lane (decision `2026-10-25-one-page.md`), where a click seeks into the shot clicked; the card
     names the shot playing and the table marks its row, scrolling its own box, checked by clicking into every shot and
     playing 13 s to 23 s. Firefox not run: its builds' hosts are outside the session's network policy)
+
+- About this file
+  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
+    already returns that description as JSON, but the page shows none of it.
+  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
+    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
+    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
+    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
+  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
+    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
+  - Not: no other fields beyond what the core returns.
+  - Status: Done (2026-10-26: `panels/about.js`, on the `opened` event, the codec, size, frame rate, pixel format,
+    colour space and range, frames, duration and audio track, each field's own value in its tooltip and Open's JSON
+    folded under them; `Mp4Input.Audio` names the codec as ffprobe does from the headers (ManagedCodecs calls an MP3
+    in 'mp4a' 'mp4a') with the demuxer's rate and channels, NativeCheck's `AudioStreamCheck.cs` equal to ffprobe's on
+    all 14 samples and no-aac files, app-check.mjs: Open's track is the one `Audio()` measures; every sample shown in
+    headless Chromium on the AOT bundle, as its name says. Firefox not run: this session's network policy blocks
+    Playwright's Firefox and Mozilla's hosts, and a Firefox from conda-forge was refused by its permissions)

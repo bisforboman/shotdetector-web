@@ -3,7 +3,8 @@
 // then every detector run on (a) the core library (ManagedCodecs + FastYuv) and (b) ShotDetector's Detect(path) with
 // FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV and stats CSV must be equal byte
 // for byte. Writes (a)'s CSVs to --out (the wasm check compares its own with them), (b)'s next to them where they differ.
-// Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check.
+// Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check,
+// and its audio track's description (AudioStreamCheck.cs).
 //   NativeCheck [--out dir] [--reject file...] sample.mp4...    (SHOTDETECTOR_FFMPEG_LIBS: FFmpeg 8.1's shared libraries)
 // Exit code 0 when everything agreed and every --reject file was refused with an UnsupportedVideoException.
 using System.Globalization;
@@ -120,6 +121,7 @@ foreach (string reject in rejects)
 }
 
 failures += AudioCheck.Run(samples, libs, outDir);
+failures += AudioStreamCheck.Run(samples);
 
 Console.WriteLine(failures == 0 ? "All agree." : $"{failures} differences or failures.");
 return failures == 0 ? 0 : 1;

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ShotDetector;
 
@@ -23,8 +24,9 @@ public static partial class Api
     const string Damaged = "The file is damaged or not an MP4 this page can read: ";
 
     /// <summary>
-    /// Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON, or the library's exception (a damaged
-    /// file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
+    /// Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with its audio track
+    /// (<see cref="Mp4Input.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one; or the
+    /// library's exception (a damaged file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
     /// in slices as the library needs them (<see cref="BlobStream"/>), never copied in whole.
     /// </summary>
     [JSExport]
@@ -36,7 +38,11 @@ public static partial class Api
         _file = file;
         var input = DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file)));
         _input = input;
-        return JsonSerializer.Serialize(input.Video, ApiJson.Default.YuvVideo);
+        var json = JsonSerializer.SerializeToNode(input.Video, ApiJson.Default.YuvVideo)!.AsObject();
+        json["audio"] = input.Audio is { } a
+            ? new JsonObject { ["codec"] = a.Codec, ["sampleRate"] = a.SampleRate, ["channels"] = a.Channels }
+            : null;
+        return json.ToJsonString();
     }
 
     /// <summary>
