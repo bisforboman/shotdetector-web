@@ -150,7 +150,7 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Done when: the Sintel trailer's numbers match what the scenes CSV gives by hand, and the strip and the table follow
     playback; screenshots in the PR.
   - Not: no change to `Api`, no libraries.
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 - A graph of the scores
   - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
