@@ -126,7 +126,7 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Done when: a run that produces a warning shows it on the page (find which input does, or say none of the samples
     does and show it with a made-up response in the PR); `tools/check.sh wasm` and `wasm aot` green, CSVs unchanged.
   - Not: no new warnings of our own.
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 - About this file
   - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
