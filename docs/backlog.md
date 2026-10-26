@@ -162,7 +162,7 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     adds on the trailer.
   - Not: no Web Audio; no change to playback (the `<video>` still plays the sound); no audio-based cut detection
     (ShotDetector has none); no exactness check against FFmpeg's audio, since a waveform has nothing to be exact about.
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 - Audio measures: reference tone, silence, peaks, loudness
   - Why: someone checking a master before delivery asks these first. Is there bars and tone at the head (a steady
