@@ -266,3 +266,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     PR. Firefox wasn't run: Playwright's Firefox is blocked by the session's network policy and other installs were
     refused by its permissions. The panel is a lane and a card, not marks on a shots strip: the page's structure row
     replaced that strip)
+
+- ShotDetector 3.16.1
+  - Why: 3.16.1 keeps the stats in columns, about 52 B a frame instead of about 400 (bisforboman/shotdetector#512),
+    the largest part of [#20](https://github.com/bisforboman/shotdetector-web/issues/20) that was ShotDetector's.
+    3.16.0 also converts 8-bit 4:2:0 faster with SIMD on WebAssembly, with the same bytes, and adds `ScoreRange` and
+    `Merge` (the workers row below).
+  - Where: `Directory.Packages.props`: ShotDetector and ShotDetector.FastYuv to 3.16.1, and FrameReader to what
+    3.16.1 depends on. Measure the two-hour film's heap again the way README "What the heap holds" did, and update
+    that section and the Waiting row "ShotDetector: the stats in less memory, written row by row" (its column half has
+    shipped; streaming the CSV row by row hasn't).
+  - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
+    unchanged, and the new heap numbers in the README.
+  - Not: no use of `ScoreRange` or `Merge` yet (their row).
+  - Status: Done (2026-10-26: FrameReader stays 2.11.0, which 3.16.1 depends on (`[2.11.0, 3.0.0)`) and the latest.
+    `tools/check.sh`: native all agree, every CSV and waveform in `out/native` byte for byte 3.15.0's on the same
+    samples, the audio table identical; 132 of 132 CSVs identical interpreted and AOT; FastYuv replaced from v3.16.1
+    runs. On the two-hour film under Node, AOT: the wasm heap ends at 208 MB instead of 432 (the stats CSV no longer
+    grows it), the stats keep 65 B a frame natively instead of 370, the CSV allocates 175 MB instead of 325. FastYuv's
+    SIMD: the trailer's adaptive run 20.8 s instead of 21.9 s in headless Chromium, 23.1 s instead of 24.0 s under
+    Node, the film 1,636 s instead of 1,781 s: 4 to 8% less time. README "Large files" and "What the heap holds"; the
+    Waiting row is now "ShotDetector: the stats CSV written row by row")
