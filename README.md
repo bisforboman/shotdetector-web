@@ -352,6 +352,46 @@ colour; a stream starting at 1.4 s (an empty edit); an edit list ending before t
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
 measures; six files to refuse; and three whose audio isn't measured.
 
+## WebCodecs
+
+Are the frames the browser's own H.264 decoder (WebCodecs' `VideoDecoder`) gives the frames ManagedCodecs gives? A
+measurement, not a check: three tools, none of them in `tools/check.sh` or CI (backlog "WebCodecs: are its frames
+ManagedCodecs' frames?", [#15](https://github.com/bisforboman/shotdetector-web/issues/15)). The numbers and the verdict
+are in the decision's "Not doing" ([docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md)).
+Measured 2026-10-26, headless on a VM without a GPU: Chromium 153's frames are ManagedCodecs' frames, every plane of
+every frame of every sample and of a two-hour film, decoded and copied out 7 to 10 times faster than ManagedCodecs on
+wasm AOT; Firefox 136 hands its frames to the page in RGB (BGRX), so it has no Y, U and V planes to compare. Not
+identical in both browsers: the page keeps ManagedCodecs.
+
+```
+dotnet build tools/WebCodecsCheck -c Release
+dotnet tools/WebCodecsCheck/bin/Release/net10.0/WebCodecsCheck.dll prepare --out out/webcodecs/data samples/*.mp4
+dotnet publish tools/WebCodecsWasm -c Release -p:RunAOTCompilation=true    # ManagedCodecs on wasm, for the timings
+node tools/webcodecs/serve.mjs --data out/webcodecs/data --results out/webcodecs/results \
+  --wasm tools/WebCodecsWasm/bin/Release/net10.0/publish/wwwroot \
+  --reference tools/WebCodecsCheck/bin/Release/net10.0/WebCodecsCheck.dll
+# then, in each browser: http://localhost:8090/check.html?compare=all&time=sintel_trailer-480p
+```
+
+- `tools/WebCodecsCheck` (native): for each file, its video's access units exactly as ManagedCodecs' `Mp4Demuxer` gives
+  them (`<name>.units`), and the first 16 bytes of the SHA-256 of each plane of each frame `Mp4Input` decodes, the
+  frames ShotDetector gets (`<name>.hashes`); `diff` says where one frame differs from planes the browser copied out.
+- `tools/webcodecs/` (a page, no build step, no dependency): `check.html` feeds those access units to `VideoDecoder`
+  (the avcC as its description, each unit a chunk with its pts as the timestamp, a discarded unit's frame left out),
+  copies each frame's visible Y, U and V planes out with `VideoFrame.copyTo` (I420, packed) and compares their hashes
+  with ManagedCodecs' frame by frame, once per `hardwareAcceleration` (`prefer-software`, `prefer-hardware`) that
+  `isConfigSupported` accepts; the first frame that differs goes to `serve.mjs`, which asks `WebCodecsCheck diff` where
+  and by how much. With `time=`, it times the decode plus the copy against ManagedCodecs' decoder on wasm fed the same
+  access units, the runs alternating, each in a worker of its own (on the page's thread a .NET runtime slowed the
+  WebCodecs runs after it several times over). Results go to `out/webcodecs/results/<browser>/`, the tables to
+  `report.md` there. Any browser can open it; WebCodecs needs a secure context, which localhost is.
+- `tools/WebCodecsWasm` (browser-wasm, AOT): ManagedCodecs' `H264Decoder`, one access unit a call, as `Mp4Input`
+  decodes for the page.
+
+Tampering with one access unit (a byte of one frame's slice data, a frame no other refers to) makes the page report that
+frame and only it, with
+its position and how far apart the values are: "identical" is a comparison that can fail.
+
 ## Packages
 
 ShotDetector and ShotDetector.FastYuv (3.16.1; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.11.0,

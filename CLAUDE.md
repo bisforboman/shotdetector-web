@@ -84,7 +84,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Detect`'s pauses under 1% of the runs' time; `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks (sample files named after the options: only those);
-  `tools/make-samples.sh`: the samples.
+  `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
+  frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane
+  compared, timed against `tools/WebCodecsWasm`, ManagedCodecs' decoder on wasm): the WebCodecs measurement (README
+  "WebCodecs"), not in the checks or CI.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`:
   pull requests (interpreted on one sample, AOT on all; docs-only ones pass without checks) and the whole of it daily on
   `main` (README "Checks");

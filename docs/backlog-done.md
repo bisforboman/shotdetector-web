@@ -420,3 +420,27 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     and 136 ms, a run with another threshold started 98 and 129 ms after its click without opening the file; a file
     picked mid-run abandons it on the same worker; a worker that doesn't answer is terminated after 1.5 s. A
     `[JSExport]`'s cancelled task never settles its promise in .NET 10: `Detect` fails instead, CLAUDE.md "Gotchas")
+
+- WebCodecs: are its frames ManagedCodecs' frames?
+  - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
+    and the browser's own `VideoDecoder`, often in hardware, could make a run 2.5 to 4 times faster. The page's
+    design ruled it out ("Not doing": its output may differ between browsers and from FFmpeg's). The owner reopened
+    that question (2026-10-26), proof first. H.264's decoding is defined exactly by the standard, so the same frames
+    are plausible but not yet shown.
+  - Where: measure only. Decode every sample, the Sintel trailer and the two-hour film with WebCodecs in headless
+    Chromium and Firefox, copy each frame's Y, U and V planes out (`VideoFrame.copyTo`, I420), and compare them with
+    ManagedCodecs' frames for the same file, frame by frame (a hash per plane, and the first differing frame and
+    position where they differ). Also time the decode and the copy against ManagedCodecs on wasm AOT. A tool under
+    `tools/`, not in the page. Write the numbers and the verdict in the decision's "Not doing" section.
+  - Done when: a table per browser and sample, either "every frame identical" or where it differs, and the timings.
+    The decision changes only if every frame is identical in both browsers; a later row would then build it, with
+    ManagedCodecs kept wherever WebCodecs isn't there or differs.
+  - Not: no change to the page or the checks.
+  - Status: Done (2026-10-26: `tools/WebCodecsCheck`, `tools/webcodecs/`, `tools/WebCodecsWasm`, README
+    "WebCodecs". Headless on a 4-core VM without a GPU: Chromium 153 decodes in software (`prefer-hardware`
+    unsupported), and every frame of every sample and of the two-hour film (172,800) is identical to ManagedCodecs',
+    every plane and timestamp; Firefox 136 decodes with the system's FFmpeg in software but hands every frame to the
+    page as BGRX, so there are no Y, U and V planes to compare. Decode plus copy against ManagedCodecs on wasm AOT:
+    Chromium 1.71 s against 16.65 s on the trailer, 243 s against 1,656 s on the film; Firefox 12.92 s against 20.57 s on the trailer,
+    410 s against 1,929 s on the film. Not every frame identical in both browsers, so the decision's "Not doing" stands and no row
+    builds it; the numbers are there)
