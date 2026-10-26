@@ -7,8 +7,10 @@
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
 #
-# Usage: tools/check.sh [native] [wasm] [replace] [aot]
-#   (default: native wasm; aot: the wasm and replace bundles compiled ahead of time)
+# Usage: tools/check.sh [native] [wasm] [replace] [aot] [<sample.mp4>...]
+#   (default: native wasm; aot: the wasm and replace bundles compiled ahead of time; samples named: only those, instead
+#   of every samples/*.mp4, the files to refuse and those without AAC still all: CI's interpreted check on a pull
+#   request, README "Checks". wasm compares the CSVs of the samples it ran, so native may have run more.)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
 #   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm and
 #   replace, and git with access to github.com for replace.
@@ -16,19 +18,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 native=false wasm=false replace=false aot=false
+samples=()
 for arg in "$@"; do
   case $arg in
     native) native=true ;;
     wasm) wasm=true ;;
     replace) replace=true ;;
     aot) aot=true ;;
+    *.mp4) [[ -f $arg ]] || { echo "No such sample: $arg" >&2; exit 2; }; samples+=("$arg") ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
 if [[ $native == false && $wasm == false && $replace == false ]]; then native=true wasm=true; fi
 
 shopt -s nullglob
-samples=(samples/*.mp4)
+if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4); fi
 rejects=(samples/reject/*)
 noAac=(samples/no-aac/*)
 if [[ ${#samples[@]} == 0 ]]; then echo "No samples: run tools/make-samples.sh first." >&2; exit 1; fi
@@ -67,20 +71,25 @@ if [[ $wasm == true ]]; then
   if [[ $aot == true ]]; then expect='^No FFmpeg assembly loaded'; else expect='^No FFmpeg assembly loaded at all\.$'; fi
   if ! grep -qE "$expect" out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
 
-  files=0 differ=0 extra=0
-  for n in out/native/*.csv; do
-    [[ $n == *.ffmpeg.* ]] && continue
-    files=$((files + 1))
-    w=out/wasm/${n#out/native/}
-    if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
+  # The native CSVs of the samples run here (all of out/native/ unless samples were named), each written by the run.
+  files=0 differ=0 extra=0 missing=0
+  for s in "${samples[@]}"; do
+    csvs=(out/native/"$(basename "$s" .mp4)".*.csv)
+    if [[ ${#csvs[@]} == 0 ]]; then echo "No native CSVs for $s: run tools/check.sh native on it first."; missing=$((missing + 1)); fi
+    for n in "${csvs[@]}"; do
+      [[ $n == *.ffmpeg.* ]] && continue
+      files=$((files + 1))
+      w=out/wasm/${n#out/native/}
+      if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
+    done
   done
   for w in out/wasm/*.csv; do
     if [[ ! -f out/native/${w#out/wasm/} ]]; then echo "Not written natively: $w"; extra=$((extra + 1)); fi
   done
-  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs identical."
+  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs identical (${#samples[@]} samples)."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
-  if [[ $differ != 0 || $extra != 0 ]]; then exit 1; fi
+  if [[ $differ != 0 || $extra != 0 || $missing != 0 ]]; then exit 1; fi
 fi
 
 if [[ $replace == true ]]; then
