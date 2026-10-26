@@ -26,7 +26,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON) and `Detect(string optionsJson)` (shots, frame
-  count, rate, duration as JSON), and the `[JSImport]`s `progress(done, expected)` and `shot(json)`
+  count, rate, duration, warnings as JSON), and the `[JSImport]`s `progress(done, expected)` and `shot(json)`
   (`DetectionOptions.OnShot`: each shot as soon as it is known, one object of `Shots.Json`'s array); `Api.Csv.cs` has
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
@@ -48,7 +48,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
   `seek()`) and `panels/`: `cuts.js` (a lane), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
-  (the table below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
+  (the table below), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
   sound's measures, labelled measured, what the page derives labelled as its own). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
