@@ -104,9 +104,10 @@ The owner chose (2026-10-26) to take these two up, each with its design question
       finished run or a click.
     - **Live shots:** `ScoreRange` tells no shots (`OnShot` isn't honoured there: shots are decided in `Merge`), so a
       one-worker run built this way would lose its live table. Ask upstream for `OnShot` on a range starting at frame 0
-      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it; until then keep
-      one-worker runs on `DetectAsync` and resume them by scoring the rest as a range with the first part re-scored
-      once, and say what that costs.
+      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it. Until it ships,
+      a run on `DetectAsync` keeps no scores to merge, so resuming it would mean scoring its start again: run one-worker
+      runs through `ScoreRangeAsync` with progress but no live table, or leave them unresumable. Measure both and put
+      the choice to the owner in the PR.
   - Done when: `tools/app-check.mjs` stops at a frame on every sample, resumes, and gets exactly the full run's CSVs;
     the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
   - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
