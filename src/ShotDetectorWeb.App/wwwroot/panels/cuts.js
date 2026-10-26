@@ -1,10 +1,10 @@
 // The cuts, a lane of the timeline: a tick where each shot after the first starts, as soon as the shot is known, and
-// while a run goes, the part of the file it has read shaded (a cancelled run's stays, up to where it stopped).
+// while a run goes, the part of the file it has read shaded (a stopped or lost run's stays, up to where it stopped).
 import { on } from '../app.js';
 import { lane, secondsOf, timecode, x } from '../timeline.js';
 
 let cuts = [];  // the cuts' times in seconds
-let read = 0;   // how far the run has read, in seconds (0 once it has finished: all of it)
+let read = 0;   // how far the run has read, in seconds (0 once it has read all of it)
 const scanned = document.createElement('div');
 scanned.className = 'scanned';
 
@@ -40,9 +40,9 @@ on('shot', ({ shot }) => {
   cuts.push(at);
   cutsLane.track.append(tick(at));
 });
-// The result's shots, which are the ones told while it ran.
+// The result's shots, which are the ones told while it ran; a stopped run's, the part read.
 on('done', ({ result }) => {
   cuts = result.shots.filter(s => s.shot > 1).map(s => secondsOf(s.startTimecode));
-  read = 0;
+  read = result.stopped ? result.frameCount * result.frameRate.den / result.frameRate.num : 0;
   cutsLane.draw();
 });

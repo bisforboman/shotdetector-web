@@ -74,7 +74,7 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: 0.5; cursor: default; }
-#cancel { background: transparent; color: var(--accent); }
+#stop { background: transparent; color: var(--accent); }
 
 #status { min-height: 2.5rem; }
 #status p { margin: 0.25rem 0; color: var(--muted); font-variant-numeric: tabular-nums; }
