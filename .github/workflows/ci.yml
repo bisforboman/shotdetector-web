@@ -1,14 +1,21 @@
-# The exactness checks on every pull request and push to main. README, "Checks".
+# The exactness checks on every pull request, and all of them once a day on main. README, "Checks". A push to main is
+# checked by pages.yml, before it deploys.
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  # Every sample interpreted and FastYuv replaced, which a pull request leaves to this and to pages.yml.
+  schedule:
+    - cron: '23 4 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# A pull request's newer push cancels its run in progress; any other run has a group of its own and is never cancelled.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}', github.ref) || format('ci-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -20,27 +27,54 @@ jobs:
       # hash of digits as a number.
       SINTEL_SHA256: '34bbd52a4b89fdf63c8ace50b268da26653a59508288100cd3c23de276db7931'
     steps:
+      # Two commits deep: a pull request's merge commit and its first parent, the base it's compared with.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: true
+          fetch-depth: 2
 
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+      # build is the required check, so a pull request that changes only documentation still runs it, and it passes
+      # without the checks, which can't see those files (not paths-ignore: the check would never report). Every other
+      # step runs only if checks is true.
+      - name: What the change touches
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ $EVENT != pull_request ]] || ! git rev-parse -q --verify HEAD^2 > /dev/null; then
+            echo "checks=true" >> "$GITHUB_OUTPUT"; echo "Every check ($EVENT)."; exit 0
+          fi
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          echo "$changed"
+          code=$(grep -vE '^(docs/.*|.*\.md|LICENSE)$' <<< "$changed" || true)
+          if [[ -z $code ]]; then
+            echo "checks=false" >> "$GITHUB_OUTPUT"
+            echo "Only documentation changed (docs/, *.md, LICENSE): no check runs." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "checks=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.scope.outputs.checks == 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: steps.scope.outputs.checks == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
 
       # FFmpeg 8.1 with its shared libraries (BtbN's build, pinned by SHA-256): libx264 makes the samples, and
       # ShotDetector's in-process path decodes them for the reference results.
       - name: Install FFmpeg 8.1
+        if: steps.scope.outputs.checks == 'true'
         id: ffmpeg
         uses: ./.github/actions/btbn-ffmpeg
         with:
           build: gpl-shared
 
       - name: Install the wasm-tools workload
+        if: steps.scope.outputs.checks == 'true'
         run: dotnet workload install wasm-tools
 
       # Sintel's trailer (Blender Foundation, CC-BY 3.0), the real trailer the checks run and the page's demo is made
@@ -48,12 +82,14 @@ jobs:
       # the 480p re-encode is scaled down from the best source. Pinned by SHA-256 (Blender publishes none: recorded from
       # this workflow's first download, 2026-10-24), checked after a cache restore too.
       - name: Cache Sintel's trailer
+        if: steps.scope.outputs.checks == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sintel
           key: sintel-${{ env.SINTEL_SHA256 }}
 
       - name: Download Sintel's trailer
+        if: steps.scope.outputs.checks == 'true'
         id: sintel
         env:
           URL: https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4
@@ -70,6 +106,7 @@ jobs:
           echo "file=$f" >> "$GITHUB_OUTPUT"
 
       - name: Make the samples
+        if: steps.scope.outputs.checks == 'true'
         env:
           FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
           LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
@@ -80,22 +117,33 @@ jobs:
           sha256sum samples/sintel_trailer-480p.mp4 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Native check (ManagedCodecs + FastYuv against FFmpeg)
+        if: steps.scope.outputs.checks == 'true'
         env:
           SHOTDETECTOR_FFMPEG_LIBS: ${{ steps.ffmpeg.outputs.bin }}
         run: tools/check.sh native
 
+      # Interpreted, the runtime loads an assembly only when code needs it, so this is where "no FFmpeg assembly loaded
+      # at all" holds. On a pull request one short sample with audio (the audio pass is on the path), the files to
+      # refuse and those without AAC; every sample once a day and by hand. The AOT check below, what the page deploys,
+      # runs every sample on every pull request.
       - name: WebAssembly check, interpreted
-        run: tools/check.sh wasm
+        if: steps.scope.outputs.checks == 'true'
+        env:
+          SAMPLES: ${{ github.event_name == 'pull_request' && 'samples/with-audio-320x240-25.mp4' || '' }}
+        run: tools/check.sh wasm $SAMPLES
 
       - name: WebAssembly check, AOT
+        if: steps.scope.outputs.checks == 'true'
         run: tools/check.sh wasm aot
 
       # LGPL-2.1: a FastYuv built from its source replaces the package's in a rebuilt bundle, and runs (README, Licensing).
+      # Not on a pull request: pages.yml runs it before every deploy.
       - name: FastYuv replaced from its source, AOT
+        if: steps.scope.outputs.checks == 'true' && github.event_name != 'pull_request'
         run: tools/check.sh replace aot
 
       - name: Results
-        if: always()
+        if: always() && steps.scope.outputs.checks == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: results

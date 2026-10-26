@@ -23,7 +23,7 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-25). It changes `Api.Detect` and
 `worker.js`, so it runs after the page's structure row.
 
-- Cancel without restarting the worker
+- Stop a run and keep what was read, without restarting the worker
   - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
     two on a trailer, plus opening the file again (streamed since "Large files": seconds on a film). The owner chose (2026-10-24)
     cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
@@ -35,13 +35,20 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
     `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
     `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
     `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
-    `tools/app-check.mjs` calls the new export. A cancelled run's shots (the page keeps those it was told, "Shots as
-    they're found", done) get a scenes CSV: `Api` keeps the shots it was told and makes it from them with `Shots.Csv`,
-    and `cancelled` carries it (no partial stats CSV); `app.js` offers it as the download, the unfinished line not in it.
-  - Done when: on the Sintel trailer, a run cancelled mid-way is followed at once by a run with another threshold,
-    without opening the file again; the yields cost under 1% of the run's time (pick N for it); checks green, CSVs
-    unchanged.
-  - Not: no shared memory. A cancelled run throws and keeps no result, upstream too; its shots are the ones told.
+    `tools/app-check.mjs` calls the new export.
+    **Stop keeps what was read** (the owner's question, 2026-10-26: stats for a stopped run). The page's button
+    becomes Stop: at the next yield the frame source simply ends, as if the file ended there, instead of cancelling
+    the token. `DetectAsync` then finishes normally with the result for the frames read: the shots, the scenes CSV and
+    the stats CSV, shown and offered for download like a finished run's, labelled "stopped at" the time reached. The
+    token stays for a runtime that has to be abandoned, and `terminate()` for one that doesn't answer.
+  - Done when: on the Sintel trailer, a run stopped mid-way shows its shots, its cards and both downloads, and a run
+    with another threshold follows at once without opening the file again. `tools/app-check.mjs` stops a run at a
+    frame N on every sample and checks that its stats CSV equals the first rows of the full run's up to N (each frame's
+    stats depend only on the frames before it), and that its shots are the full run's up to the last cut before N,
+    plus one ending at N. Find out from ShotDetector's source whether a frame source that ends before
+    `YuvVideo.FrameCount` gives a warning, and show it if so. The yields cost under 1% of the run's time (pick N for
+    it); checks green, CSVs unchanged.
+  - Not: no shared memory.
   - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
     (done).
   - Status: Open
@@ -56,18 +63,17 @@ The owner chose (2026-10-26) to take these two up, each with its design question
     `ShotDetection.Merge` merges the ranges' `RangeScores` (carried as bytes, `ToBytes`/`FromBytes`) into exactly
     the result `Detect` gives for the whole video. Workers need no shared memory, so this works on Pages, unlike wasm
     threads. A film could run several times faster on a machine with several cores.
-  - Where: first a decision in `docs/decisions/` with choices for each question, the owner's to answer:
-    - **Live shots and cancel:** shots exist only after `Merge`. Keep the live table for one worker and show
-      progress per range for several? Merge what's done on cancel?
-    - **Memory:** each worker is a runtime of its own (about 13 MB to start) plus its range's share.
-    - **How many workers:** from `navigator.hardwareConcurrency`, and from what length on.
-    - **Where ranges start:** at keyframes, from "Packets in the core".
-    Then, once answered, the build: the page starts the workers, each opens the same `File`, and `tools/app-check.mjs`
-    checks that a run split into ranges gives the same CSVs as one worker, on every sample.
-  - Done when: the decision is answered and merged, then the build's PR shows the same CSVs split and whole, and the
-    speed on the two-hour film with 1, 2 and 4 workers.
-  - Depends on: the 3.16.1 row (done, 2026-10-26).
-  - Status: Open (decision first)
+  - Where: decision [2026-10-26-workers.md](decisions/2026-10-26-workers.md), answered by the owner on 2026-10-26:
+    progress per range with the shots at the end (one worker keeps live shots); Stop merges the ranges finished from
+    the start; several workers above about 10 minutes of video, up to `navigator.hardwareConcurrency` − 1 and at most
+    4, each range starting at a keyframe from the packet list; the audio pass in a worker of its own, in parallel.
+    The page starts the workers, each opens the same `File`, and `tools/app-check.mjs` checks that a run split into
+    ranges gives the same CSVs as one worker, on every sample, and that a stopped split run gives the result for its
+    finished start.
+  - Done when: the same CSVs split and whole; the speed and the heap on the two-hour film with 1, 2 and 4 workers,
+    and the decision's 10 minutes and 4 adjusted to what was measured.
+  - Depends on: "Stop a run and keep what was read" (it drives runs through `DetectAsync`).
+  - Status: Open (decided 2026-10-26)
 
 - WebCodecs: are its frames ManagedCodecs' frames?
   - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
@@ -204,7 +210,8 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
     position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
     `[JSImport]` the worker gives), so the whole CSV is never one string.
-  - Status: Waiting on the owner to file it (2026-10-25; the columns shipped in 3.16.1 on 2026-10-25)
+  - Status: Waiting on upstream ([shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519), filed
+    2026-10-26; the columns shipped in 3.16.1 on 2026-10-25)
 
 - ManagedCodecs: the MP4 index without its copies
   - Why: `Mp4Demuxer` allocates about 275 B a sample to index a file and keeps 56 (140 MB and 28.5 MB for a two-hour
@@ -213,7 +220,8 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are
   - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23): each track's samples filled once, a smaller
     `Sample`, optionally only the tracks asked for. Then here: the submodule bumped, the steps measured again.
-  - Status: Waiting on the owner to file it (2026-10-25)
+  - Status: Waiting on upstream ([ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed
+    2026-10-26)
 
 - ManagedCodecs' license
   - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to
