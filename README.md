@@ -87,29 +87,46 @@ returns, which V8 frees late while .NET holds the thread). Before the duration p
 the same file took 43 s and peaked the renderer at 1.7 GB. The estimate before the big file's run said 35 min (the
 reference rate scaled by picture size); the next run in the same browser uses its own measured rate.
 
+ShotDetector 3.16.0's FastYuv converts 8-bit 4:2:0 with SIMD, WebAssembly's included (the bundle has it on:
+`WasmEnableSIMD` defaults to true), to the same bytes. Measured 2026-10-26 on the AOT bundle, 3.15.0 against 3.16.1
+on one 4-core cloud VM, the runs alternating: the Sintel trailer's adaptive run takes 20.8 s instead of 21.9 s in
+headless Chromium (60.2 frames per second instead of 57.3, the median of three), 23.1 s instead of 24.0 s under Node
+(the median of five). The control above runs in 1,636 s instead of 1,781 s under Node (106 frames per second instead
+of 97; the two runs side by side): 4 to 8% less time, so the conversion is a small part of a run.
+
 ### What the heap holds
 
-Measured 2026-10-25 under Node on the AOT bundle (`node` driving the App's exports as `tools/app-check.mjs` does), on the
-control file above (172,800 frames and 335,939 audio packets), adaptive with stats: the wasm heap after each step, and
-what grew it (the same steps run natively, with `GC.GetTotalMemory` around them and a `dotnet-gcdump` mid-run).
+Measured 2026-10-26 under Node on the AOT bundle (`node` driving the App's exports as `tools/app-check.mjs` does), on the
+control file above made again by its recipe (172,800 frames and 335,939 audio packets as before; 345,713,834 bytes, its
+audio at 128 kbit/s), adaptive with stats, ShotDetector 3.15.0 and 3.16.1 side by side on one 4-core cloud VM: the wasm
+heap after each step, and what grew it (the same steps run natively, `GC.GetTotalMemory` around them).
 
-| Step | Wasm heap | What grows it |
-| --- | --- | --- |
-| The runtime started | 34 MB | |
-| The file opened | 174 MB (208 MB before) | ManagedCodecs' `Mp4Demuxer` indexes every sample, video and audio: 140 MB allocated (about 275 B a sample), 28.5 MB kept (a `Sample[]`, 56 B a sample). Opening built one for the first frame and another for the duration pass; one now does both. |
-| The run | 250 MB, flat to its end | the run's own demuxer and decoder; ShotDetector's stats grow inside it, about 370 B a frame (63.7 MB at the end) |
-| The stats CSV (`Stats.Csv`) | 432 MB | a 19.8-million-character string; building it allocates 322 MB (a second dictionary per frame, the sort, the `StringBuilder`) |
-| The result to JavaScript, before | 769 MB | the CSVs were inside the result's JSON: System.Text.Json escapes a string (the CSV's line breaks) through a char buffer of six times its length rounded up to a power of two, 134 million chars (268 MB) for the stats CSV, and writes into a 67 MB UTF-8 buffer; `ArrayPool` keeps both, then the 40.6 MB JSON string |
-| The result to JavaScript, now | 432 MB | `Detect`'s JSON holds the shots and the numbers; the CSVs come as strings of their own (`ScenesCsv()`, `StatsCsv()`), which reach JavaScript without growing the heap |
+| Step | Wasm heap, 3.15.0 | Wasm heap, 3.16.1 | What grows it |
+| --- | --- | --- | --- |
+| The runtime started | 34 MB | 34 MB | |
+| The file opened | 174 MB | 174 MB | ManagedCodecs' `Mp4Demuxer` indexes every sample, video and audio: 140 MB allocated (about 275 B a sample), 28.5 MB kept (a `Sample[]`, 56 B a sample) |
+| The run (`Detect`, its JSON) | 208 MB, flat to its end | 208 MB, flat to its end | the run's own demuxer and decoder; ShotDetector's stats grow inside it, natively 370 B a frame with 3.15.0 (64.0 MB at the end), 65 B with 3.16.1, which keeps them in columns (11.3 MB) |
+| The scenes CSV (`ScenesCsv()`) | 208 MB | 208 MB | 113,808 characters |
+| The stats CSV (`StatsCsv()`) | 432 MB | 208 MB | a 20.0-million-character string; building it allocates 325 MB with 3.15.0 (a dictionary per frame, the sort, the `StringBuilder`) and 175 MB with 3.16.1 (the `StringBuilder` and the string), which fits in what the heap already has |
 
-So the heap grew with the frame count because of what the end of a run builds, not what it keeps a frame: the JSON
-about 2 KB a frame, the stats CSV about 1 KB, the demuxer's index about 1 KB with this file's audio. In headless
-Chromium as in the table above, the control's run now ends with a wasm heap of 432 MB (734 MB before) and the
-renderer's peak at 788 MB (1,043 MB), the same 1,105 shots. The CSVs are unchanged (`tools/check.sh`). What is left waits upstream (backlog, Waiting): ShotDetector's stats by column and a CSV
-written row by row, ManagedCodecs' index built without its copies.
+The CSVs reach JavaScript as strings of their own, without growing the heap. Until 2026-10-25 they were inside
+`Detect`'s JSON, and the heap reached 769 MB: System.Text.Json escapes a string (the CSV's line breaks) through a char
+buffer of six times its length rounded up to a power of two, 134 million chars (268 MB) for the stats CSV, and writes
+into a 67 MB UTF-8 buffer; `ArrayPool` keeps both, then the 40.6 MB JSON string. Opening took the heap to 208 MB before
+it built one demuxer for the first frame and the duration pass instead of two. The run's step measured 250 MB on
+2026-10-25 and 208 MB now with either version.
 
-Since then an open file also holds its video packet list (`Mp4Input.Packets`, below): 13 bytes a frame, 2.25 MB on a
-two-hour film.
+So the heap grew with the frame count because of what the end of a run builds, not what it keeps a frame: the JSON about
+2 KB a frame before 2026-10-25, the stats CSV about 1 KB with 3.15.0 (with 3.16.1 still 175 MB allocated, about 1 KB a
+frame, but in room the heap already has on this film: the demuxer's index allocates about 1 KB a frame with this file's
+audio, and keeps a fifth of it). In headless Chromium as in the table above, the control's run ended with a wasm heap of
+432 MB on 2026-10-25 (734 MB before) and the renderer's peak at 788 MB (1,043 MB), the same 1,105 shots; with 3.16.1 the
+heap ends where the run leaves it, 208 MB under Node. The CSVs are unchanged (`tools/check.sh`). What is left waits
+upstream (backlog, Waiting): the stats CSV written row by row rather than built as one string, ManagedCodecs' index
+built without its copies.
+
+An open file also holds its video packet list (`Mp4Input.Packets`, below; in the 2026-10-26 numbers): 13 bytes a frame,
+2.25 MB on a two-hour film.
 
 ## Size
 
