@@ -9,7 +9,8 @@
 //   against its peak=true+sample (within 0.1 dB).
 // On the tone sample both tones must come out at -20 dBFS (within 0.1 dB). Each file in no-aac/ beside the samples
 // (make-samples.sh: audio that isn't AAC, or that ManagedCodecs' decoder refuses) must be answered with the reason it
-// isn't measured, not an exception. A Markdown table on standard output.
+// isn't measured, not an exception. A Markdown table on standard output; each sample's waveform to the output folder
+// (<sample>.waveform.json: samplesPerPoint, min and max per waveform), which the wasm check compares its own with.
 using System.Diagnostics;
 using System.Globalization;
 using FrameReader;
@@ -23,7 +24,7 @@ static class AudioCheck
     const double LevelTolerance = 0.1;
 
     /// <summary>Checks each sample with audio, and the files in no-aac/ beside them; returns how many disagreed.</summary>
-    public static int Run(IReadOnlyList<string> samples, string libs)
+    public static int Run(IReadOnlyList<string> samples, string libs, string outDir)
     {
         int failures = 0;
         Console.WriteLine();
@@ -35,7 +36,7 @@ static class AudioCheck
             var cells = new List<string>();
             try
             {
-                Check(sample, libs, problems, cells);
+                Check(sample, libs, outDir, problems, cells);
             }
             catch (Exception e)
             {
@@ -71,7 +72,7 @@ static class AudioCheck
         return failures;
     }
 
-    static void Check(string sample, string libs, List<string> problems, List<string> cells)
+    static void Check(string sample, string libs, string outDir, List<string> problems, List<string> cells)
     {
         bool hasAudio = Probe(libs, sample, "-select_streams", "a", "-show_entries", "stream=index").Length > 0;
         var watch = Stopwatch.StartNew();
@@ -92,6 +93,7 @@ static class AudioCheck
 
         // The waveform, against FrameReader's from FFmpeg's decode with the same points.
         var waveform = ours.Waveform!;
+        WriteWaveform(Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".waveform.json"), waveform);
         using (var reader = new AudioReader(sample))
         {
             var theirs = WaveformData.Read(reader, new WaveformOptions { SamplesPerPixel = waveform.SamplesPerPixel });
@@ -263,6 +265,14 @@ static class AudioCheck
 
     static string Probe(string libs, string sample, params string[] args) =>
         Run(Path.Combine(libs, "ffprobe"), ["-v", "error", .. args, "-of", "csv=p=0", sample]);
+
+    /// <summary>The waveform's points as the App's Audio() gives them (min and max per waveform), for tools/app-check.mjs.</summary>
+    static void WriteWaveform(string path, WaveformData w)
+    {
+        string Values(Func<int, int, short> value) => "[" + string.Join(",", Enumerable.Range(0, w.Channels).Select(c =>
+            "[" + string.Join(",", Enumerable.Range(0, w.Length).Select(i => value(c, i).ToString(CultureInfo.InvariantCulture))) + "]")) + "]";
+        File.WriteAllText(path, $"{{\"samplesPerPoint\":{w.SamplesPerPixel},\"min\":{Values(w.Min)},\"max\":{Values(w.Max)}}}\n");
+    }
 
     /// <summary>Runs a program and returns its standard output and error, failing unless it exits with 0.</summary>
     static string Run(string program, params string[] args)
