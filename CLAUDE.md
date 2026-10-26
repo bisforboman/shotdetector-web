@@ -29,7 +29,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `audio`: `{ codec, sampleRate,
   channels }` from `Mp4Input.Audio`, or null), `Detect(string optionsJson)` (a promise: shots,
-  frame count, rate, duration and `stopped` as JSON; `Mp4Input.DetectAsync`, pausing every 8 frames, `PauseEvery`),
+  frame count, rate, duration, `stopped` and `warnings` as JSON; `Mp4Input.DetectAsync`, pausing every 8 frames, `PauseEvery`),
   `Stop()` (the run's frames end at its next pause: the result for the frames read, `stopped` true) and `Cancel()` (the
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
@@ -59,7 +59,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
-  (the table below), `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots; it names
+  (the table below), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots; it names
   the shot playing and marks its row in the table, found by `#shots`), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
   sound's measures, labelled measured, what the page derives labelled as its own), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
