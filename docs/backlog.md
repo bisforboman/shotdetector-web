@@ -18,12 +18,24 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Now: the page's structure, and the core's audio and packets
+### Now
 
-The owner asked (2026-10-25) to build the missing pieces at once rather than one by one. These ran side by side: the
-page's structure (the App only) and packets in the core, both done ([backlog-done.md](backlog-done.md)), and audio in
-the core below (the core and `tools/NativeCheck` only). The panel rows below can run side by side now, the waveform
-and audio measures rows once audio in the core has landed.
+The page's structure, packets in the core and audio in the core are done ([backlog-done.md](backlog-done.md),
+2026-10-25), so the panel rows below can run side by side.
+
+- ShotDetector 3.16.1
+  - Why: 3.16.1 keeps the stats in columns, about 52 B a frame instead of about 400 (bisforboman/shotdetector#512),
+    the largest part of [#20](https://github.com/bisforboman/shotdetector-web/issues/20) that was ShotDetector's.
+    3.16.0 also converts 8-bit 4:2:0 faster with SIMD on WebAssembly, with the same bytes, and adds `ScoreRange` and
+    `Merge` (the workers row below).
+  - Where: `Directory.Packages.props`: ShotDetector and ShotDetector.FastYuv to 3.16.1, and FrameReader to what
+    3.16.1 depends on. Measure the two-hour film's heap again the way README "What the heap holds" did, and update
+    that section and the Waiting row "ShotDetector: the stats in less memory, written row by row" (its column half has
+    shipped; streaming the CSV row by row hasn't).
+  - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
+    unchanged, and the new heap numbers in the README.
+  - Not: no use of `ScoreRange` or `Merge` yet (their row).
+  - Status: Open
 
 ### Unblocked by ShotDetector 3.15.0
 
@@ -52,6 +64,46 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
   - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
     (done).
   - Status: Open
+
+### Decisions to make first
+
+The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
+
+- Long videos across several Web Workers
+  - Why: [#19](https://github.com/bisforboman/shotdetector-web/issues/19). ShotDetector 3.16.0's
+    `ShotDetection.ScoreRange`/`ScoreRangeAsync` scores a range of frames on a runtime of its own, and
+    `ShotDetection.Merge` merges the ranges' `RangeScores` (carried as bytes, `ToBytes`/`FromBytes`) into exactly
+    the result `Detect` gives for the whole video. Workers need no shared memory, so this works on Pages, unlike wasm
+    threads. A film could run several times faster on a machine with several cores.
+  - Where: first a decision in `docs/decisions/` with choices for each question, the owner's to answer:
+    - **Live shots and cancel:** shots exist only after `Merge`. Keep the live table for one worker and show
+      progress per range for several? Merge what's done on cancel?
+    - **Memory:** each worker is a runtime of its own (about 13 MB to start) plus its range's share.
+    - **How many workers:** from `navigator.hardwareConcurrency`, and from what length on.
+    - **Where ranges start:** at keyframes, from "Packets in the core".
+    Then, once answered, the build: the page starts the workers, each opens the same `File`, and `tools/app-check.mjs`
+    checks that a run split into ranges gives the same CSVs as one worker, on every sample.
+  - Done when: the decision is answered and merged, then the build's PR shows the same CSVs split and whole, and the
+    speed on the two-hour film with 1, 2 and 4 workers.
+  - Depends on: the 3.16.1 row.
+  - Status: Open (decision first)
+
+- WebCodecs: are its frames ManagedCodecs' frames?
+  - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
+    and the browser's own `VideoDecoder`, often in hardware, could make a run 2.5 to 4 times faster. The page's
+    design ruled it out ("Not doing": its output may differ between browsers and from FFmpeg's). The owner reopened
+    that question (2026-10-26), proof first. H.264's decoding is defined exactly by the standard, so the same frames
+    are plausible but not yet shown.
+  - Where: measure only. Decode every sample, the Sintel trailer and the two-hour film with WebCodecs in headless
+    Chromium and Firefox, copy each frame's Y, U and V planes out (`VideoFrame.copyTo`, I420), and compare them with
+    ManagedCodecs' frames for the same file, frame by frame (a hash per plane, and the first differing frame and
+    position where they differ). Also time the decode and the copy against ManagedCodecs on wasm AOT. A tool under
+    `tools/`, not in the page. Write the numbers and the verdict in the decision's "Not doing" section.
+  - Done when: a table per browser and sample, either "every frame identical" or where it differs, and the timings.
+    The decision changes only if every frame is identical in both browsers; a later row would then build it, with
+    ManagedCodecs kept wherever WebCodecs isn't there or differs.
+  - Not: no change to the page or the checks.
+  - Status: Open (measure first)
 
 ### First release: the page on GitHub Pages
 
@@ -331,6 +383,6 @@ file out of `samples/reject/`, and passes the native check.
   - Status: Maybe (needs ManagedCodecs)
 
 - WebCodecs as a decoder
-  - Why not: the browser's own decoder is fast, but its output differs between browsers and from FFmpeg's, and
+  - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
     identical results are the point. Decision "Not doing".
-  - Status: Won't do (kept here so it isn't proposed again)
+  - Status: Reopened for measurement (2026-10-26): "WebCodecs: are its frames ManagedCodecs' frames?" under Next
