@@ -313,3 +313,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
     green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
     docs-only pull request)
+
+- About this file
+  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
+    already returns that description as JSON, but the page shows none of it.
+  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
+    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
+    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
+    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
+  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
+    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
+  - Not: no other fields beyond what the core returns.
+  - Status: Done (2026-10-26: `panels/about.js`, on the `opened` event, the codec, size, frame rate, pixel format,
+    colour space and range, frames, duration and audio track, each field's own value in its tooltip and Open's JSON
+    folded under them; `Mp4Input.Audio` names the codec as ffprobe does from the headers (ManagedCodecs calls an MP3
+    in 'mp4a' 'mp4a') with the demuxer's rate and channels, NativeCheck's `AudioStreamCheck.cs` equal to ffprobe's on
+    all 14 samples and no-aac files, app-check.mjs: Open's track is the one `Audio()` measures; every sample shown in
+    headless Chromium on the AOT bundle, as its name says. Firefox not run: this session's network policy blocks
+    Playwright's Firefox and Mozilla's hosts, and a Firefox from conda-forge was refused by its permissions)

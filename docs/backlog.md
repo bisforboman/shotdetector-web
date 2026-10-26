@@ -134,18 +134,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Not: no new warnings of our own.
   - Status: Open
 
-- About this file
-  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
-    already returns that description as JSON, but the page shows none of it.
-  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
-    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
-    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
-    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
-  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
-    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
-  - Not: no other fields beyond what the core returns.
-  - Status: In progress (2026-10-26)
-
 - Shot statistics and a timeline
   - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
     of shots under the player shows where the cuts are at a glance.
