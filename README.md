@@ -50,8 +50,10 @@ is a timeline: one time axis, a playhead that follows the video, a click anywher
 over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded) and,
 once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
-the player are cards, today the run's summary and downloads; below, the shots as a table whose rows play the video from
-the shot, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
+the player are cards, today the run's summary and downloads, the shots' statistics (the number of shots, average and
+median shot length, shortest and longest, cuts per minute, the run's speed against real time: the page's own figures,
+worked out from the shots, and the shot playing now) and the sound; below, the shots as a table whose rows play the
+video from the shot, the row of the shot playing marked, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
 `DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
