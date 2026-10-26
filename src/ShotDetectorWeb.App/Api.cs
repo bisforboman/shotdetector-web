@@ -41,24 +41,78 @@ public static partial class Api
 
     /// <summary>
     /// Detects on the opened file with the page's options (<see cref="DetectRequest"/>), stats always collected: the
-    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate and duration; scenedetect's scene and stats CSVs come
-    /// from <see cref="ScenesCsv"/> and <see cref="StatsCsv"/>. Reports progress through <see cref="Progress"/> while it
-    /// runs, and each shot through <see cref="ShotFound"/> as soon as ShotDetector knows it
-    /// (<see cref="DetectionOptions.OnShot"/>).
+    /// shots (<see cref="Shots.Json"/>), the frame count, frame rate and duration, and whether it was stopped; scenedetect's
+    /// scene and stats CSVs come from <see cref="ScenesCsv"/> and <see cref="StatsCsv"/>. Reports progress through
+    /// <see cref="Progress"/> while it runs, and each shot through <see cref="ShotFound"/> as soon as ShotDetector knows it
+    /// (<see cref="DetectionOptions.OnShot"/>). A promise to the worker: every <see cref="PauseEvery"/> frames the run
+    /// waits for the worker's next task (<see cref="Pause"/>), so <see cref="Stop"/> and <see cref="Cancel"/> can come in.
     /// </summary>
     [JSExport]
-    public static string Detect(string optionsJson)
+    public static async Task<string> Detect(string optionsJson)
     {
         _result = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
-        var result = DamagedPrefixed(() => input.Detect(request.ToOptions(new JsProgress(), new JsShots())));
+        _stopping = _stopped = false;
+        using var run = _run = new CancellationTokenSource();
+        DetectionResult result;
+        try
+        {
+            result = await DamagedPrefixed(() =>
+                input.DetectAsync(PauseEvery, Between, request.ToOptions(new JsProgress(), new JsShots()), run.Token));
+        }
+        catch (OperationCanceledException e) when (run.IsCancellationRequested)
+        {
+            // A cancelled task never settles the promise JavaScript holds (.NET 10's interop, seen 2026-10-26): a failed
+            // one rejects it.
+            throw new RunCancelledException(e);
+        }
+        finally
+        {
+            _run = null;
+        }
+
         _result = result;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration),
+            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration, _stopped),
             ApiJson.Default.DetectResponse);
+    }
+
+    /// <summary>
+    /// Ends the running <see cref="Detect"/>'s frames at its next pause, as if the file ended there: it then gives the
+    /// result for the frames read (its shots, both CSVs), with <c>stopped</c> true. Nothing when no run is going.
+    /// </summary>
+    [JSExport]
+    public static void Stop()
+    {
+        if (_run is not null)
+            _stopping = true;
+    }
+
+    /// <summary>
+    /// Abandons the running <see cref="Detect"/> at its next pause: it fails with an
+    /// <see cref="OperationCanceledException"/> and keeps no result. Nothing when no run is going.
+    /// </summary>
+    [JSExport]
+    public static void Cancel() => _run?.Cancel();
+
+    /// <summary>
+    /// Frames between two pauses. Each pause costs a round trip through the worker's event loop; at 8 frames that is
+    /// well under 1% of a run on the samples and the Sintel trailer (README "Stopping a run"), and a stop waits at most
+    /// 8 frames.
+    /// </summary>
+    const int PauseEvery = 8;
+
+    static CancellationTokenSource? _run;
+    static bool _stopping, _stopped;
+
+    static async ValueTask<bool> Between(int framesRead)
+    {
+        await Pause(framesRead);
+        _stopped = _stopping;
+        return !_stopping;
     }
 
     /// <summary>The last <see cref="Detect"/>'s result, for the exports that show more of it.</summary>
@@ -71,9 +125,23 @@ public static partial class Api
         catch (InvalidDataException e) { throw new InvalidDataException(Damaged + e.Message, e); }
     }
 
+    /// <summary><see cref="DamagedPrefixed{T}(Func{T})"/> for a run that fails in its task.</summary>
+    static async Task<T> DamagedPrefixed<T>(Func<Task<T>> f)
+    {
+        try { return await f(); }
+        catch (InvalidDataException e) { throw new InvalidDataException(Damaged + e.Message, e); }
+    }
+
     /// <summary>Frames done and expected (0 when unknown), about ten times a second while <see cref="Detect"/> runs.</summary>
     [JSImport("progress", "host")]
     internal static partial void Progress(int done, int expected);
+
+    /// <summary>
+    /// Resolves in the worker's next task (a <c>MessageChannel</c> message, wwwroot/pause.js), so the messages that came
+    /// in meanwhile run first: <see cref="Detect"/>'s pause, told how many frames it has read.
+    /// </summary>
+    [JSImport("pause", "host")]
+    internal static partial Task Pause(int framesRead);
 
     /// <summary>
     /// A shot as soon as ShotDetector knows it, while <see cref="Detect"/> runs: one object of
@@ -128,7 +196,14 @@ sealed record DetectRequest
 /// <summary>One detector of a run with several.</summary>
 sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
 
-sealed record DetectResponse(JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration);
+/// <summary><see cref="Api.Detect"/> was cancelled (<see cref="Api.Cancel"/>): no result.</summary>
+sealed class RunCancelledException(OperationCanceledException inner) : Exception("The run was cancelled.", inner);
+
+/// <summary>
+/// What <see cref="Api.Detect"/> returns. Stopped: the run was stopped (<see cref="Api.Stop"/>) and its frames ended at
+/// <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is still the file's.
+/// </summary>
+sealed record DetectResponse(JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration, bool Stopped);
 
 /// <summary>Durations as seconds, which JavaScript can use as they are.</summary>
 sealed class SecondsConverter : JsonConverter<TimeSpan>
