@@ -53,6 +53,20 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
     (done).
   - Status: Open
 
+- Pause and resume a run
+  - Why: the owner asked (2026-10-26) to resume after stopping. While the page stays open, that is a pause: the run
+    stays in memory and goes on where it was.
+  - Where: the asynchronous frame source from "Stop a run and keep what was read": a `pause` message makes it wait,
+    at its next yield, on a promise that a `resume` message settles. `DetectAsync` simply waits meanwhile; nothing is
+    cancelled or ended. `app.js`: a Pause button beside Stop while a run goes, then Resume; the progress bar and the
+    frames-per-second figure hold still; live shots stay as they were told. Stop works while paused too.
+  - Done when: on the Sintel trailer, a run paused mid-way and resumed gives exactly the CSVs of a run never paused
+    (`tools/app-check.mjs` pauses and resumes at a frame on every sample, and compares); in headless Chromium and
+    Firefox the buttons and the bar behave (screenshots in the PR).
+  - Not: nothing kept across a reload (the next row); no change to the result.
+  - Depends on: "Stop a run and keep what was read".
+  - Status: Open
+
 ### Decisions to make first
 
 The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
@@ -74,6 +88,31 @@ The owner chose (2026-10-26) to take these two up, each with its design question
     and the decision's 10 minutes and 4 adjusted to what was measured.
   - Depends on: "Stop a run and keep what was read" (it drives runs through `DetectAsync`).
   - Status: Open (decided 2026-10-26)
+
+- Resume after Stop, across visits
+  - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
+    between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that
+    ended early. Scoring a second range from where it stopped and calling `Merge` on both gives exactly the result for
+    the whole video. `RangeScores.ToBytes` makes the stopped part's scores storable, so a later visit can resume too.
+  - Where: built with the workers row, on the same `ScoreRangeAsync` and `Merge`:
+    - **At Stop:** `Merge` of the ranges so far shows the result for the part read (find out from ShotDetector's source
+      that `Merge` takes ranges that end before the video does, as the workers decision's Stop already assumes).
+    - **Resume:** a range from the last frame read (decoding from the keyframe before it and dropping frames up to the
+      one before), then `Merge` over all ranges.
+    - **Kept in the browser:** the scores' bytes in IndexedDB, keyed by the file's name, size and modified time and by
+      the options, behind try/catch; "Resume" offered when the same file and options come back, and forgotten on a
+      finished run or a click.
+    - **Live shots:** `ScoreRange` tells no shots (`OnShot` isn't honoured there: shots are decided in `Merge`), so a
+      one-worker run built this way would lose its live table. Ask upstream for `OnShot` on a range starting at frame 0
+      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it. Until it ships,
+      a run on `DetectAsync` keeps no scores to merge, so resuming it would mean scoring its start again: run one-worker
+      runs through `ScoreRangeAsync` with progress but no live table, or leave them unresumable. Measure both and put
+      the choice to the owner in the PR.
+  - Done when: `tools/app-check.mjs` stops at a frame on every sample, resumes, and gets exactly the full run's CSVs;
+    the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
+  - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
+  - Depends on: "Long videos across several Web Workers".
+  - Status: Open
 
 - WebCodecs: are its frames ManagedCodecs' frames?
   - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
