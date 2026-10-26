@@ -13,13 +13,13 @@ const NO_AUDIO_TRACK = 'The file has no audio track.';
 // How many silences the card lists; the lane has them all.
 const LISTED = 10;
 
-let audio = null; // the last audio event's object, while it was measured
+let audio = null; // the last audio event's measures (its audio), while they were measured
 
 const section = card('Sound');
 section.id = 'sound';
 section.hidden = true;
 
-const soundLane = lane('Audio', track => {
+const soundLane = lane('Measures', track => {
   track.replaceChildren(
     ...(audio?.referenceTone ?? []).map(s => mark('tone', s, `Reference tone: ${tone(s)}. Play from ${timecode(s.start)}`)),
     ...(audio?.silences ?? []).map(s => mark('silence', s, `Silence: ${timecode(s.start)} to ${timecode(s.end)}. Play from ${timecode(s.start)}`)));
@@ -44,7 +44,7 @@ function clear() {
 }
 
 on('chose', clear);
-on('audio', a => {
+on('audio', ({ audio: a }) => {
   clear();
   if (a.notMeasured === NO_AUDIO_TRACK) return;
   section.hidden = false;
