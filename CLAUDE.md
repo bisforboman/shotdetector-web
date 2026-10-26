@@ -116,8 +116,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   interpreted first.
 - FFmpeg's `ebur128` prints its summary to one decimal and its frame metadata to three, the peaks there as linear
   amplitudes: `AudioCheck.cs` reads the last frame's metadata (`ametadata=print:file=`). A 2 s gap between tones comes
-  out 1.9966 s after FFmpeg's AAC encoder, so `silencedetect`'s default 2 s finds nothing in the tone sample: the
-  check also runs at 1 s.
+  out 1.9966 s after FFmpeg's AAC encoder, too short for `silencedetect`'s default 2 s (which the page shows): the
+  tone sample's gap is 3 s, and the check also runs at 1 s.
 - The published bundle is trimmed with `UseSystemResourceKeys`: the framework's exception messages come out as resource
   keys (`DeserializeUnableToConvertValue, ...`), the libraries' own (ManagedCodecs, `UnsupportedVideoException`) whole.
 - Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen

@@ -59,23 +59,24 @@ enc -filter_complex "$(three 1280x720 25 1),$untagged" -c:v libx264 -preset very
 enc -filter_complex "$(three 320x240 25 1)" -f lavfi -i sine=d=3.45 -c:v libx264 -pix_fmt yuv420p -c:a aac "$out/with-audio-320x240-25.mp4"
 
 # Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
-# 0.1), 2 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 14 s of video.
+# 0.1), 3 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 15 s of video. The
+# gap is 3 s, not 2, because FFmpeg's AAC encoder spreads the tone's edges into it by a few milliseconds: a 2 s gap
+# came out 1.9966 s, too short for silencedetect's default 2 s (and so for the page, which shows the default's).
 s="$out/tone-silence-320x240-25.mp4"
 tone="sine=f=1000:r=48000:d=6,volume=0.8"
-enc -filter_complex "testsrc2=s=320x240:r=25:d=14[v];$tone[a];anullsrc=r=48000:cl=mono,atrim=duration=2[b];$tone[c];[a][b][c]concat=n=3:v=0:a=1,pan=stereo|c0=c0|c1=c0[s]" \
+enc -filter_complex "testsrc2=s=320x240:r=25:d=15[v];$tone[a];anullsrc=r=48000:cl=mono,atrim=duration=3[b];$tone[c];[a][b][c]concat=n=3:v=0:a=1,pan=stereo|c0=c0|c1=c0[s]" \
   -map '[v]' -map '[s]' -c:v libx264 -pix_fmt yuv420p -c:a aac "$s"
-# What it must be: one stereo 48 kHz AAC track of 14 s, the tone at -20 dBFS (an RMS level of -23.01 dB: the decoded
-# peaks wander by a few tenths) and the gap silent below -60 dBFS for almost 2 s (the encoder spreads the tone's edges
-# into it by a few milliseconds).
+# What it must be: one stereo 48 kHz AAC track of 15 s, the tone at -20 dBFS (an RMS level of -23.01 dB: the decoded
+# peaks wander by a few tenths) and the gap silent below -60 dBFS for almost 3 s, found at silencedetect's default 2 s.
 got=$("$fp" -v error -select_streams a -show_entries stream=codec_name,sample_rate,channels,duration -of default=nw=1 "$s")
 want="codec_name=aac
 sample_rate=48000
 channels=2
-duration=14.000000"
+duration=15.000000"
 [[ $got == "$want" ]] || { printf '%s: the audio is\n%s\n' "$s" "$got" >&2; exit 1; }
 level=$("$ff" -hide_banner -nostats -i "$s" -map 0:a -af atrim=start=1:end=5,astats=measure_perchannel=none:measure_overall=RMS_level -f null - 2>&1 | awk '/RMS level dB/ {print $NF}')
-gap=$("$ff" -hide_banner -nostats -i "$s" -map 0:a -af silencedetect=d=1.9 -f null - 2>&1 | awk '/silence_end/ {print $5, $8}')
-if ! awk -v l="$level" -v g="$gap" 'BEGIN { split(g, x, " "); exit !(l > -23.06 && l < -22.96 && x[1] > 7.95 && x[1] < 8.05 && x[2] > 1.95 && x[2] < 2) }'; then
+gap=$("$ff" -hide_banner -nostats -i "$s" -map 0:a -af silencedetect -f null - 2>&1 | awk '/silence_end/ {print $5, $8}')
+if ! awk -v l="$level" -v g="$gap" 'BEGIN { split(g, x, " "); exit !(l > -23.06 && l < -22.96 && x[1] > 8.95 && x[1] < 9.05 && x[2] > 2.95 && x[2] < 3) }'; then
   echo "$s: the tone's RMS level is ${level:-?} dB, the gap (end, length) is ${gap:-not found}." >&2; exit 1
 fi
 

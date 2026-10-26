@@ -234,7 +234,7 @@ of their own, and deploys it to GitHub Pages.
 The samples (tools/make-samples.sh) each isolate something the description must get right: 25, 29.97 and 23.976 fps;
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
-the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 2 s of silence, the tone again) for the audio
+the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
 measures; six files to refuse; and three whose audio isn't measured.
 
 ## Packages
