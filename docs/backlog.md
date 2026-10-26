@@ -144,7 +144,7 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
     tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
   - Not: no other fields beyond what the core returns.
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 - Shot statistics and a timeline
   - Why: a list of times doesn't show a film's rhythm. Average shot length is the number film analysis uses, and a strip
