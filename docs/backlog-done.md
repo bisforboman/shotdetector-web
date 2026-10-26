@@ -311,8 +311,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     interpreted on `with-audio-320x240-25.mp4` 22 s, 12 of 12 CSVs and "No FFmpeg assembly loaded at all.", AOT 3 min,
     132 of 132 CSVs on 11 samples); a temporary change of the last byte of the scenes CSV for runs over 1,000 frames
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
-    green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
-    docs-only pull request)
+    green, then reverted. After the merge, Pages run 40337621791 on the push: native, AOT 132 of 132 CSVs on the
+    bundle it then deployed, FastYuv replaced, the site's checks, and the deploy, 7 min 10 s instead of 29 min of CI
+    and 4 of Pages. A docs-only pull request, the one that added this, ran `build` without the checks)
 
 - Bitrate and keyframes
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
@@ -342,6 +343,83 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the timeline's cuts lane (decision `2026-10-25-one-page.md`), where a click seeks into the shot clicked; the card
     names the shot playing and the table marks its row, scrolling its own box, checked by clicking into every shot and
     playing 13 s to 23 s. Firefox not run: its builds' hosts are outside the session's network policy)
+
+- About this file
+  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
+    already returns that description as JSON, but the page shows none of it.
+  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
+    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
+    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
+    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
+  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
+    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
+  - Not: no other fields beyond what the core returns.
+  - Status: Done (2026-10-26: `panels/about.js`, on the `opened` event, the codec, size, frame rate, pixel format,
+    colour space and range, frames, duration and audio track, each field's own value in its tooltip and Open's JSON
+    folded under them; `Mp4Input.Audio` names the codec as ffprobe does from the headers (ManagedCodecs calls an MP3
+    in 'mp4a' 'mp4a') with the demuxer's rate and channels, NativeCheck's `AudioStreamCheck.cs` equal to ffprobe's on
+    all 14 samples and no-aac files, app-check.mjs: Open's track is the one `Audio()` measures; every sample shown in
+    headless Chromium on the AOT bundle, as its name says. Firefox not run: this session's network policy blocks
+    Playwright's Firefox and Mozilla's hosts, and a Firefox from conda-forge was refused by its permissions)
+
+- A graph of the scores
+  - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
+    a cut was found and what a different threshold would do. The stats are computed for every run already
+    (`statsCsv`), and the page only offers them as a download.
+  - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
+    threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
+    differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
+    CSV header, not by position, and say in the row's PR which column each detector's graph shows. Where a
+    frame-difference score (`content_val`, `delta_*`) stays near zero for a second or more, mark the span as a still
+    picture, labelled as the page's reading.
+  - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
+    threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
+  - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
+    languages is how results drift).
+  - Status: Done (2026-10-26, #36: `panels/scores.js`, a canvas lane of the column each detector cuts on, picked by
+    the header (`adaptive_ratio`, `content_val`, `average_rgb`, `hist_diff`, `hash_dist`), against the threshold the run
+    used, a dot on each cut's score; still pictures where `content_val` stays under 1 for 1 s; every cut of the five
+    detectors on the Sintel trailer past its line; a two-hour stats CSV read in under 0.1 s, each draw under 50 ms)
+
+- Stop a run and keep what was read, without restarting the worker
+  - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
+    two on a trailer, plus opening the file again (streamed since "Large files": seconds on a film). The owner chose (2026-10-24)
+    cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
+  - Where: ShotDetector 3.15.0 has `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>, DetectionOptions?,
+    CancellationToken)` ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492)): it runs on the
+    caller's own awaits, with no other thread, and gives the synchronous `Detect`'s result. Here: an asynchronous `Mp4Input` frame source that yields to the
+    worker's event loop every N frames, so a `cancel` message can run and cancel the token. On single-threaded wasm
+    the yield must be a real macrotask: a `[JSImport]` returning a Promise resolved by `setTimeout(0)` or a
+    `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
+    `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
+    `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
+    `tools/app-check.mjs` calls the new export.
+    **Stop keeps what was read** (the owner's question, 2026-10-26: stats for a stopped run). The page's button
+    becomes Stop: at the next yield the frame source simply ends, as if the file ended there, instead of cancelling
+    the token. `DetectAsync` then finishes normally with the result for the frames read: the shots, the scenes CSV and
+    the stats CSV, shown and offered for download like a finished run's, labelled "stopped at" the time reached. The
+    token stays for a runtime that has to be abandoned, and `terminate()` for one that doesn't answer.
+  - Done when: on the Sintel trailer, a run stopped mid-way shows its shots, its cards and both downloads, and a run
+    with another threshold follows at once without opening the file again. `tools/app-check.mjs` stops a run at a
+    frame N on every sample and checks that its stats CSV equals the first rows of the full run's up to N (each frame's
+    stats depend only on the frames before it), and that its shots are the full run's up to the last cut before N,
+    plus one ending at N. Find out from ShotDetector's source whether a frame source that ends before
+    `YuvVideo.FrameCount` gives a warning, and show it if so. The yields cost under 1% of the run's time (pick N for
+    it); checks green, CSVs unchanged.
+  - Not: no shared memory.
+  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
+    (done).
+  - Status: Done (2026-10-26: `Mp4Input.FramesAsync`/`DetectAsync` pausing every 8 frames through `pause.js`, a
+    `MessageChannel`; `Api.Detect` a promise, `Stop` and `Cancel`; `worker.js` handles `stop` and `cancel` between
+    pauses. ShotDetector 3.16.1 neither warns nor refuses a source that ends before `FrameCount`. `tools/app-check.mjs`
+    stops every run on every sample half-way: the stats CSV the whole run's rows but the adaptive ratio of the last 2
+    frames, `None`; the shots the whole run's with the next one cut short, no cut missed. One run cancelled, no result.
+    The pauses 0.25% of the runs AOT under Node, 6 µs each in Chromium's worker; 132 of 132 CSVs identical AOT, the
+    whole runs' unchanged. In headless Chromium and Firefox 136 on the Sintel trailer, AOT: stopped at frame 608, the
+    shots, the cards and both downloads (the stats CSV the native whole run's up to there), the stop answered in 201
+    and 136 ms, a run with another threshold started 98 and 129 ms after its click without opening the file; a file
+    picked mid-run abandons it on the same worker; a worker that doesn't answer is terminated after 1.5 s. A
+    `[JSExport]`'s cancelled task never settles its promise in .NET 10: `Detect` fails instead, CLAUDE.md "Gotchas")
 
 - Warnings on the page
   - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.

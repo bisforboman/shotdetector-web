@@ -1,6 +1,6 @@
 // The page: picks a file, has the worker (worker.js, which owns the .NET runtime) open it and detect, and tells the
 // panels what happens. How it is built: docs/decisions/2026-10-24-the-page.md and 2026-10-25-one-page.md. This file
-// keeps the page's states (idle, opening, detecting, done, error), the options, the estimate, cancel and the demo; what
+// keeps the page's states (idle, opening, detecting, done, error), the options, the estimate, stop and the demo; what
 // is shown of a file or a run is in the panels (panels/<name>.js, listed in index.html), each a lane of the timeline
 // (timeline.js) or a card. A panel imports from here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
@@ -11,14 +11,16 @@
 //                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it
 //                        'done'     { video, result, seconds, name }   the run's result (Api's Detect, its CSVs as
 //                                                                scenesCsv and statsCsv); name: the file's, without its
-//                                                                extension, for downloads
-//                        'cancelled' { video, done, expected }   the run was cancelled at frame done
+//                                                                extension, for downloads. A stopped run's too, with
+//                                                                result.stopped: the result for its frameCount frames
+//                        'cancelled' { video, done, expected }   the run was lost at frame done: the worker didn't
+//                                                                answer a stop and was terminated
 //                        'audio'    { video, audio }             the file's sound, after its first finished run: Api's
 //                                                                Audio (CLAUDE.md "Layout" has its JSON), once per
 //                                                                opened file; a failure as notMeasured
 //   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns
 //   card(title, { below }) a card beside the video (below: under it, full width), for the panel to fill
-import { setDuration } from './timeline.js';
+import { setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
@@ -36,7 +38,7 @@ const DEFAULT_MIN_LENGTH = '0.6s';
 const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
-const detectButton = $('detect'), cancelButton = $('cancel'), demoButton = $('demo');
+const detectButton = $('detect'), stopButton = $('stop'), demoButton = $('demo');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
 const result = $('result'), video = $('video'), cards = $('cards'), below = $('below');
 
@@ -48,6 +50,8 @@ let started = 0;        // when the current detection started (performance.now()
 let framesDone = 0;     // frames the current run has done, as its last progress report said
 let framesExpected = 0; // and how many it expects (0 when unknown)
 let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
+let running = null;     // the current run's Detect call (a promise), while it goes
+let stopping = false;   // the current run has been told to stop
 
 const listeners = {};
 export function on(event, f) {
@@ -68,8 +72,9 @@ export function card(title, { below: under = false } = {}) {
   return section;
 }
 
-// The worker and its calls: each call has an id, and the worker answers them in order. A worker that is replaced (a
-// cancel, a crash) takes its calls with it: they reject with an AbortError, which the page doesn't show.
+// The worker and its calls: each call has an id, and the worker answers them in order. A worker that is replaced (one
+// that didn't answer a stop, a crash) takes its calls with it, and a call the worker cancelled ends the same way: they
+// reject with an AbortError, which the page doesn't show.
 let worker, calls = new Map(), lastId = 0;
 
 export function call(name, ...args) {
@@ -82,7 +87,7 @@ export function call(name, ...args) {
 
 function newWorker() {
   const w = new Worker('worker.js', { type: 'module' });
-  // Only the current worker's: one terminated by a cancel may still have messages on their way.
+  // Only the current worker's: one terminated may still have messages on their way.
   w.onmessage = ({ data }) => { if (w === worker) fromWorker[data.type]?.(data); };
   // Not an exception from .NET (those answer a call as 'error'): the worker itself failed, e.g. out of memory.
   w.onerror = e => {
@@ -110,6 +115,7 @@ function answer(id) {
 const fromWorker = {
   result({ id, value }) { answer(id)?.resolve(value); },
   error({ id, message }) { answer(id)?.reject(new Error(message)); },
+  cancelled({ id }) { answer(id)?.reject(new DOMException('The call was cancelled.', 'AbortError')); },
   progress({ done, expected }) {
     if (state !== 'detecting') return;
     framesDone = done;
@@ -117,8 +123,8 @@ const fromWorker = {
     if (expected > 0) progress.value = Math.min(done / expected, 1);
     const seconds = (performance.now() - started) / 1000;
     const fps = seconds > 0 ? done / seconds : 0;
-    statusText.textContent = `Detecting: frame ${done}${expected > 0 ? ` of ${expected}` : ''}, ` +
-      `${fps.toFixed(0)} frames per second. ${estimate}`;
+    statusText.textContent = stopping ? `Stopping at frame ${done}…` :
+      `Detecting: frame ${done}${expected > 0 ? ` of ${expected}` : ''}, ${fps.toFixed(0)} frames per second. ${estimate}`;
     emit('progress', { video: opened, done, expected });
   },
   // A shot as soon as ShotDetector knows it: a few frames after the cut that ends it with one detector (what the page
@@ -132,19 +138,31 @@ function setState(next) {
   state = next;
   const busy = next === 'opening' || next === 'detecting';
   document.body.dataset.state = next;
-  fileInput.disabled = busy;
+  // While a run goes, another file can be chosen: the run is abandoned (choose).
+  fileInput.disabled = next === 'opening';
   for (const input of [detector, threshold, minLength]) input.disabled = busy;
   detectButton.disabled = busy || !file;
   demoButton.disabled = busy;
   detectButton.hidden = busy;
-  cancelButton.hidden = !busy;
+  // Opening can't be stopped half-way, only abandoned: the worker is terminated (stop).
+  stopButton.hidden = !busy;
+  stopButton.disabled = false;
+  stopButton.textContent = next === 'opening' ? 'Cancel' : 'Stop';
   progress.hidden = !busy;
   error.hidden = next !== 'error';
   if (next === 'opening') result.hidden = true;
 }
 
-function choose(chosen) {
-  if (!chosen || state === 'opening' || state === 'detecting') return;
+// A new file. During a run, the run is abandoned first: cancelled (Api's Cancel through the worker's 'cancel'), so it
+// keeps nothing and the worker stays, or the worker replaced if it doesn't answer.
+async function choose(chosen) {
+  if (!chosen || state === 'opening') return;
+  if (state === 'detecting' && running) {
+    const run = running;
+    running = null;
+    worker.postMessage({ type: 'cancel' });
+    if (!await answered(run)) replaceWorker();
+  }
   opened = null;
   result.hidden = true;
   setDuration(0);
@@ -157,8 +175,8 @@ function choose(chosen) {
   setState('idle');
 }
 
-// Opens the file if the current worker hasn't, then detects. Errors are the library's messages; a call that a cancel
-// took away is no error.
+// Opens the file if the current worker hasn't, then detects. Errors are the library's messages; a call that a cancel or
+// a replaced worker took away is no error.
 async function start() {
   if (!file) return;
   error.textContent = '';
@@ -178,9 +196,12 @@ async function start() {
   }
 }
 
+// One run on the opened file. Stop (stop) ends it early with the result for the frames read, which is shown as a
+// finished run's is; a new file (choose) abandons it.
 async function detect() {
   setState('detecting');
   framesDone = framesExpected = 0;
+  stopping = false;
   const run = options();
   emit('run', { video: opened, options: run });
   result.hidden = false;
@@ -188,12 +209,28 @@ async function detect() {
   estimate = estimateText(opened);
   statusText.textContent = `Detecting… ${estimate}`;
   started = performance.now();
-  const r = JSON.parse(await call('Detect', JSON.stringify(run)));
+  const video = opened, detecting = running = call('Detect', JSON.stringify(run));
+  const r = JSON.parse(await detecting);
+  const seconds = (performance.now() - started) / 1000;
+  if (running !== detecting) return; // abandoned: a new file was chosen
+  running = null;
   // The CSVs come as strings of their own, not inside Detect's JSON (README "Large files").
   r.scenesCsv = await call('ScenesCsv');
   r.statsCsv = await call('StatsCsv');
-  show(r, (performance.now() - started) / 1000);
+  if (opened !== video) return; // a new file was chosen meanwhile
+  show(r, seconds);
   await sound();
+}
+
+// Whether a call answered (anything: its value, an error, a cancel) within a second or so: as long as the worker takes
+// for a few pauses of Detect's (8 frames apart, Api's PauseEvery) at the rate the run has had, and a second more.
+async function answered(call) {
+  const frame = framesDone > 0 ? (performance.now() - started) / framesDone : 0;
+  let timer;
+  const late = new Promise(resolve => { timer = setTimeout(() => resolve(false), 1000 + 24 * frame); });
+  const ok = await Promise.race([call.then(() => true, () => true), late]);
+  clearTimeout(timer);
+  return ok;
 }
 
 // The file's sound, after its first run, so detection's time and results stay as they are (decision 2026-10-24-audio.md):
@@ -259,14 +296,29 @@ function options() {
   };
 }
 
-// Terminates the worker (decision "Cancelling a run"): the result is gone with it; the panels keep what they were told
-// and mark where the run stopped.
-function cancel() {
-  const wasDetecting = state === 'detecting', video = opened;
+// Stops the run where it has got to (decision "Cancelling a run"): the worker's 'stop' ends Detect's frames at its next
+// pause, and Detect answers with the result for the frames read, which detect shows. Only a worker that doesn't answer
+// is terminated: the result is gone with it, and the panels keep the shots they were told and mark where the run had
+// got to. Opening can't stop half-way: the worker is terminated, and a run opens the file again.
+async function stop() {
+  if (state === 'opening') {
+    replaceWorker();
+    setState('idle');
+    statusText.textContent = 'Cancelled.';
+    return;
+  }
+  if (state !== 'detecting' || stopping) return;
+  stopping = true;
+  stopButton.disabled = true;
+  statusText.textContent = `Stopping at frame ${framesDone}…`;
+  const run = running, video = opened;
+  worker.postMessage({ type: 'stop' });
+  if (await answered(run) || running !== run) return;
+  running = null;
   replaceWorker();
   setState('idle');
-  statusText.textContent = 'Cancelled.';
-  if (wasDetecting) emit('cancelled', { video, done: framesDone, expected: framesExpected });
+  statusText.textContent = 'Stopped: the worker didn\'t answer, so it was restarted, and the run\'s result went with it.';
+  emit('cancelled', { video, done: framesDone, expected: framesExpected });
 }
 
 function fail(message) {
@@ -277,7 +329,11 @@ function fail(message) {
 
 function show(r, seconds) {
   setState('done');
-  statusText.textContent = `Done in ${seconds.toFixed(1)} s (${(r.frameCount / seconds).toFixed(0)} frames per second).`;
+  const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second`;
+  statusText.textContent = r.stopped
+    ? `Stopped at ${timecode(r.frameCount * r.frameRate.den / r.frameRate.num)} (frame ${r.frameCount} of ` +
+      `${opened.frameCount}) after ${seconds.toFixed(1)} s (${rate}).`
+    : `Done in ${seconds.toFixed(1)} s (${rate}).`;
   // A run of a few seconds is mostly start-up: too short to measure this browser's speed by.
   if (seconds >= 5) storeRate(r.frameCount * opened.width * opened.height / seconds);
   emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, '') });
@@ -292,7 +348,7 @@ detector.onchange = () => { threshold.value = DEFAULT_THRESHOLDS[detector.value]
 threshold.value = DEFAULT_THRESHOLDS[detector.value];
 fileInput.onchange = () => choose(fileInput.files[0]);
 form.onsubmit = e => { e.preventDefault(); start(); };
-cancelButton.onclick = cancel;
+stopButton.onclick = stop;
 // The demo clip, next to the page (pages.yml), run as if it had been picked.
 demoButton.onclick = async () => {
   demoButton.disabled = true;
@@ -300,7 +356,7 @@ demoButton.onclick = async () => {
   try {
     const response = await fetch('demo/sintel-trailer.mp4');
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    choose(new File([await response.blob()], 'sintel-trailer.mp4', { type: 'video/mp4' }));
+    await choose(new File([await response.blob()], 'sintel-trailer.mp4', { type: 'video/mp4' }));
     start();
   } catch (e) {
     fail(`The demo clip didn't download: ${e.message}`);

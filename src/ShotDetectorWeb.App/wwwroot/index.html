@@ -10,6 +10,7 @@
   <!-- The panels (decision 2026-10-25-one-page.md), each a lane of the timeline or a card: lanes stack in this order,
        cards beside the video in this order. A new panel is a module in panels/ and a line here. -->
   <script type="module" src="panels/cuts.js"></script>
+  <script type="module" src="panels/scores.js"></script>
   <script type="module" src="panels/bitrate.js"></script>
   <script type="module" src="panels/waveform.js"></script>
   <script type="module" src="panels/run.js"></script>
@@ -17,6 +18,7 @@
   <script type="module" src="panels/shots.js"></script>
   <script type="module" src="panels/stats.js"></script>
   <script type="module" src="panels/sound.js"></script>
+  <script type="module" src="panels/about.js"></script>
 </head>
 <body>
   <header>
@@ -61,7 +63,7 @@
 
       <div class="actions">
         <button type="submit" id="detect" disabled>Detect shots</button>
-        <button type="button" id="cancel" hidden>Cancel</button>
+        <button type="button" id="stop" hidden>Stop</button>
       </div>
     </form>
 
