@@ -11,7 +11,8 @@ let duration = 0;
 
 // Adds a lane, below the ones added before it: its label, and a track the panel draws into. draw(track) is called
 // whenever the axis changes (a new duration, a new width), and by the panel through the lane's draw() when its own
-// data changes; a lane positioned in x()'s percentages only needs it for a new duration.
+// data changes; a lane positioned in x()'s percentages only needs it for a new duration. show(false) hides the lane,
+// label and track, for a file that has nothing for it (show(true) brings it back).
 export function lane(label, draw) {
   const name = document.createElement('div');
   name.className = 'lane-label';
@@ -20,7 +21,12 @@ export function lane(label, draw) {
   const track = document.createElement('div');
   track.className = 'track';
   tracks.insertBefore(track, axis);
-  const entry = { track, draw: () => { if (duration > 0) draw(track); else track.replaceChildren(); } };
+  const entry = {
+    track,
+    label: name,
+    draw: () => { if (duration > 0) draw(track); else track.replaceChildren(); },
+    show: visible => { name.hidden = track.hidden = !visible; },
+  };
   lanes.push(entry);
   return entry;
 }

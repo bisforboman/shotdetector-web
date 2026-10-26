@@ -30,6 +30,7 @@ if [[ $native == false && $wasm == false && $replace == false ]]; then native=tr
 shopt -s nullglob
 samples=(samples/*.mp4)
 rejects=(samples/reject/*)
+noAac=(samples/no-aac/*)
 if [[ ${#samples[@]} == 0 ]]; then echo "No samples: run tools/make-samples.sh first." >&2; exit 1; fi
 
 if [[ $native == true ]]; then
@@ -56,7 +57,8 @@ if [[ $wasm == true ]]; then
   rm -rf out/wasm
   # The runtime's own notes (under Node, that it can't load its symbol file) come on stdout, starting MONO_WASM.
   status=0
-  node tools/app-check.mjs "$publish/wwwroot" out/wasm "${samples[@]}" --reject "${rejects[@]}" 2> out/wasm-stderr.txt \
+  node tools/app-check.mjs "$publish/wwwroot" out/wasm "${samples[@]}" --reject "${rejects[@]}" --no-aac "${noAac[@]}" \
+    --native out/native 2> out/wasm-stderr.txt \
     | { grep -v '^MONO_WASM:' || true; } || status=$?
   cat out/wasm-stderr.txt
   if [[ $status != 0 ]]; then echo "The WebAssembly run failed (above)." >&2; exit 1; fi
