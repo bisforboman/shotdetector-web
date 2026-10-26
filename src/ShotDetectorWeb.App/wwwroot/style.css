@@ -135,6 +135,16 @@ video { display: block; width: 100%; background: #000; border-radius: 0.375rem; 
 .scanned { position: absolute; top: 0; bottom: 0; left: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .tick { position: absolute; top: 15%; bottom: 15%; width: 2px; margin-left: -1px; background: var(--fg); }
 
+/* The waveform lane: taller than the others, the sound's envelope across it (an SVG stretched over the points' span). */
+.track.waveform, .lane-label.waveform { height: 3.5rem; }
+.lane-label.waveform { line-height: 3.5rem; }
+.track.waveform svg { position: absolute; top: 0; height: 100%; }
+.track.waveform path { fill: color-mix(in srgb, var(--accent) 75%, transparent); }
+.not-measured {
+  display: block; padding: 0 0.5rem; line-height: 3.5rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
 /* The shots table. */
 #shots-card { max-height: 70vh; overflow: auto; padding-top: 0; }
 #shots-card h2 { position: sticky; top: 0; margin: 0; padding: 0.75rem 0 0.5rem; background: var(--panel); }
