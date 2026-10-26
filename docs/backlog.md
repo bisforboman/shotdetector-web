@@ -166,7 +166,7 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
   - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
     languages is how results drift).
-  - Status: Open
+  - Status: In progress (2026-10-26)
 
 - Bitrate and keyframes
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
