@@ -50,7 +50,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
   `seek()`) and `panels/`: `cuts.js` (a lane), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
-  (the table below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
+  (the table below), `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots; it names
+  the shot playing and marks its row in the table, found by `#shots`), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
   sound's measures, labelled measured, what the page derives labelled as its own), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
   the page's own reading). `Api` prefixes ManagedCodecs'
