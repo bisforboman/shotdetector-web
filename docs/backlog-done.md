@@ -311,8 +311,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     interpreted on `with-audio-320x240-25.mp4` 22 s, 12 of 12 CSVs and "No FFmpeg assembly loaded at all.", AOT 3 min,
     132 of 132 CSVs on 11 samples); a temporary change of the last byte of the scenes CSV for runs over 1,000 frames
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
-    green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
-    docs-only pull request)
+    green, then reverted. After the merge, Pages run 40337621791 on the push: native, AOT 132 of 132 CSVs on the
+    bundle it then deployed, FastYuv replaced, the site's checks, and the deploy, 7 min 10 s instead of 29 min of CI
+    and 4 of Pages. A docs-only pull request, the one that added this, ran `build` without the checks)
 
 - Bitrate and keyframes
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
