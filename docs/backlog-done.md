@@ -313,3 +313,22 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
     green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
     docs-only pull request)
+
+- A graph of the scores
+  - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
+    a cut was found and what a different threshold would do. The stats are computed for every run already
+    (`statsCsv`), and the page only offers them as a download.
+  - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
+    threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
+    differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
+    CSV header, not by position, and say in the row's PR which column each detector's graph shows. Where a
+    frame-difference score (`content_val`, `delta_*`) stays near zero for a second or more, mark the span as a still
+    picture, labelled as the page's reading.
+  - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
+    threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
+  - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
+    languages is how results drift).
+  - Status: Done (2026-10-26, #36: `panels/scores.js`, a canvas lane of the column each detector cuts on, picked by
+    the header (`adaptive_ratio`, `content_val`, `average_rgb`, `hist_diff`, `hash_dist`), against the threshold the run
+    used, a dot on each cut's score; still pictures where `content_val` stays under 1 for 1 s; every cut of the five
+    detectors on the Sintel trailer past its line; a two-hour stats CSV read in under 0.1 s, each draw under 50 ms)
