@@ -66,18 +66,21 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,
-  which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks;
+  which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples.
-- `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`;
-  `.github/workflows/pages.yml`: after CI on a push to `main`, the AOT publish's `wwwroot/` plus FastYuv's license,
+- `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`:
+  pull requests (interpreted on one sample, AOT on all; docs-only ones pass without checks) and the whole of it daily on
+  `main` (README "Checks");
+  `.github/workflows/pages.yml`: on a push to `main`, the native, AOT and replace checks, then the AOT check's own
+  publish's `wwwroot/` plus FastYuv's license,
   `.nojekyll` and the demo clip (`demo/sintel-trailer.mp4`: Sintel's trailer, downloaded pinned by the same SHA-256 as
   `ci.yml` and made by `tools/make-samples.sh`, the file the checks run), checked for the two LGPL files and the clip,
-  deployed to https://bisforboman.github.io/shotdetector-web/.
+  deployed to https://bisforboman.github.io/shotdetector-web/ only if all of it passes.
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
   (`2026-10-24-the-page.md`: how the page is built; `2026-10-24-fastyuv-replaceable.md`: FastYuv replaced by
   rebuilding; `2026-10-24-audio.md`: the audio decoded in the worker by ManagedCodecs; `2026-10-25-one-page.md`: one
-  timeline and cards, a module per panel).
+  timeline and cards, a module per panel; `2026-10-26-workers.md`: long videos across several workers).
 
 ## Working on this repository
 

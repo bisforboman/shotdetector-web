@@ -1,32 +1,30 @@
-# The page on GitHub Pages (https://bisforboman.github.io/shotdetector-web/): after CI passes on a push to main, the App
-# published ahead of time, deployed as it is. README, "Status"; decision 2026-10-24-the-page.md, "Delivery". The
-# repository's Pages source is "GitHub Actions". workflow_dispatch redeploys main by hand. With it, the demo clip:
-# Sintel's trailer re-encoded by tools/make-samples.sh, the same file CI's checks run (decision "The demo clip").
+# The page on GitHub Pages (https://bisforboman.github.io/shotdetector-web/): on a push to main, the merged tree checked
+# (natively, the App published ahead of time on every sample, FastYuv replaced) and that same publish deployed as it is.
+# main doesn't have to be up to date before a merge, so this is the merged tree's test; ci.yml doesn't run on the push.
+# README, "Status" and "Checks"; decision 2026-10-24-the-page.md, "Delivery". The repository's Pages source is "GitHub
+# Actions". workflow_dispatch checks and redeploys main by hand. With it, the demo clip: Sintel's trailer re-encoded by
+# tools/make-samples.sh, the same file the checks run (decision "The demo clip").
 name: Pages
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# One deploy at a time; a newer one waits rather than cancelling one half done.
+# One run at a time; a newer one waits rather than cancelling one half done (a newer push still waiting replaces an
+# older one, whose tree it holds).
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
   build:
-    # Only the commit CI just passed on a push to main (not a pull request's run that happens to be from main).
-    if: >-
-      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' ||
-      github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       # Sintel's trailer, the original's SHA-256: the same pin as ci.yml's (keep the two the same).
@@ -34,18 +32,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           submodules: true
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
       - name: Install the wasm-tools workload
         run: dotnet workload install wasm-tools
 
-      # The demo clip is made as CI makes the sample it checks: the same FFmpeg build (libx264), the same original and
-      # the same recipe, so the page serves the file the exactness check covered. These three steps are ci.yml's.
+      # As ci.yml: FFmpeg 8.1's shared build makes the samples (and the demo clip, the Sintel sample) and is the native
+      # check's reference. These three steps are ci.yml's.
       - name: Install FFmpeg 8.1
         id: ffmpeg
         uses: ./.github/actions/btbn-ffmpeg
@@ -74,8 +75,8 @@ jobs:
           echo "$(stat -c %s "$f") bytes, SHA-256 $got"
           echo "file=$f" >> "$GITHUB_OUTPUT"
 
-      # All of make-samples.sh (the recipe isn't split out): the trailer's re-encode, ffprobe-verified, is the demo.
-      - name: Make the demo clip
+      # The samples the checks run; the trailer's re-encode, ffprobe-verified, is the demo.
+      - name: Make the samples and the demo clip
         env:
           FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
           LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
@@ -84,24 +85,45 @@ jobs:
           tools/make-samples.sh
           sha256sum samples/sintel_trailer-480p.mp4 | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # As tools/check.sh wasm aot publishes it, which CI just checked against the native results.
-      - name: Publish the App ahead of time
-        run: dotnet publish src/ShotDetectorWeb.App -c Release -nologo -warnaserror -p:RunAOTCompilation=true
+      - name: Native check (ManagedCodecs + FastYuv against FFmpeg)
+        env:
+          SHOTDETECTOR_FFMPEG_LIBS: ${{ steps.ffmpeg.outputs.bin }}
+        run: tools/check.sh native
 
-      # The bundle is the publish's wwwroot/. FastYuv's license (LGPL-2.1) is copied by the core csproj to the publish
-      # root, outside it, so it goes in here; .nojekyll so nothing on Pages' side touches the files. The demo clip goes
-      # in demo/, where index.html's "Try the demo" fetches it.
+      # The App published ahead of time and checked on every sample against the native results: this publish is the
+      # bundle deployed below, not a second one.
+      - name: Publish the App ahead of time and check it
+        run: tools/check.sh wasm aot
+
+      # The bundle is the publish's wwwroot/, copied out as it is (the next step rebuilds the App in the publish folder).
+      # FastYuv's license (LGPL-2.1) is copied by the core csproj to the publish root, outside it, so it goes in here;
+      # .nojekyll so nothing on Pages' side touches the files. The demo clip goes in demo/, where index.html's "Try the
+      # demo" fetches it.
       - name: Make the site
         id: site
         run: |
           publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
-          site=$publish/wwwroot
+          site=$RUNNER_TEMP/site
+          cp -a "$publish/wwwroot" "$site"
           mkdir -p "$site/licenses/ShotDetector.FastYuv"
           cp "$publish/licenses/ShotDetector.FastYuv/COPYING.LGPL" "$site/licenses/ShotDetector.FastYuv/"
           mkdir -p "$site/demo"
           cp samples/sintel_trailer-480p.mp4 "$site/demo/sintel-trailer.mp4"
           touch "$site/.nojekyll"
           echo "path=$site" >> "$GITHUB_OUTPUT"
+
+      # LGPL-2.1 (README, Licensing): a FastYuv built from its source replaces the package's in a rebuilt bundle, and
+      # runs. After the site is copied out: it publishes the App again in the same folder, and deletes it.
+      - name: FastYuv replaced from its source, AOT
+        run: tools/check.sh replace aot
+
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: results
+          path: out/
+          if-no-files-found: ignore
 
       - name: Upload the site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

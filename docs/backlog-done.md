@@ -287,3 +287,29 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     SIMD: the trailer's adaptive run 20.8 s instead of 21.9 s in headless Chromium, 23.1 s instead of 24.0 s under
     Node, the film 1,636 s instead of 1,781 s: 4 to 8% less time. README "Large files" and "What the heap holds"; the
     Waiting row is now "ShotDetector: the stats CSV written row by row")
+
+- CI: the slow checks once
+  - Why: a CI run took 29 min (measured 2026-10-26): the WebAssembly check interpreted 19 min 10 s, AOT 5 min,
+    FastYuv replaced 2 min 10 s, native 1 min 47 s, the rest about 1 min. Every merge ran all of it again on `main`,
+    then Pages published AOT again and deployed (4 min), and docs-only pull requests paid the full run. Several
+    sessions merge every day.
+  - Where: `.github/workflows/ci.yml`, `.github/workflows/pages.yml`, `tools/check.sh`, README "Checks". The owner
+    chose four changes: (1) a docs-only pull request (`docs/**`, `*.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md`) still
+    runs `build`, the required check, and skips every heavy step (`git diff --name-only` against the base, `if:` on each
+    step; not `paths-ignore`, which never reports); (2) `concurrency` cancels a pull request's superseded runs, never
+    `main`'s; (3) the interpreted check on pull requests runs one short sample with audio (`tools/check.sh` takes the
+    samples to run), the strict "No FFmpeg assembly loaded at all." kept, and the full interpreted check runs once a
+    day on `main` (`schedule`) and by hand; the AOT check stays on every sample on every pull request; (4) the push to
+    `main` is tested by `pages.yml` itself: the native check, the AOT check on the very bundle it deploys (one
+    publish) and FastYuv replaced, deploying only if all pass; `ci.yml` no longer runs on that push.
+  - Done when: a docs-only pull request goes green in under 2 minutes; a code pull request's CI takes about 10
+    minutes with the AOT check on every sample; a deliberate one-byte CSV break turns the run red (then reverted); after
+    the merge, the push to `main` runs Pages with the checks, and it deploys.
+  - Not: no check weakened for what the page deploys: the AOT check stays on every sample, on every pull request and
+    before every deploy; the deploy's own checks (FastYuv's `.wasm` and its license in the artifact) stay.
+  - Status: Done (2026-10-26: a code pull request's CI 5 min 21 s instead of 29 min (run 40334239866: native 1 min,
+    interpreted on `with-audio-320x240-25.mp4` 22 s, 12 of 12 CSVs and "No FFmpeg assembly loaded at all.", AOT 3 min,
+    132 of 132 CSVs on 11 samples); a temporary change of the last byte of the scenes CSV for runs over 1,000 frames
+    (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
+    green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
+    docs-only pull request)
