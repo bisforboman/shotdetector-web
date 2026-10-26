@@ -40,16 +40,21 @@ export async function* stream(url) {
     }
     return true;
   };
-  while (await have(13)) {
-    const view = new DataView(buffer.buffer, buffer.byteOffset + position, 13);
-    const size = view.getInt32(0, true);
-    const flags = view.getUint8(12);
-    const pts = Number(view.getBigInt64(4, true));
-    if (!await have(13 + size)) throw new Error(`${url} ends inside an access unit.`);
-    yield { data: buffer.subarray(position + 13, position + 13 + size), pts, key: !!(flags & 1), discard: !!(flags & 2) };
-    position += 13 + size;
+  // A pass that stops early (Firefox's first frame in RGB) cancels the download, or it would go on into the next runs.
+  try {
+    while (await have(13)) {
+      const view = new DataView(buffer.buffer, buffer.byteOffset + position, 13);
+      const size = view.getInt32(0, true);
+      const flags = view.getUint8(12);
+      const pts = Number(view.getBigInt64(4, true));
+      if (!await have(13 + size)) throw new Error(`${url} ends inside an access unit.`);
+      yield { data: buffer.subarray(position + 13, position + 13 + size), pts, key: !!(flags & 1), discard: !!(flags & 2) };
+      position += 13 + size;
+    }
+    if (buffer.length > position) throw new Error(`${url} ends inside an access unit's header.`);
+  } finally {
+    reader.cancel().catch(() => {});
   }
-  if (buffer.length > position) throw new Error(`${url} ends inside an access unit's header.`);
 }
 
 export const config = (meta, accel) => ({ codec: meta.codec, description: bytesOf(meta.description), hardwareAcceleration: accel });
