@@ -380,3 +380,43 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the header (`adaptive_ratio`, `content_val`, `average_rgb`, `hist_diff`, `hash_dist`), against the threshold the run
     used, a dot on each cut's score; still pictures where `content_val` stays under 1 for 1 s; every cut of the five
     detectors on the Sintel trailer past its line; a two-hour stats CSV read in under 0.1 s, each draw under 50 ms)
+
+- Stop a run and keep what was read, without restarting the worker
+  - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
+    two on a trailer, plus opening the file again (streamed since "Large files": seconds on a film). The owner chose (2026-10-24)
+    cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
+  - Where: ShotDetector 3.15.0 has `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>, DetectionOptions?,
+    CancellationToken)` ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492)): it runs on the
+    caller's own awaits, with no other thread, and gives the synchronous `Detect`'s result. Here: an asynchronous `Mp4Input` frame source that yields to the
+    worker's event loop every N frames, so a `cancel` message can run and cancel the token. On single-threaded wasm
+    the yield must be a real macrotask: a `[JSImport]` returning a Promise resolved by `setTimeout(0)` or a
+    `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
+    `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
+    `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
+    `tools/app-check.mjs` calls the new export.
+    **Stop keeps what was read** (the owner's question, 2026-10-26: stats for a stopped run). The page's button
+    becomes Stop: at the next yield the frame source simply ends, as if the file ended there, instead of cancelling
+    the token. `DetectAsync` then finishes normally with the result for the frames read: the shots, the scenes CSV and
+    the stats CSV, shown and offered for download like a finished run's, labelled "stopped at" the time reached. The
+    token stays for a runtime that has to be abandoned, and `terminate()` for one that doesn't answer.
+  - Done when: on the Sintel trailer, a run stopped mid-way shows its shots, its cards and both downloads, and a run
+    with another threshold follows at once without opening the file again. `tools/app-check.mjs` stops a run at a
+    frame N on every sample and checks that its stats CSV equals the first rows of the full run's up to N (each frame's
+    stats depend only on the frames before it), and that its shots are the full run's up to the last cut before N,
+    plus one ending at N. Find out from ShotDetector's source whether a frame source that ends before
+    `YuvVideo.FrameCount` gives a warning, and show it if so. The yields cost under 1% of the run's time (pick N for
+    it); checks green, CSVs unchanged.
+  - Not: no shared memory.
+  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
+    (done).
+  - Status: Done (2026-10-26: `Mp4Input.FramesAsync`/`DetectAsync` pausing every 8 frames through `pause.js`, a
+    `MessageChannel`; `Api.Detect` a promise, `Stop` and `Cancel`; `worker.js` handles `stop` and `cancel` between
+    pauses. ShotDetector 3.16.1 neither warns nor refuses a source that ends before `FrameCount`. `tools/app-check.mjs`
+    stops every run on every sample half-way: the stats CSV the whole run's rows but the adaptive ratio of the last 2
+    frames, `None`; the shots the whole run's with the next one cut short, no cut missed. One run cancelled, no result.
+    The pauses 0.25% of the runs AOT under Node, 6 µs each in Chromium's worker; 132 of 132 CSVs identical AOT, the
+    whole runs' unchanged. In headless Chromium and Firefox 136 on the Sintel trailer, AOT: stopped at frame 608, the
+    shots, the cards and both downloads (the stats CSV the native whole run's up to there), the stop answered in 201
+    and 136 ms, a run with another threshold started 98 and 129 ms after its click without opening the file; a file
+    picked mid-run abandons it on the same worker; a worker that doesn't answer is terminated after 1.5 s. A
+    `[JSExport]`'s cancelled task never settles its promise in .NET 10: `Detect` fails instead, CLAUDE.md "Gotchas")

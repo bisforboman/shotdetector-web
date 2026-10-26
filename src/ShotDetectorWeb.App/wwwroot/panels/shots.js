@@ -1,5 +1,6 @@
 // The shots, a table under the video and the timeline: a row for each shot as soon as ShotDetector knows it, each row
-// playing the video from the shot's start. A cancelled run's rows stay, with one more line, marked unfinished, from the
+// playing the video from the shot's start. A stopped run's are its result's, the last ending where it stopped. A run
+// lost with its worker (one that didn't answer a stop) keeps its rows, with one more line, marked unfinished, from the
 // last cut to the frame the run had reached (the page's own times, not a shot).
 import { card, on } from '../app.js';
 import { secondsOf, seek, timecode } from '../timeline.js';
@@ -19,13 +20,13 @@ function addRow(shot) {
   last = shot;
 }
 
-// The part of the video after the last cut that a cancelled run had read: the page's own times (frames done over the
+// The part of the video after the last cut that a lost run had read: the page's own times (frames done over the
 // frame rate), not a shot of ShotDetector's, so it says so.
 function addUnfinished(from, to) {
   const r = body.insertRow();
   r.className = 'unfinished';
   row(r, ['unfinished', timecode(from), timecode(to), `${(to - from).toFixed(3)} s`], from);
-  r.title = `Not a shot: the run was cancelled here. Play from ${timecode(from)}`;
+  r.title = `Not a shot: the run was lost here. Play from ${timecode(from)}`;
 }
 
 function row(r, texts, at) {

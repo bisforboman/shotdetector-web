@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using ManagedCodecs;
 using ManagedCodecs.Containers.Mp4;
 using ManagedCodecs.H264;
@@ -132,6 +133,45 @@ public sealed class Mp4Input
         if (options.Yuv420Converter is null)
             options = options with { Yuv420Converter = new SwscaleYuv420() };
         return ShotDetection.Detect(Video, Frames(), options, cancellationToken);
+    }
+
+    /// <summary>
+    /// Detects shots as <see cref="Detect"/> does, through
+    /// <see cref="ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable{YuvFrame}, DetectionOptions?, CancellationToken)"/>
+    /// on <see cref="FramesAsync"/>: the same result, and between frames the caller's own awaits (in the browser, the
+    /// worker's event loop), where it can end the frames early (<paramref name="between"/>) or cancel. Frames that end
+    /// early are a file that ends there: the result is the one for the frames read, stats included (ShotDetector 3.16.1
+    /// neither warns nor refuses when fewer frames come than <see cref="YuvVideo.FrameCount"/> says).
+    /// </summary>
+    public Task<DetectionResult> DetectAsync(int every, Func<int, ValueTask<bool>> between,
+        DetectionOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        options ??= new DetectionOptions();
+        if (options.Yuv420Converter is null)
+            options = options with { Yuv420Converter = new SwscaleYuv420() };
+        return ShotDetection.DetectAsync(Video, FramesAsync(every, between), options, cancellationToken);
+    }
+
+    /// <summary>
+    /// <see cref="Frames"/> as an asynchronous source: after every <paramref name="every"/> frames, before the next one
+    /// is decoded, it awaits <paramref name="between"/> with the number of frames given so far; when that returns false,
+    /// the frames end there, as if the file did.
+    /// </summary>
+    public async IAsyncEnumerable<YuvFrame> FramesAsync(int every, Func<int, ValueTask<bool>> between,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(every, 1);
+        ArgumentNullException.ThrowIfNull(between);
+        using var frames = Frames().GetEnumerator();
+        for (int given = 0; ; given++)
+        {
+            if (given > 0 && given % every == 0 && !await between(given))
+                yield break;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!frames.MoveNext())
+                yield break;
+            yield return frames.Current;
+        }
     }
 
     /// <summary>

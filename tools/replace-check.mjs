@@ -16,7 +16,7 @@ await runMain();
 Open(fileBlob(sample));
 let message;
 try {
-  Detect(JSON.stringify({ detector: 'content' }));
+  await Detect(JSON.stringify({ detector: 'content' }));
   message = '(no exception: the package\'s FastYuv ran)';
 } catch (e) {
   message = e.message.split('\n')[0];
