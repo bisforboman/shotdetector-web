@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>WebCodecs against ManagedCodecs</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; }
+  pre { white-space: pre-wrap; }
+</style>
+<h1>WebCodecs against ManagedCodecs</h1>
+<p>Decodes each sample's access units with this browser's <code>VideoDecoder</code> and compares every frame's planes
+with ManagedCodecs' (tools/webcodecs/serve.mjs, README "WebCodecs"). Parameters: <code>?compare=all</code> or names,
+<code>time=</code>names, <code>repeat=</code>3, <code>accel=</code>prefer-software,prefer-hardware.</p>
+<pre id="log"></pre>
+<script type="module" src="check.js"></script>
+</html>
