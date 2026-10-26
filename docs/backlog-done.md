@@ -313,3 +313,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
     green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
     docs-only pull request)
+
+- Warnings on the page
+  - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.
+  - Where: `src/ShotDetectorWeb.App/Api.cs`: `warnings` (the strings as they are) added to `DetectResponse`;
+    `app.js` shows them under the summary when there are any.
+  - Done when: a run that produces a warning shows it on the page (find which input does, or say none of the samples
+    does and show it with a made-up response in the PR); `tools/check.sh wasm` and `wasm aot` green, CSVs unchanged.
+  - Not: no new warnings of our own.
+  - Status: Done (2026-10-26: `DetectResponse.Warnings`, `DetectionResult.Warnings`' sentences as they are, an empty
+    list when none; `panels/warnings.js` a card under the run's, shown only when a finished run has any, gone on a new
+    file or run. No sample warns, nor can one: on the frames path (`Detect(YuvVideo, IEnumerable<YuvFrame>, ...)`)
+    ShotDetector 3.16.1's only warning is "read sequentially, not in chunks: frames from the caller", for
+    `DetectionMode.Parallel`, an option the page doesn't send (every sample in Auto, Sequential and Parallel, natively;
+    the HLS and chunk-fallback warnings are the file path's). A frame source that ends before `YuvVideo.FrameCount`
+    (the trailer's first 600 of 1253 frames) gives none either. So the PR shows that sentence in a made-up response
+    (worker.js patched in the test's route), in headless Chromium, interpreted and AOT, wide and at 390 px; screenshots
+    in the PR. `DetectionOptions.Warnings` isn't used: Parallel's is told before the first frame, the same sentence as
+    the result's, and telling it live would need an import in `worker.js` and an event in `app.js` for a warning the
+    page can't cause. `tools/app-check.mjs` checks the field is a list of strings on every run. `tools/check.sh wasm`
+    and `wasm aot`: 132 of 132 CSVs identical. Firefox wasn't run: Playwright's and Mozilla's downloads are blocked by
+    the session's network policy. The card is a panel of its own, not in `app.js`: the page's structure row)

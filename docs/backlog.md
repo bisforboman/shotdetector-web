@@ -125,15 +125,6 @@ shots strip", read a lane of the timeline. The waveform, audio measures and bitr
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
 derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
 
-- Warnings on the page
-  - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.
-  - Where: `src/ShotDetectorWeb.App/Api.cs`: `warnings` (the strings as they are) added to `DetectResponse`;
-    `app.js` shows them under the summary when there are any.
-  - Done when: a run that produces a warning shows it on the page (find which input does, or say none of the samples
-    does and show it with a made-up response in the PR); `tools/check.sh wasm` and `wasm aot` green, CSVs unchanged.
-  - Not: no new warnings of our own.
-  - Status: In progress (2026-10-26)
-
 - About this file
   - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
     already returns that description as JSON, but the page shows none of it.
