@@ -7,8 +7,8 @@
 // loaded at all (interpreted: none), the audio pass included.
 // The sound (Api's Audio, after the runs as the page calls it): every sample's, in the JSON's names the page's panels
 // read; for a sample without audio, the core's words the page shows nothing for (NO_AUDIO); the tone sample's waveform
-// loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native: <sample>.waveform.json), each value
-// within 1; each file of --no-aac answered with why it isn't measured.
+// loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native:
+// <sample>.waveform.json), each value within 1; each file of --no-aac answered with why it isn't measured.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
