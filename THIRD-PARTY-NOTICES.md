@@ -8,7 +8,7 @@ which license:
 | ShotDetector, FrameReader | NuGet (`ShotDetector`, `FrameReader`), [bisforboman/shotdetector](https://github.com/bisforboman/shotdetector) | MIT |
 | ShotDetector.FastYuv | NuGet (`ShotDetector.FastYuv`), same repository | **LGPL-2.1-or-later** (a port of FFmpeg's libswscale conversion) |
 | FFmpeg.AutoGen | NuGet, a dependency of ShotDetector (bindings only; unused here, and no FFmpeg library ships) | MIT |
-| ManagedCodecs (Core, Containers, H264) | [bisforboman/ManagedCodecs](https://github.com/bisforboman/ManagedCodecs), submodule `external/ManagedCodecs` | not yet declared upstream (no LICENSE file at the pinned commit) |
+| ManagedCodecs (Core, Containers, H264, Aac) | [bisforboman/ManagedCodecs](https://github.com/bisforboman/ManagedCodecs), submodule `external/ManagedCodecs` | not yet declared upstream (no LICENSE file at the pinned commit) |
 | .NET runtime and libraries | Microsoft | MIT |
 
 **ShotDetector.FastYuv (LGPL-2.1-or-later).** It stays a separate assembly (no single-file output; on WebAssembly,
