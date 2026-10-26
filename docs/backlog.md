@@ -99,7 +99,7 @@ The owner chose (2026-10-26) to take these two up, each with its design question
     The decision changes only if every frame is identical in both browsers; a later row would then build it, with
     ManagedCodecs kept wherever WebCodecs isn't there or differs.
   - Not: no change to the page or the checks.
-  - Status: Open (measure first)
+  - Status: In progress (2026-10-26)
 
 ### First release: the page on GitHub Pages
 
