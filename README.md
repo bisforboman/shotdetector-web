@@ -51,11 +51,15 @@ is a timeline: one time axis, a playhead that follows the video, a click anywher
 over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), the
 scores (each frame's score from the stats CSV, the column the detector cuts on, against the threshold the run used, a
 dot where each cut sits on it, and the spans where `content_val` stays under 1 for a second or more marked as still
-pictures, the page's reading) and,
-once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
+pictures, the page's reading), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
+the MP4's packets (`Api.Packets`; Using the library, below), and, once the first run is done, the sound: its waveform,
+decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
-the player are cards, today the run's summary and downloads; below, the shots as a table whose rows play the video from
-the shot, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
+the player are cards, today the bitrate's numbers and how many cuts fall on a keyframe, the run's summary and
+downloads, the shots' statistics (the number of shots, average and median shot length, shortest and longest, cuts per
+minute, the run's speed against real time: the page's own figures, worked out from the shots, and the shot playing
+now) and the sound's measures; below, the shots as a table whose rows play the video from the shot, the row of the
+shot playing marked, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
 `DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
@@ -189,6 +193,17 @@ duration, with their data skipped; the list is kept on the way, by column, 13 by
 once at the track's sample count. Measured 2026-10-25 natively against `main` on a two-hour file (172,800 frames at
 24 fps, 337,501 AAC packets): `Open` keeps 2.25 MB more and allocates 2.25 MB more, in the same time (0.9 s).
 
+On the page it is `Api.Packets()`, called as soon as the file is opened, whose JSON (CLAUDE.md, "Layout") the
+timeline's Bitrate lane and its card read: the bitrate per second, a tick at each keyframe, and after a run how many
+cuts fall on a keyframe (a shot's first frame in display order), the page's own reading of the packets. JSON by
+column rather than typed arrays: an export returns a string the worker passes on as it is, and a `[JSImport]` of
+typed arrays would need a new import in `worker.js`. Measured 2026-10-26 on a two-hour MP4 (the trailer looped, 640x360
+at 250 kbit/s with 128 kbit/s AAC, 345,625,385 bytes, 172,800 video packets, 1,794 keyframes), 4-core cloud VM: the JSON
+is 2,257,642 characters (13 a packet); under Node `Packets()` takes 20 to 33 ms compiled ahead of time (71 to 111 ms
+interpreted) and `JSON.parse` 7 to 11 ms; in headless Chromium on the AOT bundle, the call through the worker takes 35 to
+49 ms and the parse 6 to 7 ms, and the lane and card show 0.17 s after the file is opened. On Sintel's trailer
+(1,253 packets) the JSON is 14,742 characters, and 5 of the 7 adaptive cuts fall on one of its 17 keyframes.
+
 ### The sound
 
 ```csharp
@@ -229,7 +244,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   frame count, frame rate, length, duration, processed size, cuts, scene CSV and stats CSV must be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
-  same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`). Markdown
+  same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
+  lines go to `out/native/<sample>.packets.txt` for the wasm check). Markdown
   tables go to `out/native-report.md`, (a)'s CSVs to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
@@ -253,7 +269,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   "The file has no audio track." (which the page shows nothing for) for a sample without audio and a reason for each of
   `samples/no-aac/`, that the tone sample's waveform is loud, silent, loud where make-samples.sh puts the tone and the
   gap, each edge within a video frame, and that each waveform's values are within 1 of the
-  native check's (`out/native/<sample>.waveform.json`: the same managed code, another runtime), and that the publish
+  native check's (`out/native/<sample>.waveform.json`: the same managed code, another runtime), that `Packets()` (the
+  bitrate lane's) lists every sample's video packets as ffprobe does (`out/native/<sample>.packets.txt`): the same
+  packets in the same order, each with the same pts, pts_time, size and K and D flags, and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
   Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it, and FrameReader, whose
   waveform and tone code the audio pass runs) is loaded at all, the audio pass included (`LoadedAssemblies()`): the
