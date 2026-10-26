@@ -35,9 +35,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `read` (`FileReaderSync`). The page (no build step, no dependency, native ES modules; README "Running the page";
   decision `2026-10-25-one-page.md`): `index.html` (the layout and the list of panels), `style.css`, `app.js` (the
   states, the options, the estimate, cancel, the demo; the events panels listen to, `call(name, ...args)` and
-  `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
-  `seek()`) and `panels/`: `cuts.js` (a lane), `run.js` (a card: the summary and downloads), `shots.js` (the table
-  below). `Api` prefixes ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach
+  `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)` with its `show(on)`,
+  `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `run.js` (a card: the summary and downloads), `shots.js` (the table
+  below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the sound's
+  measures, labelled measured, what the page derives labelled as its own). `Api` prefixes ManagedCodecs' `InvalidDataException` for the page (a .NET exception's type doesn't reach
   JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
     under the video, as the table). A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
