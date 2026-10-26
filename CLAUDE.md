@@ -41,7 +41,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   waveform, one unless split, of audiowaveform's 16-bit values, full scale 32767; or null), `referenceTone` (`[{ start,
   end, level }]`), `silences` (`[{ start, end }]`), `peaks` (`[{ sample, true, fullScale }]` per channel, dBFS and
   dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
-  null). `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
+  null); `Api.Packets.cs` `Packets()`: `Mp4Input.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
+  discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes).
+  `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
   the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order; `progress` and `shot` posted while `Detect` runs), `wwwroot/blob-read.js` is its
   `read` (`FileReaderSync`). The page (no build step, no dependency, native ES modules; README "Running the page";
@@ -51,8 +53,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `seek()`) and `panels/`: `cuts.js` (a lane), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
   (the table below), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
-  sound's measures, labelled measured, what the page derives labelled as its own), `about.js` (a card on the `opened` event: Open's
-  description in a viewer's words, its JSON folded under them). `Api` prefixes ManagedCodecs'
+  sound's measures, labelled measured, what the page derives labelled as its own), `bitrate.js` (on `opened`: a lane of
+  the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
+  the page's own reading), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
+  folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
     under the video, as the table). A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
@@ -62,7 +66,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
-  `ffprobe -show_packets`; `AudioStreamCheck.cs`: `Mp4Input.Audio` vs ffprobe's first audio stream; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
+  `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
+  vs ffprobe's first audio stream; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
