@@ -130,6 +130,11 @@ every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path run
 103 KB transferred (447 KB raw); FrameReader 26 KB (80 KB). Pages answers with `cache-control: max-age=600` and an
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
+The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's
+`_framework/` against `main` before it, files through `gzip -6`: 17.03 to 17.92 MB raw (+889 KB, 5.2%), 5.08 to 5.34 MB
+compressed (+258 KB, 5.1%). `ManagedCodecs.Aac.wasm` is 168 KB raw (43 KB compressed); the rest is mostly its AOT code
+in `dotnet.native.wasm` (+639 KB, +195 KB compressed), then the core's and the App's new code (+67 KB, +16 KB).
+
 ## Using the library
 
 ```csharp
@@ -179,6 +184,12 @@ FFmpeg's `silencedetect` (every channel below -60 dBFS for 2 s or more), peaks p
 full scale, and loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, loudness range in LU, true peak in dBTP
 from the signal oversampled 4 times). Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
 pass takes about 0.6 s natively. Checked against FFmpeg within tolerances (Checks, audio).
+
+On the page it is `Api.Audio()`, called once a file's first run is done ("Running the page"), whose JSON
+(CLAUDE.md, "Layout") the timeline's Sound lane reads, and the other sound panels with it. Measured 2026-10-26 on the
+AOT bundle in headless Chromium (4-core cloud VM): 0.63 s on the Sintel trailer (0.54 s in Firefox 136); 72 s on a
+two-hour MP4 (the trailer looped, 640x360 at 2.5 Mbit/s with 128 kbit/s AAC, 2.37 GB, 7,169 s of stereo 48 kHz audio),
+whose JSON is 13.5 KB. Under Node, the trailer's pass takes 0.46 s compiled ahead of time and 2.6 s interpreted.
 
 ## Checks
 
