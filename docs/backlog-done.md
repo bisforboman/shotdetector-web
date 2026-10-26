@@ -311,8 +311,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     interpreted on `with-audio-320x240-25.mp4` 22 s, 12 of 12 CSVs and "No FFmpeg assembly loaded at all.", AOT 3 min,
     132 of 132 CSVs on 11 samples); a temporary change of the last byte of the scenes CSV for runs over 1,000 frames
     (only the Sintel trailer) turned run 40335198564 red, AOT 126 of 132 identical while the interpreted check stayed
-    green, then reverted. The docs-only run and the first Pages run on a push follow with the merge, in the follow-up
-    docs-only pull request)
+    green, then reverted. After the merge, Pages run 40337621791 on the push: native, AOT 132 of 132 CSVs on the
+    bundle it then deployed, FastYuv replaced, the site's checks, and the deploy, 7 min 10 s instead of 29 min of CI
+    and 4 of Pages. A docs-only pull request, the one that added this, ran `build` without the checks)
 
 - Bitrate and keyframes
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
@@ -342,6 +343,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the timeline's cuts lane (decision `2026-10-25-one-page.md`), where a click seeks into the shot clicked; the card
     names the shot playing and the table marks its row, scrolling its own box, checked by clicking into every shot and
     playing 13 s to 23 s. Firefox not run: its builds' hosts are outside the session's network policy)
+
+- About this file
+  - Why: the library describes the file as FFmpeg would without FFmpeg (README, the `YuvVideo` table), and `Open`
+    already returns that description as JSON, but the page shows none of it.
+  - Where: `app.js`, `index.html`, `style.css`: after opening, a small block with the codec, width and height, frame
+    rate, pixel format, colour space and range, frame count and duration, in the words a viewer knows (say "BT.709",
+    not the enum's name), the raw JSON one click away. Also the audio track's codec, sample rate and channels, or "no
+    audio": `Open` adds them from the demuxer's `AudioStreamInfo`.
+  - Done when: each sample in `tools/make-samples.sh` shows what its name says (25, 29.97 and 23.976 fps, the colour
+    tags, full range, the cropped 854x480, the audio track where there is one); screenshots in the PR.
+  - Not: no other fields beyond what the core returns.
+  - Status: Done (2026-10-26: `panels/about.js`, on the `opened` event, the codec, size, frame rate, pixel format,
+    colour space and range, frames, duration and audio track, each field's own value in its tooltip and Open's JSON
+    folded under them; `Mp4Input.Audio` names the codec as ffprobe does from the headers (ManagedCodecs calls an MP3
+    in 'mp4a' 'mp4a') with the demuxer's rate and channels, NativeCheck's `AudioStreamCheck.cs` equal to ffprobe's on
+    all 14 samples and no-aac files, app-check.mjs: Open's track is the one `Audio()` measures; every sample shown in
+    headless Chromium on the AOT bundle, as its name says. Firefox not run: this session's network policy blocks
+    Playwright's Firefox and Mozilla's hosts, and a Firefox from conda-forge was refused by its permissions)
 
 - A graph of the scores
   - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
