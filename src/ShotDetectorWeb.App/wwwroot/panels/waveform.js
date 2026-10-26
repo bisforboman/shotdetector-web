@@ -13,7 +13,7 @@ let audio = null;  // Audio()'s JSON for the open file, once it has come
 
 // One SVG over the points' span, in x()'s percentages: drawn again only for a new duration, not for a new width.
 const waveLane = lane('Sound', track => {
-  if (audio === null) return track.replaceChildren();
+  if (audio === null || audio.notMeasured === NO_AUDIO) return track.replaceChildren();
   if (audio.waveform === null) return track.replaceChildren(line(audio.notMeasured));
   track.replaceChildren(svg(audio.waveform));
 });
