@@ -5,9 +5,10 @@
 // before the run. The packets are the file's; the bitrate, the spacing and the cuts on keyframes are the page's own
 // reading of them, and the card says so. Packets an edit list discards (decoded, not shown) are left out of both.
 import { card, on, call } from '../app.js';
-import { lane, timecode, x } from '../timeline.js';
+import { lane, x } from '../timeline.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
+const BAND = 0.3; // the keyframes' share of the lane's height, at its top
 
 let packets = null; // the open file's packets, read for the page (read() below), once Packets() has come
 let opened = null;  // the YuvVideo they are for
@@ -17,8 +18,10 @@ section.id = 'bitrate';
 section.hidden = true;
 const facts = document.createElement('div'), cuts = document.createElement('p'), note = document.createElement('p');
 note.className = 'note';
+const command = document.createElement('code');
+command.textContent = 'ffprobe -show_packets';
 note.append('From the MP4\'s video packets, without decoding: their sizes and keyframe flags are the file\'s, checked ' +
-  'against ffprobe -show_packets. ', own('Underlined dotted: the page\'s own reading.', ''));
+  'against ', command, '. ', own('Underlined dotted: the page\'s own reading.', ''));
 section.append(facts, cuts, note);
 
 // One SVG over the video's span, in x()'s percentages: drawn again only for a new duration, not for a new width.
@@ -50,11 +53,12 @@ function read({ timeBase: { num, den }, pts, sizes, keyframes, discarded }, { fr
   const rate = Array.from(bits, (b, s) => b / (Math.min(s + 1, end) - s));
   const frameOf = new Map(sorted.map((p, f) => [p, f]));
   const keys = keyframes.filter(i => !gone.has(i)).map(i => ({ at: seconds(pts[i]), frame: frameOf.get(pts[i]) }));
-  return { count: pts.length, shown: shown.length, discarded: discarded.length, bytes, end, rate, keys };
+  return { shown: shown.length, discarded: discarded.length, bytes, end, rate, keys };
 }
 
-// The bitrate as a filled step graph, each second's rate its height (the most in one second the lane's), and the
-// keyframes as ticks over it: the viewBox's x is seconds, its y the lane's height from 0 (top) to 1.
+// The keyframes as ticks in a band at the top of the lane, right under the cuts, and below it the bitrate as a filled
+// step graph, each second's rate its height (the most in one second the band's bottom), so a film's thousands of ticks
+// don't hide the graph: the viewBox's x is seconds, its y the lane's height from 0 (top) to 1.
 function svg({ end, rate, keys }) {
   const s = document.createElementNS(SVG, 'svg');
   s.setAttribute('viewBox', `0 0 ${end} 1`);
@@ -62,7 +66,7 @@ function svg({ end, rate, keys }) {
   s.setAttribute('aria-hidden', 'true');
   s.style.left = x(0);
   s.style.width = x(end);
-  const most = Math.max(...rate, 1), y = r => (1 - 0.9 * r / most).toFixed(4);
+  const most = Math.max(...rate, 1), y = r => (1 - (1 - BAND) * r / most).toFixed(4);
   let d = 'M0 1';
   rate.forEach((r, i) => { d += `V${y(r)}H${Math.min(i + 1, end)}`; });
   const area = document.createElementNS(SVG, 'path');
@@ -70,7 +74,7 @@ function svg({ end, rate, keys }) {
   area.setAttribute('d', `${d}V1Z`);
   const ticks = document.createElementNS(SVG, 'path');
   ticks.setAttribute('class', 'keyframes');
-  ticks.setAttribute('d', keys.map(k => `M${k.at.toFixed(4)} 0V1`).join(''));
+  ticks.setAttribute('d', keys.map(k => `M${k.at.toFixed(4)} 0V${BAND}`).join(''));
   s.append(area, ticks);
   return s;
 }
@@ -80,13 +84,13 @@ function show(p) {
   const most = p.rate.reduce((m, r, i) => (r > p.rate[m] ? i : m), 0);
   const spacing = p.keys.length > 1 ? (p.keys.at(-1).at - p.keys[0].at) / (p.keys.length - 1) : null;
   facts.replaceChildren(
-    paragraph(`${p.count.toLocaleString('en')} video packets, ${megabytes(p.bytes)}, ` +
+    paragraph(`${p.shown.toLocaleString('en')} video packets, ${megabytes(p.bytes)}, ` +
       `${p.keys.length.toLocaleString('en')} ${p.keys.length === 1 ? 'keyframe' : 'keyframes'}` +
-      `${p.discarded > 0 ? `; ${p.discarded} discarded by the edit list (decoded, not shown), left out` : ''}.`),
+      `${p.discarded > 0 ? `; ${p.discarded} more discarded by the edit list (decoded, not shown), left out` : ''}.`),
     paragraph(
       own(`${mbits(average)} on average`, 'The page\'s own: the shown packets\' bits over the video\'s length'), ', ',
       own(`${mbits(p.rate[most] ?? 0)} at most in one second`, 'The page\'s own: the most bits in one second of the video'),
-      ` (from ${timecode(most)}).`),
+      ` (from ${clock(most)}).`),
     ...(spacing === null ? [] : [paragraph(own(`A keyframe every ${spacing.toFixed(1)} s on average.`,
       'The page\'s own: the time from the first keyframe to the last over the keyframes between them'))]));
   section.hidden = false;
@@ -149,6 +153,12 @@ function paragraph(...parts) {
   const p = document.createElement('p');
   p.append(...parts);
   return p;
+}
+
+// m:ss, h:mm:ss past an hour.
+function clock(seconds) {
+  const h = Math.floor(seconds / 3600), m = Math.floor(seconds / 60) % 60, ss = String(seconds % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
 const megabytes = bytes => `${(bytes / 1e6).toFixed(bytes < 1e7 ? 2 : 1)} MB`;
