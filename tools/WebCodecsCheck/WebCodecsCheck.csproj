@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    WebCodecs against ManagedCodecs (backlog "WebCodecs: are its frames ManagedCodecs' frames?", README "WebCodecs"):
+    the reference side. Writes each sample's H.264 access units as ManagedCodecs' MP4 demuxer gives them, for
+    tools/webcodecs/ to feed to the browser's VideoDecoder, and the hash of each plane of each frame Mp4Input decodes,
+    to compare the browser's with; and tells where one frame differs. Not part of the checks or of CI.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ShotDetectorWeb.WebCodecsCheck</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ShotDetectorWeb.Core\ShotDetectorWeb.Core.csproj" />
+  </ItemGroup>
+
+</Project>
