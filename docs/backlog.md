@@ -187,32 +187,6 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     languages is how results drift).
   - Status: Open
 
-- Audio measures: reference tone, silence, peaks, loudness
-  - Why: someone checking a master before delivery asks these first. Is there bars and tone at the head (a steady
-    1 kHz sine at -18 or -20 dBFS)? Where is it silent? Does it clip? How loud is it, as EBU R128 measures loudness
-    (LUFS)? All of it comes from the samples the waveform row already decodes. Decision
-    [2026-10-24-audio.md](decisions/2026-10-24-audio.md).
-  - Where: the core, in the waveform's pass, with no second decode and without holding the samples:
-    - the reference tone, as ShotDetector already defines it (`ShotDetection.FindReferenceTone`, FrameReader's
-      `ReferenceTone`): mostly 1 kHz (about ±15 Hz) at a steady level for at least 5 s, breaks of up to 1 s not
-      splitting it, given as start, end and level (`ToneSegment`). Found with FrameReader 2.11.0's `ReferenceToneFinder`
-      (`Add` each chunk of samples, then `Finish`: the segments `ReferenceTone.Find` gives, without FFmpeg,
-      [shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)), so the definition is shared code;
-    - silence: spans below -60 dBFS for 2 s or more (FFmpeg's `silencedetect` defaults);
-    - peak per channel in dBFS, and how many samples reach full scale;
-    - loudness per ITU-R BS.1770-4 and EBU Tech 3341/3342: integrated loudness, loudness range and true peak.
-    The waveform's export returns these too. `app.js` shows a sound panel with the numbers, the tone's span and the
-    silences marked on the shots strip. `tools/NativeCheck` compares the loudness numbers with FFmpeg's
-    `ebur128=peak=true` (within 0.1 LU and 0.1 dB), the silences with `silencedetect` (within a packet) and the tone
-    segments with ShotDetector's `FindReferenceTone` on the same file (within a packet, level within 0.1 dB), on the
-    Sintel trailer and on the waveform row's tone sample, where both tones must come out at -20 dBFS. README "Checks"
-    says these are tolerances, not byte-exact. Depends on the waveform row.
-  - Done when: those checks pass in CI, natively and through the App on wasm interpreted and AOT; the panel shows the
-    trailer's numbers (screenshot in the PR); the PR gives the time the measures add.
-  - Not: no loudness correction or normalising; no codecs other than AAC; no colour bars detection (the Maybe row on
-    picture measures has it).
-  - Status: Open
-
 - Bitrate and keyframes
   - Why: the bitrate rises at cuts and encoders put keyframes at scene changes, so a bitrate graph and keyframe marks
     on the shots strip show the encoder's own view of the cuts next to ShotDetector's. It needs no decoding: each

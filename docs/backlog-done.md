@@ -230,3 +230,39 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     headless Chromium and Firefox 136. The bundle grew 258 KB compressed (889 KB raw), `ManagedCodecs.Aac.wasm` 43 KB
     of it; `Audio()` takes 0.63 s on the trailer and 72 s on a two-hour film, AOT in Chromium (README "The sound").
     The lane is under the timeline's cuts, not on a shots strip: the page's structure row replaced that strip)
+
+- Audio measures: reference tone, silence, peaks, loudness
+  - Why: someone checking a master before delivery asks these first. Is there bars and tone at the head (a steady
+    1 kHz sine at -18 or -20 dBFS)? Where is it silent? Does it clip? How loud is it, as EBU R128 measures loudness
+    (LUFS)? All of it comes from the samples the waveform row already decodes. Decision
+    [2026-10-24-audio.md](decisions/2026-10-24-audio.md).
+  - Where: the core, in the waveform's pass, with no second decode and without holding the samples:
+    - the reference tone, as ShotDetector already defines it (`ShotDetection.FindReferenceTone`, FrameReader's
+      `ReferenceTone`): mostly 1 kHz (about ±15 Hz) at a steady level for at least 5 s, breaks of up to 1 s not
+      splitting it, given as start, end and level (`ToneSegment`). Found with FrameReader 2.11.0's `ReferenceToneFinder`
+      (`Add` each chunk of samples, then `Finish`: the segments `ReferenceTone.Find` gives, without FFmpeg,
+      [shotdetector#494](https://github.com/bisforboman/shotdetector/issues/494)), so the definition is shared code;
+    - silence: spans below -60 dBFS for 2 s or more (FFmpeg's `silencedetect` defaults);
+    - peak per channel in dBFS, and how many samples reach full scale;
+    - loudness per ITU-R BS.1770-4 and EBU Tech 3341/3342: integrated loudness, loudness range and true peak.
+    The waveform's export returns these too. `app.js` shows a sound panel with the numbers, the tone's span and the
+    silences marked on the shots strip. `tools/NativeCheck` compares the loudness numbers with FFmpeg's
+    `ebur128=peak=true` (within 0.1 LU and 0.1 dB), the silences with `silencedetect` (within a packet) and the tone
+    segments with ShotDetector's `FindReferenceTone` on the same file (within a packet, level within 0.1 dB), on the
+    Sintel trailer and on the waveform row's tone sample, where both tones must come out at -20 dBFS. README "Checks"
+    says these are tolerances, not byte-exact. Depends on the waveform row.
+  - Done when: those checks pass in CI, natively and through the App on wasm interpreted and AOT; the panel shows the
+    trailer's numbers (screenshot in the PR); the PR gives the time the measures add.
+  - Not: no loudness correction or normalising; no codecs other than AAC; no colour bars detection (the Maybe row on
+    picture measures has it).
+  - Status: Done (2026-10-26: the core in #26; the page here: `panels/sound.js` on the waveform row's `audio` event (#31),
+    a card with integrated loudness, range and true peak, each channel's peaks and full-scale count, "Reference tone:
+    1 kHz at -20.0 dBFS, 0:00 to 0:06" per segment and the silences, tagged as measured, a silence's length marked as
+    the page's own; a Measures lane under the waveform with the tone's spans and the silences, a click playing from
+    one's start; nothing for a file without audio, one line when not measured. The tone sample's gap is now 3 s, so
+    `silencedetect`'s default 2 s finds it (2 s came out 1.9966 s). `tools/check.sh`: 132 of 132 CSVs identical, the
+    tone sample's silence 0 ms from `silencedetect`. In headless Chromium on the real export: the tone sample's two
+    tones at -20.0 dBFS and the silence between them, the trailer's -13.2 LUFS, 14.1 LU, +1.9 dBTP; screenshots in the
+    PR. Firefox wasn't run: Playwright's Firefox is blocked by the session's network policy and other installs were
+    refused by its permissions. The panel is a lane and a card, not marks on a shots strip: the page's structure row
+    replaced that strip)
