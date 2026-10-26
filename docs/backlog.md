@@ -18,25 +18,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Now
-
-The page's structure, packets in the core and audio in the core are done ([backlog-done.md](backlog-done.md),
-2026-10-25), so the panel rows below can run side by side.
-
-- ShotDetector 3.16.1
-  - Why: 3.16.1 keeps the stats in columns, about 52 B a frame instead of about 400 (bisforboman/shotdetector#512),
-    the largest part of [#20](https://github.com/bisforboman/shotdetector-web/issues/20) that was ShotDetector's.
-    3.16.0 also converts 8-bit 4:2:0 faster with SIMD on WebAssembly, with the same bytes, and adds `ScoreRange` and
-    `Merge` (the workers row below).
-  - Where: `Directory.Packages.props`: ShotDetector and ShotDetector.FastYuv to 3.16.1, and FrameReader to what
-    3.16.1 depends on. Measure the two-hour film's heap again the way README "What the heap holds" did, and update
-    that section and the Waiting row "ShotDetector: the stats in less memory, written row by row" (its column half has
-    shipped; streaming the CSV row by row hasn't).
-  - Done when: `tools/check.sh` green natively and on wasm interpreted and AOT (CI), with the scene and stats CSVs
-    unchanged, and the new heap numbers in the README.
-  - Not: no use of `ScoreRange` or `Merge` yet (their row).
-  - Status: Open
-
 ### Unblocked by ShotDetector 3.15.0
 
 This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-25). It changes `Api.Detect` and
@@ -85,7 +66,7 @@ The owner chose (2026-10-26) to take these two up, each with its design question
     checks that a run split into ranges gives the same CSVs as one worker, on every sample.
   - Done when: the decision is answered and merged, then the build's PR shows the same CSVs split and whole, and the
     speed on the two-hour film with 1, 2 and 4 workers.
-  - Depends on: the 3.16.1 row.
+  - Depends on: the 3.16.1 row (done, 2026-10-26).
   - Status: Open (decision first)
 
 - WebCodecs: are its frames ManagedCodecs' frames?
@@ -224,20 +205,23 @@ The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
 in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are under Next.
 
-- ShotDetector: the stats in less memory, written row by row
-  - Why: since "Memory per frame" the stats CSV is the largest step of a long run: on a two-hour film `Stats.Csv`
-    grows the wasm heap from 250 to 432 MB (322 MB allocated for a 19.8-million-character string), and `Stats` holds
-    about 370 B a frame, 63.7 MB at the end (README "What the heap holds").
+- ShotDetector: the stats CSV written row by row
+  - Why: the half of this that stored the stats by column shipped in ShotDetector 3.16.1
+    (bisforboman/shotdetector#512): on a two-hour film the stats keep 11.3 MB instead of 64.0 (65 B a frame instead of
+    370), and `Stats.Csv` no longer grows the wasm heap there (208 MB, where the run leaves it, instead of 432; README
+    "What the heap holds", 2026-10-26). The CSV is still built as one string: 20 million characters, 175 MB allocated
+    (about 1 KB a frame), still the largest allocation at the end of a run, which fit in the room the heap already had
+    on that film.
   - Where: upstream (bisforboman/shotdetector), an issue for the owner to file, its text in
-    [#23](https://github.com/bisforboman/shotdetector-web/pull/23): the stats stored by column, and
-    `Stats.WriteCsv(TextWriter, position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a
-    `Blob` in pieces (a `[JSImport]` the worker gives), so the whole CSV is never one string.
-  - Status: Waiting on the owner to file it (2026-10-25)
+    [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
+    position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
+    `[JSImport]` the worker gives), so the whole CSV is never one string.
+  - Status: Waiting on the owner to file it (2026-10-25; the columns shipped in 3.16.1 on 2026-10-25)
 
 - ManagedCodecs: the MP4 index without its copies
   - Why: `Mp4Demuxer` allocates about 275 B a sample to index a file and keeps 56 (140 MB and 28.5 MB for a two-hour
-    film with audio): it takes the wasm heap from 34 to 174 MB when a file opens, 250 MB once a run builds its own
-    (README "What the heap holds").
+    film with audio): it takes the wasm heap from 34 to 174 MB when a file opens, 208 MB once a run builds its own
+    (README "What the heap holds", 2026-10-26).
   - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23): each track's samples filled once, a smaller
     `Sample`, optionally only the tracks asked for. Then here: the submodule bumped, the steps measured again.

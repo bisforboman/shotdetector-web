@@ -4,7 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="FrameReader" Version="2.11.0" />
-    <PackageVersion Include="ShotDetector" Version="3.15.0" />
-    <PackageVersion Include="ShotDetector.FastYuv" Version="3.15.0" />
+    <PackageVersion Include="ShotDetector" Version="3.16.1" />
+    <PackageVersion Include="ShotDetector.FastYuv" Version="3.16.1" />
   </ItemGroup>
 </Project>
