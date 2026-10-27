@@ -48,12 +48,13 @@ page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeli
 exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
 is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
-over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), the
+over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), a long
+video's ranges (a band per worker, filled as far as it has got: Long videos across workers, below), the
 scores (each frame's score from the stats CSV, the column the detector cuts on, against the threshold the run used, a
 dot where each cut sits on it, and the spans where `content_val` stays under 1 for a second or more marked as still
 pictures, the page's reading), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
-the MP4's packets (`Api.Packets`; Using the library, below), and, once the first run is done, the sound: its waveform,
-decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
+the MP4's packets (`Api.Packets`; Using the library, below), and, alongside the file's first run, the sound: its
+waveform, decoded in a worker of its own by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
 the player are cards, today the bitrate's numbers and how many cuts fall on a keyframe, the run's summary and
 downloads, the shots' statistics (the number of shots, average and median shot length, shortest and longest, cuts per
@@ -69,7 +70,8 @@ of any size runs: the worker gets the `File` itself, and .NET reads it in slices
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
 run, else `REFERENCE_FPS` at the top of `app.js`); Stop ends the run where it has got to and shows the result for the
 part read, its shots and both CSVs, as a finished run's, labelled "stopped at", and a run with other options then
-starts at once on the opened file (Stopping a run, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
+starts at once on the opened file (Stopping a run, below). A long video is split across several workers, its shots
+shown once their ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
 page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
 `pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
 `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
@@ -251,7 +253,8 @@ full scale, and loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, l
 from the signal oversampled 4 times). Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
 pass takes about 0.6 s natively. Checked against FFmpeg within tolerances (Checks, audio).
 
-On the page it is `Api.Audio()`, called once a file's first run is done ("Running the page"), whose JSON
+On the page it is `Api.Audio()`, called in a worker of its own alongside a file's first run ("Running the page";
+decision [2026-10-26-workers.md](docs/decisions/2026-10-26-workers.md), "The audio pass"), whose JSON
 (CLAUDE.md, "Layout") the timeline's Sound lane reads, and the other sound panels with it. Measured 2026-10-26 on the
 AOT bundle in headless Chromium (4-core cloud VM): 0.63 s on the Sintel trailer (0.54 s in Firefox 136); 72 s on a
 two-hour MP4 (the trailer looped, 640x360 at 2.5 Mbit/s with 128 kbit/s AAC, 2.37 GB, 7,169 s of stereo 48 kHz audio),
