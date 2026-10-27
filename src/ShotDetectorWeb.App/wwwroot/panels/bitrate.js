@@ -3,7 +3,7 @@
 // numbers and how many cuts fall on a keyframe. It needs no decoding: Api's Packets (each video packet's pts, size and
 // flags, as ffprobe -show_packets lists them, checked against it: README, Checks) comes right after the file is opened,
 // before the run. The packets are the file's; the bitrate, the spacing and the cuts on keyframes are the page's own
-// reading of them, and the card says so. Packets an edit list discards (decoded, not shown) are left out of both.
+// reading of them, and the card's mark says so. Packets an edit list discards (decoded, not shown) are left out of both.
 import { card, on, call } from '../app.js';
 import { lane, x } from '../timeline.js';
 
@@ -13,7 +13,11 @@ const BAND = 0.3; // the keyframes' share of the lane's height, at its top
 let packets = null; // the open file's packets, read for the page (read() below), once Packets() has come
 let opened = null;  // the YuvVideo they are for
 
-const section = card('Bitrate and keyframes');
+const section = card('Bitrate and keyframes', {
+  mark: 'page',
+  markTitle: 'The page\'s arithmetic on the packets: their sizes and keyframe flags are the file\'s, checked against ' +
+    'ffprobe -show_packets; the rates, the spacing and the cuts on keyframes are worked out here',
+});
 section.id = 'bitrate';
 section.hidden = true;
 const facts = document.createElement('div'), cuts = document.createElement('p'), note = document.createElement('p');
@@ -21,7 +25,7 @@ note.className = 'note';
 const command = document.createElement('code');
 command.textContent = 'ffprobe -show_packets';
 note.append('From the MP4\'s video packets, without decoding: their sizes and keyframe flags are the file\'s, checked ' +
-  'against ', command, '. ', own('Underlined dotted: the page\'s own reading.', ''));
+  'against ', command, '.');
 section.append(facts, cuts, note);
 
 // One SVG over the video's span, in x()'s percentages: drawn again only for a new duration, not for a new width.
