@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mockup: the page as proposed (decision 2026-10-26-new-ui.md)</title>
+  <!-- A static mockup of docs/decisions/2026-10-26-new-ui.md's proposed layout, nothing of the real page: no runtime,
+       no worker, the Sintel trailer's numbers from a run on the live page (2026-10-26) typed in, the lanes drawn by
+       hand to look like it, grey boxes where the thumbnails would be. Open it as a file. ?state=idle, ?state=detecting
+       ?state=done (the default) or ?state=stopped (a run stopped at frame 608, as #42 shows it) shows that state; the
+       toolbar's buttons switch too. The tokens and type are the
+       live page's style.css, so what differs is the layout, not the look. -->
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafaf9; --fg: #1c1917; --muted: #57534e; --line: #d6d3d1; --panel: #ffffff; --accent: #1d4ed8;
+      --playhead: #dc2626; --tone: #059669; --keyframe: #c2410c; --threshold: #b45309;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1c1917; --fg: #f5f5f4; --muted: #a8a29e; --line: #44403c; --panel: #292524; --accent: #93c5fd;
+        --playhead: #f87171; --tone: #34d399; --keyframe: #fb923c; --threshold: #fbbf24; }
+    }
+    body { margin: 0 auto; max-width: 80rem; padding: 1rem 1rem 3rem; background: var(--bg); color: var(--fg); }
+    a { color: var(--accent); }
+    [hidden] { display: none !important; }
+    button { font: inherit; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 0.375rem; border: 1px solid var(--accent);
+      background: var(--accent); color: var(--bg); cursor: pointer; }
+    button.quiet { background: transparent; color: var(--accent); }
+    button:disabled { opacity: 0.5; cursor: default; }
+    select, input { font: inherit; padding: 0.3rem 0.4rem; min-width: 7rem; }
+    .card { padding: 0.75rem 1rem; border: 1px solid var(--line); border-radius: 0.5rem; background: var(--panel); }
+    .card h2 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    .card p { margin: 0.5rem 0 0; }
+    .card h2 + p { margin-top: 0; }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 0 1rem; margin: 0; font-variant-numeric: tabular-nums; }
+    dt { color: var(--muted); } dd { margin: 0; }
+    .note { font-size: 0.8rem; color: var(--muted); }
+    /* The provenance mark: one chip, three words. */
+    .mark { padding: 0 0.3rem; border: 1px solid var(--line); border-radius: 0.25rem; font-weight: normal; font-size: 0.75rem;
+      color: var(--muted); white-space: nowrap; cursor: help; vertical-align: 0.1em; }
+    .mark.exact { border-color: var(--tone); color: var(--tone); }
+
+    /* The landing (idle): the pitch, the drop zone with the demo in it, the options. */
+    body[data-state="idle"] .toolbar, body[data-state="idle"] .status, body[data-state="idle"] .result { display: none; }
+    body:not([data-state="idle"]) .landing { display: none; }
+    .landing h1 { margin: 0.5rem 0 0.25rem; font-size: 1.6rem; }
+    .landing > p { margin-top: 0; color: var(--muted); max-width: 48rem; }
+    .drop { display: grid; justify-items: center; gap: 0.35rem; margin: 1.5rem 0 1rem; padding: 2.5rem 1rem; border: 2px dashed var(--line);
+      border-radius: 0.5rem; background: var(--panel); text-align: center; cursor: pointer; }
+    .drop strong { font-size: 1.1rem; }
+    .drop small { color: var(--muted); }
+    .drop .demo { margin-top: 0.75rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .drop .demo small { max-width: 32rem; }
+    .options { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; }
+    .options label { display: grid; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
+    .landing .options { margin-bottom: 1rem; }
+
+    /* The toolbar (a file chosen): the file, the options and the one button, on one line; the status under it. */
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: end; padding-bottom: 0.75rem; border-bottom: 1px solid var(--line); }
+    .toolbar .title { display: grid; }
+    .toolbar .title strong { font-size: 1.05rem; }
+    .toolbar .file { display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
+    .toolbar .file small { color: var(--muted); }
+    .toolbar .actions { display: flex; gap: 0.5rem; margin-left: auto; }
+    .status { display: grid; gap: 0.25rem; min-height: 2.25rem; padding: 0.4rem 0; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+    .status progress { width: 100%; height: 0.35rem; }
+    body[data-state="done"] .detecting, body[data-state="detecting"] .done, body[data-state="stopped"] .detecting { display: none; }
+    body[data-state="stopped"] .done-only, body:not([data-state="stopped"]) .stopped { display: none; }
+
+    /* The result: the video and the run's card side by side, the timeline across the width, the shots, then the details. */
+    .result { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-areas: "player run" "timeline timeline" "shots shots" "details details";
+      gap: 1.25rem; align-items: start; margin-top: 0.5rem; }
+    .player { grid-area: player; }
+    .run { grid-area: run; }
+    .timeline { grid-area: timeline; }
+    .shots { grid-area: shots; }
+    .details { grid-area: details; display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; }
+    @media (max-width: 48rem) { .axis span:nth-child(even) { display: none; } .shots th:nth-child(4), .shots td:nth-child(4) { display: none; } .thumb { width: 4rem; } .result { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player" "run" "timeline" "shots" "details"; gap: 1rem; } }
+    video, .video { display: block; width: 100%; aspect-ratio: 854 / 480; background: #000; border-radius: 0.375rem; }
+    .now { margin: 0.4rem 0 0; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+    .now b { font-weight: 600; }
+    .run .figures { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0; font-variant-numeric: tabular-nums; }
+    .run .figures span { display: grid; } .run .figures small { color: var(--muted); } .run .figures strong { font-size: 1.25rem; font-weight: 600; }
+    .downloads { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+    .warnings { margin: 0.75rem 0 0; padding: 0.5rem 0.75rem; border-left: 4px solid var(--threshold); background: color-mix(in srgb, var(--threshold) 8%, transparent); font-size: 0.9rem; }
+
+    /* The timeline, as timeline.js lays it out: labels left, tracks right, the playhead across. Wider, nothing else. */
+    .lanes { display: flex; font-size: 0.8rem; user-select: none; }
+    .lanes .labels { flex: none; width: 4.5rem; color: var(--muted); }
+    .lane-label, .track { height: 1.75rem; } .lane-label { line-height: 1.75rem; }
+    .lane-label.tall, .track.tall { height: 3.5rem; } .lane-label.tall { line-height: 3.5rem; }
+    .lane-label.taller, .track.taller { height: 4.5rem; } .lane-label.taller { line-height: 4.5rem; }
+    .tracks { position: relative; flex: 1; min-width: 0; cursor: pointer; }
+    .track { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-top: none; }
+    .track:first-child { border-top: 1px solid var(--line); border-radius: 0.25rem 0.25rem 0 0; }
+    .track svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .axis { position: relative; height: 1.25rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .axis span { position: absolute; top: 0; padding-top: 0.2rem; transform: translateX(-50%); white-space: nowrap; }
+    .axis span::before { content: ""; position: absolute; top: 0; left: 50%; height: 0.2rem; border-left: 1px solid var(--line); }
+    .axis span:first-child { transform: none; } .axis span:first-child::before { left: 0; }
+    .playhead { position: absolute; top: 0; bottom: 1.25rem; width: 2px; margin-left: -1px; background: var(--playhead); pointer-events: none; }
+    .scanned { position: absolute; top: 0; bottom: 0; left: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+    .tick { position: absolute; top: 15%; bottom: 15%; width: 2px; margin-left: -1px; background: var(--fg); }
+    .legend { position: absolute; top: 0; left: 0; padding: 0 0.25rem; font-size: 0.7rem; color: var(--muted); background: color-mix(in srgb, var(--panel) 80%, transparent); }
+    .level { position: absolute; right: 0; padding: 0 0.25rem; font-size: 0.7rem; color: var(--threshold); background: color-mix(in srgb, var(--panel) 80%, transparent); }
+    .stillspan { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 35%, transparent) 0 2px, transparent 2px 6px); }
+    .stillspan span { position: absolute; bottom: 0; left: 0.25rem; font-size: 0.7rem; color: var(--muted); text-decoration: underline dotted; }
+    .lanes .timeline-note { font-size: 0.75rem; color: var(--muted); }
+
+    /* The shots: a table with a still per shot, in its own scroll box as today. */
+    .shots { max-height: 70vh; overflow: auto; padding-top: 0; }
+    .shots h2 { position: sticky; top: 0; margin: 0; padding: 0.75rem 0 0.5rem; background: var(--panel); }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+    th, td { padding: 0.3rem 0.5rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+    th { position: sticky; top: 2.75rem; background: var(--panel); }
+    th.still, td.still { text-align: left; width: 6rem; }
+    tbody tr { cursor: pointer; } tbody tr:hover { background: var(--bg); }
+    tbody tr.current { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+    tbody tr.current td:first-child { box-shadow: inset 3px 0 var(--accent); }
+    .thumb { display: inline-grid; place-items: center; width: 5.5rem; aspect-ratio: 854 / 480; border-radius: 0.2rem; background: #333; color: #bbb; font-size: 0.7rem; }
+    .peaks th { position: static; }
+    footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+    .banner { margin: 0 0 1rem; padding: 0.5rem 0.75rem; border: 1px solid var(--threshold); border-radius: 0.375rem; font-size: 0.85rem; color: var(--muted); }
+    .banner a { margin-left: 0.5rem; }
+  </style>
+</head>
+<body data-state="done">
+  <p class="banner">A mockup of the proposed layout, with a run's real numbers typed in and the lanes drawn by hand. States:
+    <a href="?state=idle">idle</a> <a href="?state=detecting">detecting</a> <a href="?state=done">done</a> <a href="?state=stopped">stopped</a></p>
+
+  <!-- Idle: the landing. One screen: the pitch, the drop zone (the demo inside it), the options. -->
+  <section class="landing">
+    <h1>Shot detection in the browser</h1>
+    <p>Pick an MP4 and get its shots, the same as <a href="https://www.scenedetect.com/">scenedetect</a> finds them, byte for
+      byte. The video is decoded and analysed here, on this machine: nothing is uploaded.</p>
+    <label class="drop">
+      <strong>Choose an MP4, or drop one here</strong>
+      <small>8-bit 4:2:0 H.264, progressive, constant frame rate, any size: it is read in parts, never uploaded</small>
+      <span class="demo"><button type="button" onclick="go('detecting')">Try the demo</button>
+        <small>The trailer of <a href="https://durian.blender.org/">Sintel</a>, 52 s at 854×480 (© Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC-BY 3.0</a>)</small></span>
+    </label>
+    <div class="options">
+      <label>Detector <select><option>adaptive</option><option>content</option><option>threshold</option><option>histogram</option><option>hash</option></select></label>
+      <label>Threshold <input type="number" value="3"></label>
+      <label>Minimum shot length <input type="text" value="0.6s"></label>
+      <button type="button" disabled>Detect shots</button>
+    </div>
+  </section>
+
+  <!-- A file chosen: the landing folds into a toolbar. -->
+  <header class="toolbar">
+    <div class="title"><strong>Shot detection in the browser</strong>
+      <span class="file"><span>sintel-trailer.mp4</span><small>9.6 MB · 854×480 · 24 fps · 52.2 s · AAC</small><a href="#" onclick="go('idle'); return false">Change</a></span></div>
+    <div class="options">
+      <label>Detector <select><option>adaptive</option><option>content</option><option>threshold</option><option>histogram</option><option>hash</option></select></label>
+      <label>Threshold <input type="number" value="3"></label>
+      <label>Minimum shot length <input type="text" value="0.6s"></label>
+    </div>
+    <div class="actions">
+      <button type="button" class="done" onclick="go('detecting')">Detect shots</button>
+      <button type="button" class="quiet detecting">Pause</button>
+      <button type="button" class="quiet detecting" onclick="go('stopped')">Stop</button>
+    </div>
+  </header>
+  <div class="status">
+    <progress class="detecting" max="1" value="0.33"></progress>
+    <span class="detecting">Frame 412 of 1,253 · 52 frames per second · about 16 s left (estimate from this browser's last run)</span>
+    <span class="done done-only">Done in 21.1 s, 59 frames per second (2.5 times real time). The sound measured in 0.6 s.</span>
+    <span class="stopped">Stopped at 00:00:25.333, frame 608 of 1,253, after 10.1 s (60 frames per second). The sound measured in 0.6 s.</span>
+  </div>
+
+  <main class="result">
+    <section class="player">
+      <div class="video"></div>
+      <p class="now"><b>Shot 2 of <span class="done-only">8</span><span class="stopped">5</span></b> · 00:00:13.917 – 00:00:16.500 · 1.2 s in <span class="detecting">· 3 shots so far</span></p>
+    </section>
+
+    <section class="run card">
+      <h2>This run <span class="mark exact" title="The scenes and stats CSVs are what scenedetect writes, byte for byte: checked on every sample, natively and on wasm">scenedetect's, byte for byte</span></h2>
+      <p class="figures done done-only">
+        <span><strong>8</strong><small>shots</small></span>
+        <span><strong>7</strong><small>cuts</small></span>
+        <span><strong>52.21 s</strong><small>1,253 frames at 24 fps</small></span>
+        <span><strong>adaptive 3</strong><small>min shot 0.6 s</small></span>
+      </p>
+      <p class="figures stopped">
+        <span><strong>5</strong><small>shots, the last ending where it stopped</small></span>
+        <span><strong>4</strong><small>cuts</small></span>
+        <span><strong>00:00:25.333</strong><small>stopped at: 608 of 1,253 frames read</small></span>
+        <span><strong>adaptive 3</strong><small>min shot 0.6 s</small></span>
+      </p>
+      <p class="figures detecting">
+        <span><strong>3</strong><small>shots so far</small></span>
+        <span><strong>00:00:17</strong><small>of 00:00:52 read</small></span>
+        <span><strong>adaptive 3</strong><small>min shot 0.6 s</small></span>
+      </p>
+      <p class="downloads done"><a href="#" download>Scenes CSV</a> <a href="#" download>Stats CSV</a>
+        <small class="note">sintel-trailer.scenes.csv, sintel-trailer.stats.csv: what <code>scenedetect -s</code> writes<span class="stopped"> for the part read</span></small></p>
+      <p class="downloads detecting"><small class="note">The downloads come when the run finishes or is stopped.</small></p>
+      <p class="warnings done">Read sequentially, not in chunks: frames from the caller. <span class="note">(a warning of ShotDetector's, shown here when a run has one; this run had none, the line is for the mockup)</span></p>
+    </section>
+
+    <section class="timeline">
+      <div class="lanes">
+        <div class="labels">
+          <div class="lane-label">Cuts</div>
+          <div class="lane-label taller">Scores</div>
+          <div class="lane-label tall">Bitrate</div>
+          <div class="lane-label tall">Sound</div>
+          <div class="lane-label" style="visibility:hidden">Time</div>
+        </div>
+        <div class="tracks">
+          <div class="track">
+            <div class="scanned detecting" style="width: 33%"></div><div class="scanned stopped" style="width: 48.5%"></div>
+            <span class="tick" style="left: 26.66%"></span><span class="tick" style="left: 31.6%"></span>
+            <span class="tick done" style="left: 33.5%"></span><span class="tick done" style="left: 45.57%"></span>
+            <span class="tick done done-only" style="left: 49.56%"></span><span class="tick done done-only" style="left: 52.5%"></span><span class="tick done done-only" style="left: 53.63%"></span>
+          </div>
+          <div class="track taller">
+            <div class="stillspan" style="left: 0; width: 4%"><span>still</span></div>
+            <div class="stillspan" style="left: 93.5%; width: 6.5%"><span>still</span></div>
+            <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+              <polyline fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke" points="0,96 40,95 60,90 90,88 120,92 150,89 180,86 210,90 240,84 266,20 270,88 300,86 316,30 320,90 335,25 340,88 370,85 400,83 430,87 455,18 460,86 480,84 495,22 500,85 520,80 525,24 530,84 536,26 540,86 580,84 620,88 660,82 700,86 740,84 780,88 820,83 860,87 900,85 935,96 1000,96"/>
+              <line x1="0" y1="52" x2="1000" y2="52" stroke="var(--threshold)" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>
+              <g fill="var(--fg)" opacity="0.6"><circle cx="266" cy="20" r="3"/><circle cx="316" cy="30" r="3"/><circle cx="335" cy="25" r="3"/><circle cx="455" cy="18" r="3"/><circle cx="495" cy="22" r="3"/><circle cx="525" cy="24" r="3"/><circle cx="536" cy="26" r="3"/></g>
+            </svg>
+            <span class="legend">adaptive_ratio (w=2)</span><span class="level" style="top: 42%">3</span>
+            <div class="stopped" style="position: absolute; top: 0; bottom: 0; left: 48.5%; right: 0; background: var(--panel); border-left: 1px dashed var(--line)"></div>
+          </div>
+          <div class="track tall">
+            <svg viewBox="0 0 52 1" preserveAspectRatio="none" aria-hidden="true">
+              <path fill="color-mix(in srgb, var(--muted) 45%, transparent)" d="M0 1V0.75H2V0.8H4V0.7H6V0.78H8V0.6H10V0.76H12V0.55H14V0.5H16V0.66H18V0.45H20V0.6H22V0.5H24V0.42H26V0.55H28V0.4H30V0.3H31V0.72H34V0.6H36V0.7H38V0.58H40V0.8H42V0.9H44V0.95H46V0.9H48V0.98H52V1Z"/>
+              <path stroke="var(--keyframe)" stroke-width="1.5" vector-effect="non-scaling-stroke" d="M0 0V0.3M3 0V0.3M6 0V0.3M9 0V0.3M12 0V0.3M13.917 0V0.3M16.5 0V0.3M19.5 0V0.3M22.5 0V0.3M23.792 0V0.3M26 0V0.3M28 0V0.3M31 0V0.3M34 0V0.3M37 0V0.3M45 0V0.3M48 0V0.3"/>
+            </svg>
+          </div>
+          <div class="track tall">
+            <svg viewBox="0 0 52 2" preserveAspectRatio="none" aria-hidden="true">
+              <path fill="color-mix(in srgb, var(--accent) 75%, transparent)" d="M0 1 L1 0.98 2 0.9 3 0.7 4 0.85 5 0.6 6 0.75 7 0.5 8 0.8 9 0.55 10 0.7 11 0.4 12 0.65 13 0.45 14 0.8 15 0.35 16 0.6 17 0.5 18 0.75 19 0.4 20 0.55 21 0.3 22 0.6 23 0.45 24 0.5 25 0.25 26 0.4 27 0.2 28 0.15 29 0.3 30 0.1 31 0.2 32 0.3 33 0.2 34 0.45 35 0.4 36 0.6 37 0.5 38 0.7 39 0.55 40 0.75 41 0.6 42 0.8 43 0.7 44 0.85 45 0.6 46 0.5 47 0.7 48 0.8 49 0.9 50 0.95 51 0.98 52 1 L51 1.02 50 1.05 49 1.1 48 1.2 47 1.3 46 1.5 45 1.4 44 1.15 43 1.3 42 1.2 41 1.4 40 1.25 39 1.45 38 1.3 37 1.5 36 1.4 35 1.6 34 1.55 33 1.8 32 1.7 31 1.8 30 1.9 29 1.7 28 1.85 27 1.8 26 1.6 25 1.75 24 1.5 23 1.55 22 1.4 21 1.7 20 1.45 19 1.6 18 1.25 17 1.5 16 1.4 15 1.65 14 1.2 13 1.55 12 1.35 11 1.6 10 1.3 9 1.45 8 1.2 7 1.5 6 1.25 5 1.4 4 1.15 3 1.3 2 1.1 1 1.02 Z"/>
+            </svg>
+          </div>
+          <div class="axis">
+            <span style="left:0">0:00</span><span style="left:9.58%">0:05</span><span style="left:19.15%">0:10</span><span style="left:28.73%">0:15</span>
+            <span style="left:38.31%">0:20</span><span style="left:47.88%">0:25</span><span style="left:57.46%">0:30</span><span style="left:67.04%">0:35</span>
+            <span style="left:76.61%">0:40</span><span style="left:86.19%">0:45</span><span style="left:95.77%">0:50</span>
+          </div>
+          <div class="playhead" style="left: 28.96%"></div>
+        </div>
+      </div>
+      <p class="timeline-note note">One axis for everything over time; a click seeks the video. The Measures lane (the reference tone, silences) shows when there is one; a run split across workers gets a Ranges lane while it goes.</p>
+    </section>
+
+    <section class="shots card">
+      <h2>Shots</h2>
+      <table>
+        <thead><tr><th class="still">Still <span class="mark" title="The browser's own decode of the frame, not ShotDetector's">the browser's</span></th><th>Shot</th><th>Start</th><th>End</th><th>Length</th></tr></thead>
+        <tbody>
+          <tr><td class="still"><span class="thumb">00:00:00</span></td><td>1</td><td>00:00:00.000</td><td>00:00:13.917</td><td>13.917 s</td></tr>
+          <tr class="current"><td class="still"><span class="thumb">00:00:13</span></td><td>2</td><td>00:00:13.917</td><td>00:00:16.500</td><td>2.583 s</td></tr>
+          <tr><td class="still"><span class="thumb">00:00:16</span></td><td>3</td><td>00:00:16.500</td><td>00:00:17.500</td><td>1.000 s</td></tr>
+          <tr class="done"><td class="still"><span class="thumb">00:00:17</span></td><td>4</td><td>00:00:17.500</td><td>00:00:23.792</td><td>6.292 s</td></tr>
+          <tr class="stopped"><td class="still"><span class="thumb">00:00:23</span></td><td>5</td><td>00:00:23.792</td><td>00:00:25.333</td><td>1.541 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:23</span></td><td>5</td><td>00:00:23.792</td><td>00:00:25.875</td><td>2.083 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:25</span></td><td>6</td><td>00:00:25.875</td><td>00:00:27.417</td><td>1.542 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:27</span></td><td>7</td><td>00:00:27.417</td><td>00:00:28.000</td><td>0.583 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:28</span></td><td>8</td><td>00:00:28.000</td><td>00:00:52.208</td><td>24.208 s</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="details">
+      <section class="card done">
+        <h2>Shot statistics <span class="mark" title="Worked out by the page from the shots ShotDetector found, not ShotDetector's numbers">the page's</span></h2>
+        <dl><dt>Shots</dt><dd><span class="done-only">8</span><span class="stopped">5 (the part read; the rest of the card as for the whole run, for the mockup)</span></dd><dt>Average length</dt><dd>6.53 s</dd><dt>Median length</dt><dd>2.33 s</dd>
+          <dt>Shortest</dt><dd><a href="#">0.58 s (shot 7)</a></dd><dt>Longest</dt><dd><a href="#">24.21 s (shot 8)</a></dd>
+          <dt>Cuts per minute</dt><dd>8.0</dd><dt>Cuts on a keyframe</dt><dd>5 of 7</dd></dl>
+        <p class="note">From the run's shots: their lengths as in the scenes CSV. Exact values in the tooltips.</p>
+      </section>
+      <section class="card done">
+        <h2>Sound <span class="mark" title="The core's measure, checked against FFmpeg's ebur128 and silencedetect, or ShotDetector's FindReferenceTone, within a tolerance">measured</span></h2>
+        <p>AAC, 48 kHz, 2 channels, 51.95 s.</p>
+        <dl><dt>Integrated</dt><dd>-13.2 LUFS</dd><dt>Range</dt><dd>14.2 LU</dd><dt>True peak</dt><dd>1.4 dBTP</dd>
+          <dt>Peaks</dt><dd>1.4 dBFS (36 at full scale), 0.5 dBFS (25)</dd>
+          <dt>Reference tone</dt><dd>none</dd><dt>Silence</dt><dd>none of 2 s or more</dd></dl>
+        <p class="note">EBU R128 (ITU-R BS.1770-4); each measure's check in its tooltip.</p>
+      </section>
+      <section class="card">
+        <h2>Bitrate and keyframes <span class="mark" title="The packets' sizes and keyframe flags are the file's, checked against ffprobe -show_packets; the rates are the page's arithmetic on them">the page's</span></h2>
+        <dl><dt>Packets</dt><dd>1,253, 9.20 MB</dd><dt>Keyframes</dt><dd>17, one every 3.0 s</dd>
+          <dt>Average</dt><dd>1.41 Mbit/s</dd><dt>Peak second</dt><dd>4.24 Mbit/s at 0:30</dd></dl>
+        <p class="note">From the MP4's video packets, without decoding.</p>
+      </section>
+      <section class="card">
+        <h2>About this file <span class="mark" title="Open's description of the file, each field checked against FFmpeg's">the core's</span></h2>
+        <dl><dt>Video</dt><dd>H.264 (AVC)</dd><dt>Size</dt><dd>854 × 480</dd><dt>Frame rate</dt><dd>24 fps</dd><dt>Pixel format</dt><dd>4:2:0, 8 bits</dd>
+          <dt>Colour space</dt><dd>BT.709</dd><dt>Range</dt><dd>Limited (16–235)</dd><dt>Frames</dt><dd>1,253</dd><dt>Duration</dt><dd>52.208 s</dd><dt>Audio</dt><dd>AAC, 48 kHz, stereo</dd></dl>
+        <p class="note"><a href="#">JSON</a></p>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    <p>What runs where: <a href="https://github.com/bisforboman/ManagedCodecs">ManagedCodecs</a> demuxes the MP4 and decodes the H.264 and the
+      AAC, ShotDetector.FastYuv converts the frames and <a href="https://github.com/bisforboman/shotdetector">ShotDetector</a> finds the shots,
+      all of it .NET on WebAssembly, in a worker of this page. The player is your browser's own; the shots don't come from it.</p>
+    <p>Marks: <span class="mark exact">scenedetect's, byte for byte</span> the CSVs, checked equal on every sample; <span class="mark">measured</span>
+      the core's number, checked against FFmpeg within a tolerance; <span class="mark">the page's</span> worked out on the page for display.</p>
+    <p>Nothing leaves your machine: the file is read here, there is no upload, no server and no analytics.
+      <a href="https://github.com/bisforboman/shotdetector-web">Source</a> · MIT license · Third-party notices (ShotDetector.FastYuv is LGPL-2.1-or-later, its own replaceable file)</p>
+  </footer>
+
+  <script>
+    const state = new URLSearchParams(location.search).get('state');
+    if (['idle', 'detecting', 'done', 'stopped'].includes(state)) document.body.dataset.state = state;
+    function go(s) { document.body.dataset.state = s; history.replaceState(null, '', `?state=${s}`); }
+  </script>
+</body>
+</html>
