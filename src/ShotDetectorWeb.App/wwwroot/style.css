@@ -151,6 +151,13 @@ video { display: block; width: 100%; background: #000; border-radius: 0.375rem; 
 
 /* The scores lane: the run's score per frame on a canvas, the threshold dashed, the cuts marked; the column's name and
    the threshold's value over it, the still pictures (the page's reading) hatched behind it. */
+/* The ranges lane: a split run's range per worker as a band, filled as far as the worker has got. */
+.track.ranges .range {
+  position: absolute; top: 20%; bottom: 20%; border-left: 2px solid var(--panel); background: var(--line);
+}
+.track.ranges .done { height: 100%; background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.track.ranges .not-measured { line-height: 1.75rem; }
+
 .track.scores, .lane-label.scores { height: 4.5rem; }
 .lane-label.scores { line-height: 4.5rem; }
 .track.scores { --score: var(--accent); --score-threshold: #b45309; --score-cut: color-mix(in srgb, var(--fg) 55%, transparent); }
