@@ -19,7 +19,7 @@ namespace ShotDetectorWeb;
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
 /// <see cref="InvalidDataException"/>.
 /// </remarks>
-public sealed class Mp4Input
+public sealed partial class Mp4Input
 {
     // FFmpeg's names of the H.264 / ISO matrix coefficients (libavutil's av_color_space_name); unspecified (2) is "".
     static readonly string[] MatrixNames =
@@ -129,9 +129,7 @@ public sealed class Mp4Input
     /// </summary>
     public DetectionResult Detect(DetectionOptions? options = null, CancellationToken cancellationToken = default)
     {
-        options ??= new DetectionOptions();
-        if (options.Yuv420Converter is null)
-            options = options with { Yuv420Converter = new SwscaleYuv420() };
+        options = WithConverter(options);
         return ShotDetection.Detect(Video, Frames(), options, cancellationToken);
     }
 
@@ -146,9 +144,7 @@ public sealed class Mp4Input
     public Task<DetectionResult> DetectAsync(int every, Func<int, ValueTask<bool>> between,
         DetectionOptions? options = null, CancellationToken cancellationToken = default)
     {
-        options ??= new DetectionOptions();
-        if (options.Yuv420Converter is null)
-            options = options with { Yuv420Converter = new SwscaleYuv420() };
+        options = WithConverter(options);
         return ShotDetection.DetectAsync(Video, FramesAsync(every, between), options, cancellationToken);
     }
 
@@ -157,13 +153,21 @@ public sealed class Mp4Input
     /// is decoded, it awaits <paramref name="between"/> with the number of frames given so far; when that returns false,
     /// the frames end there, as if the file did.
     /// </summary>
-    public async IAsyncEnumerable<YuvFrame> FramesAsync(int every, Func<int, ValueTask<bool>> between,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<YuvFrame> FramesAsync(int every, Func<int, ValueTask<bool>> between,
+        CancellationToken cancellationToken = default) =>
+        Paused(Frames(), int.MaxValue, every, between, cancellationToken);
+
+    /// <summary>
+    /// <paramref name="source"/>'s first <paramref name="limit"/> frames as an asynchronous source, awaiting
+    /// <paramref name="between"/> every <paramref name="every"/> frames (<see cref="FramesAsync"/>).
+    /// </summary>
+    static async IAsyncEnumerable<YuvFrame> Paused(IEnumerable<YuvFrame> source, int limit, int every,
+        Func<int, ValueTask<bool>> between, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(every, 1);
         ArgumentNullException.ThrowIfNull(between);
-        using var frames = Frames().GetEnumerator();
-        for (int given = 0; ; given++)
+        using var frames = source.GetEnumerator();
+        for (int given = 0; given < limit; given++)
         {
             if (given > 0 && given % every == 0 && !await between(given))
                 yield break;
@@ -178,9 +182,12 @@ public sealed class Mp4Input
     /// The decoded frames in display order, each valid until the enumeration moves on. Every enumeration decodes the file
     /// again from its start.
     /// </summary>
-    public IEnumerable<YuvFrame> Frames()
+    public IEnumerable<YuvFrame> Frames() => Frames(0);
+
+    /// <summary><see cref="Frames()"/> decoded from video packet <paramref name="fromPacket"/> (decode order), a keyframe.</summary>
+    IEnumerable<YuvFrame> Frames(int fromPacket)
     {
-        foreach (var frame in DecodedFrames())
+        foreach (var frame in DecodedFrames(fromPacket))
         {
             using (frame)
             {
@@ -271,15 +278,21 @@ public sealed class Mp4Input
     static TimeSpan Seconds(string text) =>
         TimeSpan.FromTicks((long)Math.Round(double.Parse(text, CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond));
 
-    IEnumerable<VideoFrame> DecodedFrames()
+    /// <summary>
+    /// The frames decoded from video packet <paramref name="fromPacket"/> on (decode order; a keyframe, for a decoder that
+    /// starts clean there). The packets before it are neither decoded nor read: the demuxer walks them with their data
+    /// skipped, as opening does, and reads from the one before it on.
+    /// </summary>
+    IEnumerable<VideoFrame> DecodedFrames(int fromPacket = 0)
     {
-        using var stream = _open();
+        using var stream = new TimingOnlyStream(_open());
         using var demuxer = new Mp4Demuxer(stream);
-        foreach (var frame in DecodedFrames(demuxer))
+        stream.SkipReads = fromPacket > 0;
+        foreach (var frame in DecodedFrames(demuxer, fromPacket, stream))
             yield return frame;
     }
 
-    static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer)
+    static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer, int fromPacket = 0, TimingOnlyStream? skipping = null)
     {
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The MP4 file has no video track.");
         var decoder = new H264Decoder(info);
@@ -287,6 +300,14 @@ public sealed class Mp4Input
         {
             if (packet.StreamIndex != info.StreamIndex)
                 continue;
+            if (packet.Sequence < fromPacket)
+            {
+                // The demuxer reads a packet's data as it hands out the packet: from the next one on, read them.
+                if (packet.Sequence == fromPacket - 1 && skipping is not null)
+                    skipping.SkipReads = false;
+                continue;
+            }
+
             foreach (var frame in decoder.Decode(packet))
                 yield return frame;
         }
