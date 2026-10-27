@@ -436,7 +436,8 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
 
   const stopFrom = Math.min(1, plan.ranges.length - 1), stopped = plan.ranges[stopFrom];
   const partial = merge(options, await scoreRanges(options, plan, stopFrom));
-  const n = partial.frameCount, half = stopped.firstFrame + Math.floor((stopped.endFrame - stopped.firstFrame) / 2);
+  // The range's frames start at the one before its first: stopped after half of them (scoreRanges), at least this many.
+  const n = partial.frameCount, half = stopped.firstFrame - 1 + Math.floor((stopped.endFrame - stopped.firstFrame) / 2);
   if (partial.stopped !== true || n < half || n >= stopped.endFrame) {
     fail(`${name} stopped in range ${stopFrom} (${stopped.firstFrame}-${stopped.endFrame - 1}) at ${half}: ` +
       `${n} frames, stopped ${partial.stopped}`);
