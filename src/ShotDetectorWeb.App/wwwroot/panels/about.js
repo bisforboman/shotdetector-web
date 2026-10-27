@@ -20,7 +20,11 @@ const CODECS = {
 // The pixel formats Mp4Input gives (8-bit 4:2:0 only, so far).
 const PIXEL_FORMATS = { yuv420p: '4:2:0, 8 bits', yuvj420p: '4:2:0, 8 bits, full range' };
 
-const section = card('About this file');
+const section = card('About this file', {
+  mark: 'core',
+  markTitle: 'Open\'s description of the file, the YuvVideo handed to ShotDetector: each field checked against FFmpeg\'s, ' +
+    'the audio track against ffprobe\'s',
+});
 section.id = 'about';
 section.hidden = true;
 const list = document.createElement('dl');

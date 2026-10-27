@@ -55,15 +55,20 @@ dot where each cut sits on it, and the spans where `content_val` stays under 1 f
 pictures, the page's reading), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
 the MP4's packets (`Api.Packets`; Using the library, below), and, alongside the file's first run, the sound: its
 waveform, decoded in a worker of its own by ManagedCodecs' AAC decoder (`Api.Audio`;
-"The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
-the player are cards, today the bitrate's numbers and how many cuts fall on a keyframe, the run's summary and
-downloads, the shots' statistics (the number of shots, average and median shot length, shortest and longest, cuts per
-minute, the run's speed against real time: the page's own figures, worked out from the shots, and the shot playing
-now), the sound's measures and, as soon as the file is opened, "About this file": the core's description of it
+"The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). The page
+is laid out as decision `2026-10-26-new-ui.md` chose: once a file is picked, the landing folds into a toolbar (the
+file, the options and one button: Detect, Stop while a run goes, Cancel while it opens) with a one-line status under
+it; then the video, with the shot playing as its caption, beside the run's card (the shots, cuts, length and options
+large, the downloads, the warnings when ShotDetector has any); the timeline across the whole width; the shots as a table
+whose rows play the video from the shot, the row of the shot playing marked, each row as soon as ShotDetector knows the
+shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`); and last a grid of cards: the shots'
+statistics (the number of shots, average and median shot length, shortest and longest, cuts per minute, the run's speed
+against real time: the page's own figures, worked out from the shots), the sound's measures, the bitrate's numbers and
+how many cuts fall on a keyframe, and, as soon as the file is opened, "About this file": the core's description of it
 (`Api.Open`: the `YuvVideo` below and the audio track) in a viewer's words, "BT.709" for `bt709`, each field's own value
-in its tooltip and Open's JSON one click away; below, the shots as a table whose rows play the video from the shot, the
-row of the shot playing marked, each row as soon as ShotDetector knows the shot (a few frames after the cut that ends it,
-`DetectionOptions.OnShot`). At phone width the cards stack under the timeline. The scenes and stats CSVs
+in its tooltip and Open's JSON one click away. Each card's title has one chip saying whose numbers they are
+("scenedetect's, byte for byte", "measured", "the core's", "the page's"; the footer says what the words mean). At phone
+width it is one column in the same order. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the

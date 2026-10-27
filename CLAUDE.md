@@ -60,28 +60,38 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   id, name, args }`, answered in order, one at a time; `progress` and `shot` posted while `Detect` runs; `{ type: 'stop'
   }` and `{ type: 'cancel' }` handled at once, between `Detect`'s pauses, a cancelled call answered `cancelled`),
   `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`). The page (no build step, no dependency, native ES modules; README "Running the page";
-  decision `2026-10-25-one-page.md`): `index.html` (the layout and the list of panels), `style.css`, `app.js` (the
-  states, the options, the estimate, stop (`terminate()` only for a worker that doesn't answer), the demo, a long video
-  split across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the
-  first range and merges) and the sound's worker; the events panels listen to, `call(name, ...args)` and
-  `card(title)`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
-  `seek()`) and `panels/`: `cuts.js` (a lane), `ranges.js` (a lane: a split run's range per worker,
+  decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
+  toolbar once a file is picked, the status line, the result's four rows: the video beside the run's cards, the timeline
+  across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
+  states, idle, opening, detecting, stopping, done, stopped, lost and error, as `body[data-state]`, `body.picked` once a
+  file is picked; the options, the one-line status, the estimate, stop (`terminate()` only for a worker that doesn't
+  answer), the demo, the shot playing as the caption under the video (told as the `playing` event), a long video split
+  across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
+  range and merges) and the sound's worker; the events panels listen to, `call(name, ...args)` and `card(title, {
+  place, mark, markTitle })`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label,
+  draw)`, `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `ranges.js` (a lane: a split run's range per worker,
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
-  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card: the summary and downloads), `shots.js`
-  (the table below), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
-  `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots; it names
-  the shot playing and marks its row in the table, found by `#shots`), `sound.js` (on the `audio` event: a lane of the tone's spans and the silences, a card of the
-  sound's measures, labelled measured, what the page derives labelled as its own), `bitrate.js` (on `opened`: a lane of
+  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads), `shots.js`
+  (the table below the timeline; marks the shot playing's row), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
+  event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
+  derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
   the page's own reading), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
   folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
-  - **Adding to the page:** something over time is a lane, anything else a card (or `card(title, { below: true })`
-    under the video, as the table). A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
+  - **Adding to the page:** something over time is a lane, anything else a card: `card(title, { place })`, `place`
+    one of `'details'` (the default: the grid of equal cards last), `'run'` (beside the video, under the run's card:
+    the run and what goes with it, as the warnings) or `'below'` (under the timeline, full width, as the table); and
+    `mark`, whose numbers the card shows, one chip on its title: `'exact'` (scenedetect's, byte for byte: the CSVs),
+    `'measured'` (the core's measures, checked against FFmpeg within a tolerance), `'core'` (the core's description,
+    checked field by field) or `'page'` (worked out on the page), with `markTitle` saying how they are checked; a row of
+    another kind says so in its tooltip, never a dotted underline. A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
     `call` and `card` from `../app.js` and `lane`, `x`, `seek` from `../timeline.js`, plus one `<script
-    type="module">` line in `index.html` (the order of those lines is the order of the lanes and cards) and its rules
+    type="module">` line in `index.html` (the order of those lines is the order of the lanes, and of the cards in each
+    place) and its rules
     in `style.css`. A new export is `Api.<Feature>.cs`, a partial file of its own with its own `JsonSerializerContext`
     if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
     only for a new event of the page's.

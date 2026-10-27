@@ -7,8 +7,9 @@
   <meta name="description" content="Finds the shots in an MP4 on WebAssembly, with scenedetect's results byte for byte. Nothing leaves the machine.">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
-  <!-- The panels (decision 2026-10-25-one-page.md), each a lane of the timeline or a card: lanes stack in this order,
-       cards beside the video in this order. A new panel is a module in panels/ and a line here. -->
+  <!-- The panels (decisions 2026-10-25-one-page.md and 2026-10-26-new-ui.md), each a lane of the timeline or a card:
+       lanes stack in this order, and cards in this order in their place (card()'s: beside the video, below the
+       timeline, or in the details' grid). A new panel is a module in panels/ and a line here. -->
   <script type="module" src="panels/cuts.js"></script>
   <script type="module" src="panels/ranges.js"></script>
   <script type="module" src="panels/scores.js"></script>
@@ -22,26 +23,34 @@
   <script type="module" src="panels/about.js"></script>
 </head>
 <body>
-  <header>
-    <h1>Shot detection in the browser</h1>
-    <p>Pick an MP4 and get its shots, the same as <a href="https://www.scenedetect.com/">scenedetect</a> finds them,
-      byte for byte. The video is decoded and analysed here, on this machine.</p>
-  </header>
-
-  <main>
-    <form id="form">
-      <label class="drop" id="drop">
-        <input type="file" id="file" accept=".mp4,video/mp4">
-        <span id="drop-text">Choose an MP4, or drop one here</span>
-        <small>8-bit 4:2:0 H.264, progressive, constant frame rate, any size: it is read in parts, never uploaded</small>
-      </label>
-
-      <p class="demo">
-        <button type="button" id="demo">Try the demo</button>
-        No MP4 at hand? The trailer of <a href="https://durian.blender.org/">Sintel</a>, 52 s at 854x480: © copyright
-        Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC-BY 3.0</a>, scaled down and
-        re-encoded.
+  <!-- Idle with no file, the landing: the pitch, the drop zone with the demo in it, the options. Once a file is picked
+       (body.picked) it folds into a toolbar: the title, the file, the options and the one button. -->
+  <header id="top">
+    <div class="title">
+      <h1>Shot detection in the browser</h1>
+      <p class="pitch">Pick an MP4 and get its shots, the same as <a href="https://www.scenedetect.com/">scenedetect</a>
+        finds them, byte for byte. The video is decoded and analysed here, on this machine.</p>
+      <p class="file" id="file-line">
+        <span id="file-name"></span>
+        <small id="file-facts"></small>
+        <button type="button" class="link" id="change" title="Choose another MP4 (or drop one anywhere on the page)">Change</button>
       </p>
+    </div>
+
+    <form id="form">
+      <div class="drop" id="drop">
+        <input type="file" id="file" accept=".mp4,video/mp4">
+        <label for="file">
+          <strong id="drop-text">Choose an MP4, or drop one here</strong>
+          <small>8-bit 4:2:0 H.264, progressive, constant frame rate, any size: it is read in parts, never uploaded</small>
+        </label>
+        <p class="demo">
+          <button type="button" id="demo">Try the demo</button>
+          <small>No MP4 at hand? The trailer of <a href="https://durian.blender.org/">Sintel</a>, 52 s at 854x480:
+            © copyright Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC-BY 3.0</a>,
+            scaled down and re-encoded.</small>
+        </p>
+      </div>
 
       <div class="options">
         <label>Detector
@@ -64,38 +73,50 @@
 
       <div class="actions">
         <button type="submit" id="detect" disabled>Detect shots</button>
-        <button type="button" id="stop" hidden>Stop</button>
+        <button type="button" id="stop" class="quiet" hidden>Stop</button>
       </div>
     </form>
+  </header>
 
+  <!-- The status, one line: a thin progress bar while a file opens or a run goes, what is happening or what happened,
+       and an error in the library's words. -->
+  <div id="statusbar">
     <section id="status" aria-live="polite">
       <progress id="progress" max="1" hidden></progress>
       <p id="status-text"></p>
     </section>
-
     <section id="error" role="alert" hidden></section>
+  </div>
 
-    <section id="result" hidden>
-      <div class="player">
-        <video id="video" controls preload="metadata"></video>
-        <div id="timeline" hidden>
-          <div class="labels"><div class="lane-label axis-label">Time</div></div>
-          <div class="tracks" tabindex="0" role="slider" aria-label="Position in the video" aria-valuemin="0">
-            <div class="axis"></div>
-            <div class="playhead"></div>
-          </div>
-        </div>
+  <!-- The result, four rows (decision 2026-10-26-new-ui.md, B): the video with the shot playing under it, beside the
+       run's cards; the timeline across the width; the cards below it (the shots); the details' grid. -->
+  <main id="result" hidden>
+    <div class="player">
+      <video id="video" controls preload="metadata"></video>
+      <p class="now" id="now"></p>
+    </div>
+    <div id="run-cards"></div>
+    <div id="timeline" hidden>
+      <div class="labels"><div class="lane-label axis-label">Time</div></div>
+      <div class="tracks" tabindex="0" role="slider" aria-label="Position in the video" aria-valuemin="0">
+        <div class="axis"></div>
+        <div class="playhead"></div>
       </div>
-      <div id="cards"></div>
-      <div id="below"></div>
-    </section>
+    </div>
+    <div id="below"></div>
+    <div id="details"></div>
   </main>
 
   <footer>
     <p>What runs where: <a href="https://github.com/bisforboman/ManagedCodecs">ManagedCodecs</a> demuxes the MP4 and
-      decodes the H.264, ShotDetector.FastYuv converts the frames and
+      decodes the H.264 and the AAC, ShotDetector.FastYuv converts the frames and
       <a href="https://github.com/bisforboman/shotdetector">ShotDetector</a> finds the shots, all of it .NET on
       WebAssembly, in a worker of this page. The player is your browser's own; the shots don't come from it.</p>
+    <p>Whose number it is, on each card's title: <span class="chip exact">scenedetect's, byte for byte</span> the shots
+      and the CSVs, checked equal to ShotDetector's FFmpeg path on every sample; <span class="chip">measured</span> the
+      core's measure of the sound, checked against FFmpeg's within a tolerance; <span class="chip">the core's</span> the
+      core's description of the file, checked against FFmpeg's field by field; <span class="chip">the page's</span>
+      worked out here for display. A row of another kind says so in its tooltip.</p>
     <p>Nothing leaves your machine: the file is read here, there is no upload, no server and no analytics.</p>
     <p><a href="https://github.com/bisforboman/shotdetector-web">Source</a> ·
       <a href="https://github.com/bisforboman/shotdetector-web/blob/main/LICENSE">MIT license</a> ·

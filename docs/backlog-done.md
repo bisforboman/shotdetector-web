@@ -466,6 +466,34 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     20.57 s on the trailer, 410 s against 1,929 s on the film. Not every frame identical in both browsers, so the
     decision's "Not doing" stands and no row builds it; the numbers are there)
 
+- The page's new UI
+  - Why: ten panels on the first release's layout: the result below the fold, a 540 px timeline beside a column of
+    cards twice its height, the run's card second under the bitrate's, three ways of marking whose number it is
+    (decision [2026-10-26-new-ui.md](decisions/2026-10-26-new-ui.md), "What a visitor sees today"). The owner asked
+    for a proposal to pick a direction from (2026-10-26).
+  - Where: the decision's choice B (proposed): the landing folds into a toolbar once a file is picked, the status one
+    line under it; the video with the shot playing as its caption beside the run's card (figures, downloads, the
+    warnings, a stopped run's line); the timeline across the whole width; the shots with a still each; the details as
+    a grid of equal cards; one provenance chip per card. `index.html`'s skeleton, `style.css`, `app.js`'s
+    `card(title, { place })`, the "Now" line out of `panels/stats.js`; the lanes unchanged. The mockup:
+    [mockups/2026-10-26-new-ui.html](mockups/2026-10-26-new-ui.html).
+  - Done when: the direction the owner chose, on the Sintel trailer in headless Chromium at 1280 px and 390 px in
+    every state (idle, opening, detecting, stopping, done, stopped, lost, error, and paused if the pause row has
+    landed), the video, the run and the whole timeline in the first screen at 1280 px; screenshots in the PR;
+    `tools/check.sh wasm` green, the CSVs unchanged (the page's exports don't change).
+  - Not: no framework, no build step; no change to what any panel computes or says; no new export.
+  - Depends on: the scores, warnings and Stop rows landed on 2026-10-26, so it
+    moves their panels rather than editing beside them; "Pause and resume a run" edits `app.js`'s buttons too, so
+    whichever lands second merges the other.
+  - Status: Done (2026-10-27: B as decided, the page 80rem wide. `index.html`'s toolbar, status line and four rows;
+    `app.js`'s `card(title, { place, mark, markTitle })`, the states stopping, stopped and lost of their own, the shot
+    playing as the caption under the video, told as `playing` so `shots.js` marks its row; one chip per card, the
+    dotted underlines gone, the footer saying what the words mean. "Cuts on a keyframe" stays in the bitrate card,
+    the reading of its packets. Every state on the Sintel trailer in headless Chromium (AOT bundle) at 1280x800 and
+    390x844, light and dark: no horizontal scroll, every text at WCAG AA, keyboard focus visible; at 1280x800 the
+    timeline ends at 796 px, the video letterboxed to fit when the window is shorter. `tools/check.sh wasm` 132 of 132
+    CSVs identical. The table's first column is left for "Thumbnails per shot"; Pause waits for its own row)
+
 - Long videos across several Web Workers
   - Why: [#19](https://github.com/bisforboman/shotdetector-web/issues/19). ShotDetector 3.16.0's
     `ShotDetection.ScoreRange`/`ScoreRangeAsync` scores a range of frames on a runtime of its own, and
