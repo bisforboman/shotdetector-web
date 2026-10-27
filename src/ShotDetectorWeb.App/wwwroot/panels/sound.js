@@ -1,8 +1,8 @@
 // The sound's measures (backlog "Audio measures"), from the audio event the waveform's export brings after a run: a lane
 // of the timeline with the reference tone's spans and the silences (a click on one plays from its start), and a card
 // with the numbers. They are the core's (Mp4Audio, ManagedCodecs' AAC decoder in the worker), each checked against
-// FFmpeg's ebur128 and silencedetect or ShotDetector's FindReferenceTone within a tolerance (README, Checks): the card
-// says "measured". What the page works out from them (a silence's length) it marks as its own. The lane shows only when
+// FFmpeg's ebur128 and silencedetect or ShotDetector's FindReferenceTone within a tolerance (README, Checks): the card's
+// mark says "measured". What the page works out from them (a silence's length) says so in its tooltip. The lane shows only when
 // there is a tone or a silence to mark. A file without an audio track shows nothing; one whose audio isn't measured, the
 // one line saying why.
 import { card, on } from '../app.js';
@@ -15,7 +15,11 @@ const LISTED = 10;
 
 let audio = null; // the last audio event's measures (its audio), while they were measured
 
-const section = card('Sound');
+const section = card('Sound', {
+  mark: 'measured',
+  markTitle: 'The core\'s measures, ManagedCodecs\' AAC decoder in the worker: each checked against FFmpeg\'s ebur128 ' +
+    'and silencedetect or ShotDetector\'s FindReferenceTone within a tolerance; a silence\'s length is the page\'s',
+});
 section.id = 'sound';
 section.hidden = true;
 
@@ -119,12 +123,8 @@ function fill({ track, referenceTone, silences, peaks, loudness }) {
   if (silences.length > LISTED) section.append(paragraph(`and ${silences.length - LISTED} more, on the timeline.`));
 
   const note = paragraph('Measured: the numbers and times above are the core\'s, checked against FFmpeg and ShotDetector ' +
-    'within a tolerance; times rounded to the second here, exact in each one\'s tooltip and on the timeline. ');
+    'within a tolerance; times rounded to the second here, exact in each one\'s tooltip and on the timeline.');
   note.className = 'note';
-  const own = document.createElement('span');
-  own.className = 'own';
-  own.textContent = 'Underlined dotted: the page\'s own.';
-  note.append(own);
   section.append(note);
 }
 
@@ -154,13 +154,10 @@ function paragraph(text, title = '') {
   return p;
 }
 
+// A heading, how its measure is checked in its tooltip (the card's mark says "measured").
 function heading(text, how) {
   const h = document.createElement('h3');
-  h.textContent = `${text} `;
-  const tag = document.createElement('span');
-  tag.className = 'measured';
-  tag.textContent = 'measured';
-  tag.title = `The core's measure: ${how}`;
-  h.append(tag);
+  h.textContent = text;
+  h.title = `The core's measure: ${how}`;
   return h;
 }

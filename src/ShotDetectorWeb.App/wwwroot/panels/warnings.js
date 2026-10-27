@@ -1,9 +1,9 @@
-// The run's warnings, a card: what ShotDetector says the user should know about how the video was read (Api's Detect,
+// The run's warnings, a card beside the video under the run's: what ShotDetector says the user should know about how the video was read (Api's Detect,
 // its warnings: DetectionResult.Warnings), each sentence as the library words it. Shown only when a finished run has
 // any; a new file or a new run takes them away. The page adds none of its own.
 import { card, on } from '../app.js';
 
-const section = card('Warnings');
+const section = card('Warnings', { place: 'run' });
 section.id = 'warnings';
 section.hidden = true;
 section.setAttribute('role', 'status');
