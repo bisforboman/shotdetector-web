@@ -1,8 +1,10 @@
 // The page: picks a file, has the worker (worker.js, which owns the .NET runtime) open it and detect, and tells the
 // panels what happens. How it is built: docs/decisions/2026-10-24-the-page.md and 2026-10-25-one-page.md. This file
-// keeps the page's states (idle, opening, detecting, done, error), the options, the estimate, stop and the demo; what
-// is shown of a file or a run is in the panels (panels/<name>.js, listed in index.html), each a lane of the timeline
-// (timeline.js) or a card. A panel imports from here:
+// keeps the page's states (idle, opening, detecting, stopping, done, stopped, lost, error), the landing that folds into
+// a toolbar once a file is picked, the one-line status, the options, the estimate, stop, the demo and the shot playing
+// under the video (decision 2026-10-26-new-ui.md); what else is shown of a file or a run is in the panels
+// (panels/<name>.js, listed in index.html), each a lane of the timeline (timeline.js) or a card. A panel imports from
+// here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
 //                        'chose'    { file }                     a new file: whatever was shown of the last one goes
 //                        'opened'   { video }                    the file's YuvVideo, from Api's Open
@@ -18,9 +20,16 @@
 //                        'audio'    { video, audio }             the file's sound, after its first finished run: Api's
 //                                                                Audio (CLAUDE.md "Layout" has its JSON), once per
 //                                                                opened file; a failure as notMeasured
+//                        'playing'  { shot, paused }             whenever the playhead moves or the shots change: the
+//                                                                shot it is in (null outside the shots known), and
+//                                                                whether the video is paused
 //   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns
-//   card(title, { below }) a card beside the video (below: under it, full width), for the panel to fill
-import { setDuration, timecode } from './timeline.js';
+//   card(title, { place, mark, markTitle }) a card for the panel to fill, in its place: 'run' beside the video (the run
+//                       and what goes with it), 'below' under the timeline, full width (the shots), 'details' (the
+//                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
+//                       title (MARKS), markTitle how they are checked, the chip's tooltip; a row of another kind says
+//                       so in its own tooltip.
+import { secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
@@ -38,20 +47,30 @@ const DEFAULT_MIN_LENGTH = '0.6s';
 const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
-const detectButton = $('detect'), stopButton = $('stop'), demoButton = $('demo');
+const detectButton = $('detect'), stopButton = $('stop'), demoButton = $('demo'), changeButton = $('change');
+const fileName = $('file-name'), fileFacts = $('file-facts');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
-const result = $('result'), video = $('video'), cards = $('cards'), below = $('below');
+const result = $('result'), video = $('video'), now = $('now');
+const places = { run: $('run-cards'), below: $('below'), details: $('details') };
+
+// Whose number it is (decision 2026-10-26-new-ui.md, "One mark"): the CSVs, checked byte for byte; the core's measures,
+// checked against FFmpeg within a tolerance; the core's description of the file, checked field by field; and what the
+// page works out for display. The footer says what the words mean.
+const MARKS = { exact: 'scenedetect\'s, byte for byte', measured: 'measured', core: 'the core\'s', page: 'the page\'s' };
 
 let file = null;        // the chosen file
 let opened = null;      // the file's YuvVideo, once the current worker has it open
-let estimate = '';      // the estimate of the current run, as the status shows it
+let estimate = '';      // the estimate of the current run, as the status's tooltip shows it
+let estimated = 0;      // and its seconds
 let state = 'idle';
 let started = 0;        // when the current detection started (performance.now())
 let framesDone = 0;     // frames the current run has done, as its last progress report said
 let framesExpected = 0; // and how many it expects (0 when unknown)
 let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
 let running = null;     // the current run's Detect call (a promise), while it goes
-let stopping = false;   // the current run has been told to stop
+let shots = [];         // the shots known, for the caption: told while a run goes, the result's once it is done
+let starts = [];        // each one's start in seconds, and its end
+let ends = [];
 
 const listeners = {};
 export function on(event, f) {
@@ -62,13 +81,20 @@ function emit(event, data) {
   for (const f of listeners[event] ?? []) f(data);
 }
 
-export function card(title, { below: under = false } = {}) {
+export function card(title, { place = 'details', mark, markTitle = '' } = {}) {
   const section = document.createElement('section');
   section.className = 'card';
   const heading = document.createElement('h2');
   heading.textContent = title;
+  if (mark) {
+    const chip = document.createElement('span');
+    chip.className = `chip ${mark}`;
+    chip.textContent = MARKS[mark];
+    chip.title = markTitle;
+    heading.append(' ', chip);
+  }
   section.append(heading);
-  (under ? below : cards).append(section);
+  places[place].append(section);
   return section;
 }
 
@@ -117,47 +143,61 @@ const fromWorker = {
   error({ id, message }) { answer(id)?.reject(new Error(message)); },
   cancelled({ id }) { answer(id)?.reject(new DOMException('The call was cancelled.', 'AbortError')); },
   progress({ done, expected }) {
-    if (state !== 'detecting') return;
+    if (!runGoes()) return;
     framesDone = done;
     framesExpected = expected;
     if (expected > 0) progress.value = Math.min(done / expected, 1);
     const seconds = (performance.now() - started) / 1000;
     const fps = seconds > 0 ? done / seconds : 0;
-    statusText.textContent = stopping ? `Stopping at frame ${done}…` :
-      `Detecting: frame ${done}${expected > 0 ? ` of ${expected}` : ''}, ${fps.toFixed(0)} frames per second. ${estimate}`;
+    if (state === 'stopping') say(`Stopping at frame ${count(done)}…`);
+    else say(`Frame ${count(done)}${expected > 0 ? ` of ${count(expected)}` : ''} · ${fps.toFixed(0)} frames per second` +
+      `${expected > 0 ? ` · about ${duration(left(done, expected, seconds, fps))} left` : ''}`,
+      `${estimate} The time left: at this run's rate so far, after its first ${LEFT_AFTER} seconds.`);
     emit('progress', { video: opened, done, expected });
   },
   // A shot as soon as ShotDetector knows it: a few frames after the cut that ends it with one detector (what the page
   // sends), the same object as in the result's shots (tools/app-check.mjs checks they are the same).
   shot({ shot }) {
-    if (state === 'detecting') emit('shot', { video: opened, shot });
+    if (!runGoes()) return;
+    emit('shot', { video: opened, shot });
+    addShot(shot);
   },
 };
 
+const runGoes = () => state === 'detecting' || state === 'stopping';
+
+// The states: idle (a file picked or not), opening, detecting, stopping (told to stop, its result to come), done,
+// stopped (a stopped run's result, shown as a finished one's), lost (a run whose worker didn't answer a stop) and error.
 function setState(next) {
   state = next;
-  const busy = next === 'opening' || next === 'detecting';
+  const busy = next === 'opening' || runGoes();
   document.body.dataset.state = next;
   // While a run goes, another file can be chosen: the run is abandoned (choose).
-  fileInput.disabled = next === 'opening';
+  fileInput.disabled = changeButton.disabled = next === 'opening';
   for (const input of [detector, threshold, minLength]) input.disabled = busy;
   detectButton.disabled = busy || !file;
   demoButton.disabled = busy;
   detectButton.hidden = busy;
   // Opening can't be stopped half-way, only abandoned: the worker is terminated (stop).
   stopButton.hidden = !busy;
-  stopButton.disabled = false;
+  stopButton.disabled = next === 'stopping';
   stopButton.textContent = next === 'opening' ? 'Cancel' : 'Stop';
   progress.hidden = !busy;
   error.hidden = next !== 'error';
   if (next === 'opening') result.hidden = true;
 }
 
+// The status line, and the tooltip that says where its figures come from.
+function say(text, title = '') {
+  statusText.textContent = text;
+  statusText.title = title;
+}
+
 // A new file. During a run, the run is abandoned first: cancelled (Api's Cancel through the worker's 'cancel'), so it
 // keeps nothing and the worker stays, or the worker replaced if it doesn't answer.
 async function choose(chosen) {
   if (!chosen || state === 'opening') return;
-  if (state === 'detecting' && running) {
+  if (running) {
     const run = running;
     running = null;
     worker.postMessage({ type: 'cancel' });
@@ -167,11 +207,16 @@ async function choose(chosen) {
   result.hidden = true;
   setDuration(0);
   emit('chose', { file: chosen });
+  clearShots();
   dropText.textContent = `${chosen.name} (${megabytes(chosen.size)})`;
+  fileName.textContent = chosen.name;
+  fileFacts.textContent = megabytes(chosen.size);
+  // The landing folds into the toolbar.
+  document.body.classList.add('picked');
   file = chosen;
   if (video.src) URL.revokeObjectURL(video.src);
   video.src = URL.createObjectURL(file);
-  statusText.textContent = '';
+  say('');
   setState('idle');
 }
 
@@ -184,10 +229,11 @@ async function start() {
     if (!opened) {
       setState('opening');
       progress.removeAttribute('value');
-      statusText.textContent = `Opening ${file.name}…`;
+      say(`Opening ${file.name}…`);
       // The File itself: the worker reads it in slices as .NET needs them, so it is never copied whole (worker.js).
       opened = JSON.parse(await call('Open', file));
-      setDuration(opened.duration ?? opened.frameCount * opened.frameRate.den / opened.frameRate.num);
+      setDuration(lengthOf(opened));
+      fileFacts.textContent = facts(file, opened);
       emit('opened', { video: opened });
     }
     await detect();
@@ -201,13 +247,14 @@ async function start() {
 async function detect() {
   setState('detecting');
   framesDone = framesExpected = 0;
-  stopping = false;
   const run = options();
   emit('run', { video: opened, options: run });
+  clearShots();
   result.hidden = false;
   progress.removeAttribute('value');
   estimate = estimateText(opened);
-  statusText.textContent = `Detecting… ${estimate}`;
+  estimated = estimateSeconds(opened);
+  say(`Detecting · about ${duration(estimated)} for ${count(opened.frameCount)} frames`, estimate);
   started = performance.now();
   const video = opened, detecting = running = call('Detect', JSON.stringify(run));
   const r = JSON.parse(await detecting);
@@ -238,9 +285,9 @@ async function answered(call) {
 // the panels say why there is no sound.
 async function sound() {
   if (measured === opened) return;
-  const video = opened, said = statusText.textContent;
+  const video = opened, said = statusText.textContent, title = statusText.title;
   measured = video;
-  statusText.textContent = `${said} Measuring the sound…`;
+  say(`${said} · measuring the sound…`, title);
   let audio;
   try {
     audio = JSON.parse(await call('Audio'));
@@ -249,7 +296,7 @@ async function sound() {
     audio = { notMeasured: e.message, track: null, waveform: null, referenceTone: [], silences: [], peaks: [], loudness: null };
   }
   if (opened !== video) return;
-  if (state === 'done') statusText.textContent = said;
+  if (state === 'done' || state === 'stopped') say(said, title);
   emit('audio', { video, audio });
 }
 
@@ -258,10 +305,20 @@ async function sound() {
 function estimateText({ width, height, frameCount }) {
   const own = storedRate();
   const rate = own ?? REFERENCE_PIXELS_PER_SECOND;
-  const seconds = frameCount * width * height / rate;
   const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
-  return `Estimate: about ${duration(seconds)} for ${frameCount} frames at ${width}x${height} ` +
-    `(${(rate / (width * height)).toFixed(0)} frames per second, from ${from}).`;
+  return `Estimate: about ${duration(estimateSeconds({ width, height, frameCount }))} for ${frameCount} frames at ` +
+    `${width}x${height} (${(rate / (width * height)).toFixed(0)} frames per second, from ${from}).`;
+}
+
+function estimateSeconds({ width, height, frameCount }) {
+  return frameCount * width * height / (storedRate() ?? REFERENCE_PIXELS_PER_SECOND);
+}
+
+// The time a run has left: at its own rate once it has gone LEFT_AFTER seconds (before, start-up weighs on the rate
+// too much), the estimate's until then.
+const LEFT_AFTER = 3;
+function left(done, expected, seconds, fps) {
+  return seconds >= LEFT_AFTER && fps > 0 ? (expected - done) / fps : Math.max(estimated - seconds, 0);
 }
 
 // The pixels per second of this browser's last finished run, if it kept one (storage can be off or throw).
@@ -304,41 +361,99 @@ async function stop() {
   if (state === 'opening') {
     replaceWorker();
     setState('idle');
-    statusText.textContent = 'Cancelled.';
+    say('Cancelled.');
     return;
   }
-  if (state !== 'detecting' || stopping) return;
-  stopping = true;
-  stopButton.disabled = true;
-  statusText.textContent = `Stopping at frame ${framesDone}…`;
+  if (state !== 'detecting') return;
+  setState('stopping');
+  say(`Stopping at frame ${count(framesDone)}…`);
   const run = running, video = opened;
   worker.postMessage({ type: 'stop' });
   if (await answered(run) || running !== run) return;
   running = null;
   replaceWorker();
-  setState('idle');
-  statusText.textContent = 'Stopped: the worker didn\'t answer, so it was restarted, and the run\'s result went with it.';
+  setState('lost');
+  say(`Lost at frame ${count(framesDone)}: the worker didn't answer the stop, so it was restarted, and the run's ` +
+    'result went with it.');
   emit('cancelled', { video, done: framesDone, expected: framesExpected });
+  follow();
 }
 
 function fail(message) {
   setState('error');
-  statusText.textContent = '';
+  say('');
   error.textContent = message;
 }
 
 function show(r, seconds) {
-  setState('done');
+  setState(r.stopped ? 'stopped' : 'done');
   const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second`;
-  statusText.textContent = r.stopped
-    ? `Stopped at ${timecode(r.frameCount * r.frameRate.den / r.frameRate.num)} (frame ${r.frameCount} of ` +
-      `${opened.frameCount}) after ${seconds.toFixed(1)} s (${rate}).`
-    : `Done in ${seconds.toFixed(1)} s (${rate}).`;
+  const read = r.frameCount * r.frameRate.den / r.frameRate.num;
+  say(r.stopped
+    ? `Stopped at ${timecode(read)}, frame ${count(r.frameCount)} of ${count(opened.frameCount)}, after ` +
+      `${seconds.toFixed(1)} s (${rate})`
+    : `Done in ${seconds.toFixed(1)} s, ${rate} (${(read / seconds).toFixed(1)} times real time)`,
+    `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, in ${seconds.toFixed(3)} s; ${estimate}`);
   // A run of a few seconds is mostly start-up: too short to measure this browser's speed by.
   if (seconds >= 5) storeRate(r.frameCount * opened.width * opened.height / seconds);
   emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, '') });
+  clearShots();
+  for (const shot of r.shots) addShot(shot);
   result.hidden = false;
 }
+
+// The shot playing, a caption under the video: the last shot starting at or before the playhead, if the playhead is
+// before its end; told to the panels as 'playing' (the shots table marks its row). The shots are the ones told while a
+// run goes (a lost run's stay), the result's once it is done.
+function clearShots() {
+  shots = [];
+  starts = [];
+  ends = [];
+  follow();
+}
+
+function addShot(shot) {
+  shots.push(shot);
+  starts.push(secondsOf(shot.startTimecode));
+  ends.push(secondsOf(shot.endTimecode));
+  follow();
+}
+
+function shotAt(t) {
+  let lo = 0, hi = starts.length - 1, found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (starts[mid] <= t + 1e-6) { found = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return found >= 0 && t < ends[found] - 1e-6 ? found : -1;
+}
+
+function follow() {
+  const t = video.currentTime || 0, i = shotAt(t), s = shots[i];
+  if (!s) {
+    now.textContent = shots.length > 0 ? 'Outside the shots found.' : '';
+    now.title = '';
+  } else {
+    const going = runGoes();
+    now.textContent = `Shot ${s.shot}${going ? '' : ` of ${shots.length}`} · ${s.startTimecode} – ${s.endTimecode} · ` +
+      `${(t - starts[i]).toFixed(1)} s into ${s.durationSeconds.toFixed(1)} s` +
+      `${going ? ` · ${shots.length} ${shots.length === 1 ? 'shot' : 'shots'} so far` : ''}`;
+    now.title = `Shot ${s.shot}: ${s.startTimecode} to ${s.endTimecode}; the playhead at ${timecode(t)}`;
+  }
+  emit('playing', { shot: s ?? null, paused: video.paused });
+}
+
+// The video's length on the axis: Open's duration, or its frames over its rate.
+const lengthOf = v => v.duration ?? v.frameCount * v.frameRate.den / v.frameRate.num;
+
+// The toolbar's line on the file: its size, and once opened the description's first facts.
+function facts(f, v) {
+  const rate = Number((v.frameRate.num / v.frameRate.den).toFixed(3));
+  return [megabytes(f.size), `${v.width}×${v.height}`, `${rate} fps`, `${lengthOf(v).toFixed(1)} s`,
+    v.audio ? v.audio.codec.toUpperCase() : 'no audio'].join(' · ');
+}
+
+const count = n => n.toLocaleString('en');
 
 function megabytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
@@ -347,12 +462,16 @@ function megabytes(bytes) {
 detector.onchange = () => { threshold.value = DEFAULT_THRESHOLDS[detector.value]; };
 threshold.value = DEFAULT_THRESHOLDS[detector.value];
 fileInput.onchange = () => choose(fileInput.files[0]);
+changeButton.onclick = () => fileInput.click();
+// The whole drop zone picks a file, not only its label: all but the demo's line.
+drop.onclick = e => { if (e.target === drop) fileInput.click(); };
+for (const type of ['timeupdate', 'seeking', 'emptied', 'play', 'pause']) video.addEventListener(type, follow);
 form.onsubmit = e => { e.preventDefault(); start(); };
 stopButton.onclick = stop;
 // The demo clip, next to the page (pages.yml), run as if it had been picked.
 demoButton.onclick = async () => {
   demoButton.disabled = true;
-  statusText.textContent = 'Downloading the demo clip…';
+  say('Downloading the demo clip…');
   try {
     const response = await fetch('demo/sintel-trailer.mp4');
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -362,13 +481,14 @@ demoButton.onclick = async () => {
     fail(`The demo clip didn't download: ${e.message}`);
   }
 };
+// A file dropped anywhere on the page: the drop zone, or the toolbar once one is picked, marked while it is dragged.
 for (const type of ['dragenter', 'dragover']) {
-  document.addEventListener(type, e => { e.preventDefault(); drop.classList.add('over'); });
+  document.addEventListener(type, e => { e.preventDefault(); document.body.classList.add('dragging'); });
 }
-document.addEventListener('dragleave', e => { if (!e.relatedTarget) drop.classList.remove('over'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
 document.addEventListener('drop', e => {
   e.preventDefault();
-  drop.classList.remove('over');
+  document.body.classList.remove('dragging');
   choose(e.dataTransfer.files[0]);
 });
 replaceWorker();
