@@ -48,9 +48,12 @@ page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeli
 exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
 is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
-over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), as soon
-as the file is opened the bitrate per second and a tick at each keyframe, from the MP4's packets (`Api.Packets`; Using
-the library, below), and, once the first run is done, the sound: its waveform, decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
+over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), the
+scores (each frame's score from the stats CSV, the column the detector cuts on, against the threshold the run used, a
+dot where each cut sits on it, and the spans where `content_val` stays under 1 for a second or more marked as still
+pictures, the page's reading), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
+the MP4's packets (`Api.Packets`; Using the library, below), and, once the first run is done, the sound: its waveform,
+decoded in the worker by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). Beside
 the player are cards, today the bitrate's numbers and how many cuts fall on a keyframe, the run's summary and
 downloads, the shots' statistics (the number of shots, average and median shot length, shortest and longest, cuts per
@@ -64,12 +67,35 @@ row of the shot playing marked, each row as soon as ShotDetector knows the shot 
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
-run, else `REFERENCE_FPS` at the top of `app.js`); Cancel stops the worker and starts a new one, and keeps the shots
-found so far, with one more line, marked unfinished, from the last cut to where the run stopped (no downloads for a
-cancelled run). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
+run, else `REFERENCE_FPS` at the top of `app.js`); Stop ends the run where it has got to and shows the result for the
+part read, its shots and both CSVs, as a finished run's, labelled "stopped at", and a run with other options then
+starts at once on the opened file (Stopping a run, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
 page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
 `pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
 `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
+
+## Stopping a run
+
+`Api.Detect` runs ShotDetector's `DetectAsync` over `Mp4Input.FramesAsync`, which every 8 frames (`PauseEvery` in
+`Api.cs`) awaits the worker's next task (`[JSImport] pause`, `wwwroot/pause.js`: a `MessageChannel` message). Between
+two pauses the worker handles the page's `stop`, which makes the frames end there as if the file did, so `Detect`
+answers with the result for the frames read: the frame count read, its shots (the last one ending where the run
+stopped) and both CSVs, and `stopped: true`. A file picked during a run abandons it with `cancel` (the token: no
+result), and only a worker that doesn't answer a stop within a second and a few pauses is terminated, losing the run
+but for the shots the page was told. ShotDetector 3.16.1 neither warns nor refuses when the frames end before
+`YuvVideo.FrameCount`.
+
+A stopped run is the run of a file that ends there. Its stats CSV is the whole run's up to there (a frame's stats
+depend only on the frames before it), but for the adaptive ratio of the last 2 frames, `None`, which waits for 2 frames
+after them; its shots are the whole run's up to the stop, the next one cut short there, but for a cut decided on frames
+past the stop (FlashFilter's merge decides one up to the minimum shot length late). The threshold detector would end a
+fade-out the stop falls in with a cut, as at a file's end. `tools/app-check.mjs` checks this on every sample and run.
+
+Measured 2026-10-26 on a 4-core cloud VM: a pause takes 6 µs in Chromium's worker (2,000 in a row through
+`pause.js`), so 8 frames of the Sintel trailer at 60 frames per second (133 ms) pay 0.005% for it; under Node, where a
+pause takes about 0.3 ms, the pauses were 0.25% of app-check's runs AOT and 0.05% interpreted (it fails above 1%). On
+the Sintel trailer, AOT, stopped at frame 600: Detect answered the stop in 201 ms in headless Chromium and 136 ms in
+Firefox 136, and the next run's first progress came 98 and 129 ms after its click, without opening the file again.
 
 ## Large files
 
@@ -272,7 +298,10 @@ name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`
   gives Node the `FileReaderSync` it lacks);
   its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
-  to the page) are the result's shots exactly, that `samples/reject/` is refused through `Open`, that `Open`'s `audio` is the track `Audio()` measures (none
+  to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
+  the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), that a run cancelled
+  half-way keeps no result, that the pauses take under 1% of the runs' time, that `samples/reject/` is refused through
+  `Open`, that `Open`'s `audio` is the track `Audio()` measures (none
 where it says the file has none; for `samples/no-aac/`, the codec in the file's name), that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
   "The file has no audio track." (which the page shows nothing for) for a sample without audio and a reason for each of
@@ -322,6 +351,46 @@ High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagge
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
 measures; six files to refuse; and three whose audio isn't measured.
+
+## WebCodecs
+
+Are the frames the browser's own H.264 decoder (WebCodecs' `VideoDecoder`) gives the frames ManagedCodecs gives? A
+measurement, not a check: three tools, none of them in `tools/check.sh` or CI (backlog "WebCodecs: are its frames
+ManagedCodecs' frames?", [#15](https://github.com/bisforboman/shotdetector-web/issues/15)). The numbers and the verdict
+are in the decision's "Not doing" ([docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md)).
+Measured 2026-10-26, headless on a VM without a GPU: Chromium 153's frames are ManagedCodecs' frames, every plane of
+every frame of every sample and of a two-hour film, decoded and copied out 7 to 10 times faster than ManagedCodecs on
+wasm AOT; Firefox 136 hands its frames to the page in RGB (BGRX), so it has no Y, U and V planes to compare. Not
+identical in both browsers: the page keeps ManagedCodecs.
+
+```
+dotnet build tools/WebCodecsCheck -c Release
+dotnet tools/WebCodecsCheck/bin/Release/net10.0/WebCodecsCheck.dll prepare --out out/webcodecs/data samples/*.mp4
+dotnet publish tools/WebCodecsWasm -c Release -p:RunAOTCompilation=true    # ManagedCodecs on wasm, for the timings
+node tools/webcodecs/serve.mjs --data out/webcodecs/data --results out/webcodecs/results \
+  --wasm tools/WebCodecsWasm/bin/Release/net10.0/publish/wwwroot \
+  --reference tools/WebCodecsCheck/bin/Release/net10.0/WebCodecsCheck.dll
+# then, in each browser: http://localhost:8090/check.html?compare=all&time=sintel_trailer-480p
+```
+
+- `tools/WebCodecsCheck` (native): for each file, its video's access units exactly as ManagedCodecs' `Mp4Demuxer` gives
+  them (`<name>.units`), and the first 16 bytes of the SHA-256 of each plane of each frame `Mp4Input` decodes, the
+  frames ShotDetector gets (`<name>.hashes`); `diff` says where one frame differs from planes the browser copied out.
+- `tools/webcodecs/` (a page, no build step, no dependency): `check.html` feeds those access units to `VideoDecoder`
+  (the avcC as its description, each unit a chunk with its pts as the timestamp, a discarded unit's frame left out),
+  copies each frame's visible Y, U and V planes out with `VideoFrame.copyTo` (I420, packed) and compares their hashes
+  with ManagedCodecs' frame by frame, once per `hardwareAcceleration` (`prefer-software`, `prefer-hardware`) that
+  `isConfigSupported` accepts; the first frame that differs goes to `serve.mjs`, which asks `WebCodecsCheck diff` where
+  and by how much. With `time=`, it times the decode plus the copy against ManagedCodecs' decoder on wasm fed the same
+  access units, the runs alternating, each in a worker of its own (on the page's thread a .NET runtime slowed the
+  WebCodecs runs after it several times over). Results go to `out/webcodecs/results/<browser>/`, the tables to
+  `report.md` there. Any browser can open it; WebCodecs needs a secure context, which localhost is.
+- `tools/WebCodecsWasm` (browser-wasm, AOT): ManagedCodecs' `H264Decoder`, one access unit a call, as `Mp4Input`
+  decodes for the page.
+
+Tampering with one access unit (a byte of one frame's slice data, a frame no other refers to) makes the page report that
+frame and only it, with
+its position and how far apart the values are: "identical" is a comparison that can fail.
 
 ## Packages
 

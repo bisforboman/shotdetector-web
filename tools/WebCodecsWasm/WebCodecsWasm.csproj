@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!--
+    WebCodecs against ManagedCodecs (README "WebCodecs"): ManagedCodecs' H.264 decoder on browser-wasm, fed the same
+    access units as the browser's VideoDecoder by tools/webcodecs/check.js, to time the two side by side. Publish it with
+    -p:RunAOTCompilation=true, as the page is. Needs the wasm-tools workload; not part of the checks or of CI.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ShotDetectorWeb.WebCodecsWasm</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WasmFingerprintAssets>false</WasmFingerprintAssets>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.H264\ManagedCodecs.H264.csproj" />
+  </ItemGroup>
+
+</Project>

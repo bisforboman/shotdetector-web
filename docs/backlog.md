@@ -23,36 +23,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-25). It changes `Api.Detect` and
 `worker.js`, so it runs after the page's structure row.
 
-- Stop a run and keep what was read, without restarting the worker
-  - Why: Cancel terminates the worker today, so the runtime starts again and the file is opened again: a second or
-    two on a trailer, plus opening the file again (streamed since "Large files": seconds on a film). The owner chose (2026-10-24)
-    cooperative cancelling through an asynchronous frame source upstream. Decision "Cancelling a run".
-  - Where: ShotDetector 3.15.0 has `ShotDetection.DetectAsync(YuvVideo, IAsyncEnumerable<YuvFrame>, DetectionOptions?,
-    CancellationToken)` ([shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492)): it runs on the
-    caller's own awaits, with no other thread, and gives the synchronous `Detect`'s result. Here: an asynchronous `Mp4Input` frame source that yields to the
-    worker's event loop every N frames, so a `cancel` message can run and cancel the token. On single-threaded wasm
-    the yield must be a real macrotask: a `[JSImport]` returning a Promise resolved by `setTimeout(0)` or a
-    `MessageChannel`, not `Task.Yield()`. `Api.Detect` becomes `async Task<string>` (a Promise to the worker).
-    `worker.js` answers `cancel` with a `cancelled` message (an `OperationCanceledException` is not an `error`).
-    `app.js` cancels with a message and falls back to `terminate()` when no `cancelled` comes within a second or so.
-    `tools/app-check.mjs` calls the new export.
-    **Stop keeps what was read** (the owner's question, 2026-10-26: stats for a stopped run). The page's button
-    becomes Stop: at the next yield the frame source simply ends, as if the file ended there, instead of cancelling
-    the token. `DetectAsync` then finishes normally with the result for the frames read: the shots, the scenes CSV and
-    the stats CSV, shown and offered for download like a finished run's, labelled "stopped at" the time reached. The
-    token stays for a runtime that has to be abandoned, and `terminate()` for one that doesn't answer.
-  - Done when: on the Sintel trailer, a run stopped mid-way shows its shots, its cards and both downloads, and a run
-    with another threshold follows at once without opening the file again. `tools/app-check.mjs` stops a run at a
-    frame N on every sample and checks that its stats CSV equals the first rows of the full run's up to N (each frame's
-    stats depend only on the frames before it), and that its shots are the full run's up to the last cut before N,
-    plus one ending at N. Find out from ShotDetector's source whether a frame source that ends before
-    `YuvVideo.FrameCount` gives a warning, and show it if so. The yields cost under 1% of the run's time (pick N for
-    it); checks green, CSVs unchanged.
-  - Not: no shared memory.
-  - Depends on: the 3.15.0 row and large files (both edit `Api` and `worker.js`); after "Shots as they're found"
-    (done).
-  - Status: Open
-
 - Pause and resume a run
   - Why: the owner asked (2026-10-26) to resume after stopping. While the page stays open, that is a pause: the run
     stays in memory and goes on where it was.
@@ -70,6 +40,7 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
 ### Decisions to make first
 
 The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
+The WebCodecs one is measured and done ([backlog-done.md](backlog-done.md)): the decision stands.
 
 - Long videos across several Web Workers
   - Why: [#19](https://github.com/bisforboman/shotdetector-web/issues/19). ShotDetector 3.16.0's
@@ -113,23 +84,6 @@ The owner chose (2026-10-26) to take these two up, each with its design question
   - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
   - Depends on: "Long videos across several Web Workers".
   - Status: Open
-
-- WebCodecs: are its frames ManagedCodecs' frames?
-  - Why: [#15](https://github.com/bisforboman/shotdetector-web/issues/15). Decoding is about 80% of a run on wasm,
-    and the browser's own `VideoDecoder`, often in hardware, could make a run 2.5 to 4 times faster. The page's
-    design ruled it out ("Not doing": its output may differ between browsers and from FFmpeg's). The owner reopened
-    that question (2026-10-26), proof first. H.264's decoding is defined exactly by the standard, so the same frames
-    are plausible but not yet shown.
-  - Where: measure only. Decode every sample, the Sintel trailer and the two-hour film with WebCodecs in headless
-    Chromium and Firefox, copy each frame's Y, U and V planes out (`VideoFrame.copyTo`, I420), and compare them with
-    ManagedCodecs' frames for the same file, frame by frame (a hash per plane, and the first differing frame and
-    position where they differ). Also time the decode and the copy against ManagedCodecs on wasm AOT. A tool under
-    `tools/`, not in the page. Write the numbers and the verdict in the decision's "Not doing" section.
-  - Done when: a table per browser and sample, either "every frame identical" or where it differs, and the timings.
-    The decision changes only if every frame is identical in both browsers; a later row would then build it, with
-    ManagedCodecs kept wherever WebCodecs isn't there or differs.
-  - Not: no change to the page or the checks.
-  - Status: Open (measure first)
 
 ### First release: the page on GitHub Pages
 
@@ -184,29 +138,17 @@ shots strip", read a lane of the timeline. The waveform, audio measures and bitr
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
 derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
 
-- Warnings on the page
-  - Why: `DetectionResult.Warnings` says what the user should know about a run, and `Api.Detect` drops it today.
-  - Where: `src/ShotDetectorWeb.App/Api.cs`: `warnings` (the strings as they are) added to `DetectResponse`;
-    `app.js` shows them under the summary when there are any.
-  - Done when: a run that produces a warning shows it on the page (find which input does, or say none of the samples
-    does and show it with a made-up response in the PR); `tools/check.sh wasm` and `wasm aot` green, CSVs unchanged.
-  - Not: no new warnings of our own.
-  - Status: Open
-
-- A graph of the scores
-  - Why: scenedetect's users read the stats as a graph: each frame's score over time against the threshold shows why
-    a cut was found and what a different threshold would do. The stats are computed for every run already
-    (`statsCsv`), and the page only offers them as a download.
-  - Where: `app.js`, `index.html`, `style.css`: a `<canvas>` graph of the run's score column over time, with the
-    threshold as a line and the cuts marked, a click seeking the `<video>`, readable at phone width. The columns
-    differ per detector (`content_val`, `delta_*`, `adaptive_ratio…`, and more for the others), so pick them by the
-    CSV header, not by position, and say in the row's PR which column each detector's graph shows. Where a
-    frame-difference score (`content_val`, `delta_*`) stays near zero for a second or more, mark the span as a still
-    picture, labelled as the page's reading.
-  - Done when: each of the five detectors draws its graph on the Sintel trailer, every cut sits on a score above the
-    threshold (or the PR says why it doesn't, for detectors that also use the minimum shot length); screenshots in the PR.
-  - Not: no charting library; no re-thresholding in JavaScript (a new threshold is a new run: detecting twice in two
-    languages is how results drift).
+- The form's default thresholds for histogram and hash
+  - Why: `app.js`'s `DEFAULT_THRESHOLDS` prefills histogram 0.05 and hash 0.395, scenedetect 0.7.1's defaults, and
+    sends a threshold equal to its default as none. ShotDetector's defaults follow `DetectionOptions.Compatibility`,
+    0.7.2 unless set, whose are 0.2 and 0.35 (`ShotDetection`'s detector setup). So the form says 0.05 while the run
+    compares against 0.2, and a visitor who types 0.05 gets 0.2. Found 2026-10-26 by "A graph of the scores": the
+    lane draws the threshold the run used, and Sintel's histogram cuts all sit under 0.8, not 0.95.
+  - Where: `app.js`'s `DEFAULT_THRESHOLDS` (histogram 0.2, hash 0.35) and its comment; `panels/scores.js` keeps the
+    same defaults to draw the line (its `DETECTORS`).
+  - Done when: the form prefills 0.2 and 0.35, and a histogram run with 0.05 typed in compares against 0.05 (the
+    scores lane's line at 0.95, and more cuts than the default's on the Sintel trailer).
+  - Not: no other compatibility than ShotDetector's default.
   - Status: Open
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
@@ -339,4 +281,7 @@ file out of `samples/reject/`, and passes the native check.
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
     identical results are the point. Decision "Not doing".
-  - Status: Reopened for measurement (2026-10-26): "WebCodecs: are its frames ManagedCodecs' frames?" under Next
+  - Status: Maybe. Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
+    decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
+    reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
+    question to open
