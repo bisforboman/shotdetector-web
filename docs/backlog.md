@@ -129,7 +129,7 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
   - Depends on: the scores, warnings and Stop rows landed on 2026-10-26, so it
     moves their panels rather than editing beside them; "Pause and resume a run" edits `app.js`'s buttons too, so
     whichever lands second merges the other.
-  - Status: Open (decided 2026-10-27: the decision's B and its one provenance chip, the owner's choice)
+  - Status: In progress (2026-10-27; decided 2026-10-27: the decision's B and its one provenance chip, the owner's choice)
 
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
