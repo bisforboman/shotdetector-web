@@ -99,6 +99,54 @@ pause takes about 0.3 ms, the pauses were 0.25% of app-check's runs AOT and 0.05
 the Sintel trailer, AOT, stopped at frame 600: Detect answered the stop in 201 ms in headless Chromium and 136 ms in
 Firefox 136, and the next run's first progress came 98 and 129 ms after its click, without opening the file again.
 
+## Long videos across workers
+
+A video longer than 2 minutes is split across several Web Workers, each with a .NET runtime of its own, and their
+results merged into exactly the one-worker result (decision
+[2026-10-26-workers.md](docs/decisions/2026-10-26-workers.md); ShotDetector 3.16's `ScoreRangeAsync` and `Merge`,
+issue [#19](https://github.com/bisforboman/shotdetector-web/issues/19)). The page splits across as many workers as
+`navigator.hardwareConcurrency` says the machine has cores, but one, and at most 4 (`SPLIT_SECONDS` and `MOST_WORKERS`
+at the top of `app.js`; `?workers=N` in the page's address forces N, 1 never splitting). `Api.Ranges` plans the ranges
+from the packet list: about equal in frames, each after the first starting one frame past the keyframe nearest an
+equal split's start (`Mp4Input.Ranges`). The page's own worker scores the first range; each other range gets a worker
+of its own, which opens the same `File` and scores its range (`Api.ScoreRange`): it decodes from the range's keyframe,
+the packets before it walked with their data skipped as opening does, and gives ShotDetector the keyframe's frame
+(the frame before the range's first), the range's own frames and the next range's first (the overlap frame, which the
+merge compares). Each worker's scores come back as bytes (`Api.RangeBytes`, `RangeScores.ToBytes`, about 97 bytes a
+frame for the adaptive detector), and the page's own worker merges them (`Api.Merge`), after which the CSVs come as
+from a one-worker run. Meanwhile the timeline's Ranges lane shows each worker's range and how far it has got; the
+shots come once the ranges merge (ShotDetector decides shots there). A run on one worker keeps its live shots.
+
+Stop stops every worker at its next pause; each range ends where its worker got to, and the ranges from the start
+merge for as long as each reaches into the next one's first frame, so the result is the one for the video up to where
+the first unfinished range stopped, as a one-worker run's stop is (the decision's "As built"). A merge that fails
+(ShotDetector's `ShotDetectionException`: an overlap frame that differs, as an open GOP or a decoder that doesn't start
+clean at a keyframe would give; another video or options; damaged bytes) or a worker that fails makes the page detect
+again with one worker, its reason in the Ranges lane. The file's sound is measured in a worker of its own alongside its
+first run, split or not.
+
+Measured 2026-10-27 on the AOT bundle in headless Chromium, 4-core cloud VM, on the two-hour control of Large files
+(below, made again by its recipe: 640x360 at 24 fps, 250 kbit/s, 172,800 frames, 1,794 keyframes, 345,642,453 bytes),
+adaptive, the runs one after another on an otherwise idle machine; the renderer's RSS (the page and all its workers)
+sampled every half second:
+
+| Workers | Run | Frames per second | Against one worker | Renderer's peak RSS | The sound came after |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1,322.7 s | 131 | 1 | 878 MB | 52.7 s |
+| 2 | 671.7 s | 257 | 1.97 times as fast | 1,065 MB | 52.4 s |
+| 3 (this machine's own choice) | 451.3 s | 383 | 2.93 | 1,303 MB | 59.7 s |
+| 4 (forced, `?workers=4`) | 367.8 s | 470 | 3.60 | 1,602 MB | 78.3 s |
+
+Every run gave the same 1,105 shots and the same scenes and stats CSVs, byte for byte. Each worker's wasm heap (under
+Node, each range's runtime on its own, the same bundle): 174 MB once it has opened the file, most of it ManagedCodecs'
+sample index (What the heap holds, below), and 208 MB at the end of its range, as a one-worker run's; the merge, in the
+page's own worker, took 1.5 s for the four ranges' 16.8 MB and left its heap as it was. So each worker costs about
+190 to 300 MB of renderer on a two-hour film, most of it the index every runtime builds again (backlog, Waiting:
+"ManagedCodecs: the MP4 index without its copies"). On Sintel's 52 s trailer splitting paid too: 19.0 s on one
+worker, 11.1 s on two, 10.0 s on three, 6.7 s on four (the median of two each; the three ranges at keyframes are less
+equal than the four), each worker about 100 MB more of renderer; below 2 minutes the page keeps one worker anyway, for
+its live shots (the decision's "As measured").
+
 ## Large files
 
 The page reads the picked file in place: the worker gets the `File` (no bytes copied), `Api.Open` takes it as a
@@ -278,12 +326,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
-  lines go to `out/native/<sample>.packets.txt` for the wasm check). Markdown
-
-  same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`); and each
-sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio stream, codec
-name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`). Markdown
-  tables go to `out/native-report.md`, (a)'s CSVs to `out/native/`.
+  lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's run with all five detectors split
+  into ranges at keyframes as the page splits a long video (`Mp4Input.Ranges`, at most 4: 2 to 4 on the samples), each
+  scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`); and
+  each sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio
+  stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`). Markdown tables go
+  to `out/native-report.md`, (a)'s CSVs to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
   byte-exact**: the decoded samples are within 3e-7 of FFmpeg's, not equal, and the measures are computed by other code.
@@ -303,7 +351,13 @@ name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
   to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
   the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), that a run cancelled
-  half-way keeps no result, that the pauses take under 1% of the runs' time, that `samples/reject/` is refused through
+  half-way keeps no result, that the pauses take under 1% of the runs' time, that the default run and the run with all five
+  detectors, split into ranges as the page's workers score them (`Ranges`, `ScoreRange`, `RangeBytes`, one range after another on the one runtime) and
+  merged from their bytes (`Merge`) gives the whole run's CSVs, shots and warnings, the merge telling the shots as
+  `Detect` does, and stopped half-way through its second range (and every range after it, as the page stops every
+  worker) the result for its start, held to the whole run as a stopped run is, that ranges scored with other options
+  or with damaged bytes fail the merge with "The ranges didn't merge: " in front (the page then detects with one
+  worker), that `samples/reject/` is refused through
   `Open`, that `Open`'s `audio` is the track `Audio()` measures (none
 where it says the file has none; for `samples/no-aac/`, the codec in the file's name), that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
@@ -332,7 +386,8 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
 - **A pull request** (`.github/workflows/ci.yml`, job `build`, the check `main` requires): native on every sample;
   wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
   shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly
-  loaded at all"; wasm AOT, the build the page deploys, on every sample. About 5 minutes (5 min 21 s on 2026-10-26).
+  loaded at all"; wasm AOT, the build the page deploys, on every sample. About 16 minutes (15 min 35 s on 2026-10-27,
+  5 min 21 s on 2026-10-26 before each run was also split into ranges and stopped there).
   A newer push to the pull request cancels its run in progress. A pull request that changes only `docs/`, `*.md` or
   `LICENSE` (git diff against its base) runs `build` too, which passes without running any check: the checks can't
   see those files.

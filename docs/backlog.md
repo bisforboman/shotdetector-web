@@ -40,25 +40,9 @@ This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-2
 ### Decisions to make first
 
 The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
-The WebCodecs one is measured and done ([backlog-done.md](backlog-done.md)): the decision stands.
-
-- Long videos across several Web Workers
-  - Why: [#19](https://github.com/bisforboman/shotdetector-web/issues/19). ShotDetector 3.16.0's
-    `ShotDetection.ScoreRange`/`ScoreRangeAsync` scores a range of frames on a runtime of its own, and
-    `ShotDetection.Merge` merges the ranges' `RangeScores` (carried as bytes, `ToBytes`/`FromBytes`) into exactly
-    the result `Detect` gives for the whole video. Workers need no shared memory, so this works on Pages, unlike wasm
-    threads. A film could run several times faster on a machine with several cores.
-  - Where: decision [2026-10-26-workers.md](decisions/2026-10-26-workers.md), answered by the owner on 2026-10-26:
-    progress per range with the shots at the end (one worker keeps live shots); Stop merges the ranges finished from
-    the start; several workers above about 10 minutes of video, up to `navigator.hardwareConcurrency` − 1 and at most
-    4, each range starting at a keyframe from the packet list; the audio pass in a worker of its own, in parallel.
-    The page starts the workers, each opens the same `File`, and `tools/app-check.mjs` checks that a run split into
-    ranges gives the same CSVs as one worker, on every sample, and that a stopped split run gives the result for its
-    finished start.
-  - Done when: the same CSVs split and whole; the speed and the heap on the two-hour film with 1, 2 and 4 workers,
-    and the decision's 10 minutes and 4 adjusted to what was measured.
-  - Depends on: "Stop a run and keep what was read" (it drives runs through `DetectAsync`).
-  - Status: In progress (2026-10-27; decided 2026-10-26)
+The WebCodecs one is measured and done ([backlog-done.md](backlog-done.md)): the decision stands. The row below
+builds on the workers row (done 2026-10-27): a merge of ranges that stop before the video's end, with the ranges
+from the start (`Mp4Input.FromStart`), gives the result for the frames they cover (app-check, stopped split runs).
 
 - Resume after Stop, across visits
   - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
@@ -99,6 +83,17 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
     `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
   - Done when: the job fails when `app.js` breaks the download and passes on `main`.
   - Not: no cross-browser matrix, no visual tests.
+  - Status: Open
+
+- The estimate's reference rate measured again
+  - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
+    3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on
+    one worker, where the reference predicts 82, so a first visit's estimate says about twice the time (12 min for a
+    run that took 6 with 4 workers).
+  - Where: `app.js`'s `REFERENCE_FPS`, measured on the Sintel trailer as before (AOT, headless Chromium, the median of
+    three), and the comment's date.
+  - Done when: a first visit's estimate on the trailer and on the two-hour film within 20% of the run.
+  - Not: no change to how a browser's own rate is kept.
   - Status: Open
 
 - Thumbnails per shot

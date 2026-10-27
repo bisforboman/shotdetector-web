@@ -94,7 +94,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
   stats CSV the whole run's rows up to there, its shots the whole run's with the next one cut short), one cancelled,
-  `Detect`'s pauses under 1% of the runs' time, every run split into ranges and merged (the whole run's CSVs and shots),
+  `Detect`'s pauses under 1% of the runs' time, the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects; `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,

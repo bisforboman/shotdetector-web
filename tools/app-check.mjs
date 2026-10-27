@@ -14,11 +14,12 @@
 // loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native:
 // <sample>.waveform.json), each value within 1; each file of --no-aac answered with why it isn't measured.
 // A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
-// every run split into ranges at keyframes (at most RANGES), each scored on its own and merged from their bytes, must
-// give the whole run's CSVs and shots, the merge telling the shots as Detect does (checkRanges); stopped half-way through
-// the second range (and every range after it, as the page stops every worker), the merge is the result for the frames
-// from the start without a gap, held to the whole run as a stopped run is (checkStopped); ranges scored with other
-// options, or damaged bytes, fail the merge with NOT_MERGED in front, on which the page detects again with one worker.
+// the default run and the run with every detector (SPLIT_RUNS) split into ranges at keyframes (at most RANGES), each
+// scored on its own and merged from their bytes, must give the whole run's CSVs and shots, the merge telling the shots
+// as Detect does (checkRanges); stopped half-way through the second range (and every range after it, as the page stops
+// every worker), the merge is the result for the frames from the start without a gap, held to the whole run as a
+// stopped run is (checkStopped); ranges scored with other options, or damaged bytes, fail the merge with NOT_MERGED in
+// front, on which the page detects again with one worker.
 // The video's packets (Api's Packets, the bitrate lane's): every sample's against ffprobe's, whose lines the native
 // check wrote (--native: <sample>.packets.txt), exactly.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
@@ -38,8 +39,11 @@ const RUNS = {
   all: { detectors: ['adaptive', 'content', 'threshold', 'histogram', 'hash'].map(kind => ({ kind })) },
 };
 
-// The most ranges a run is split into here, as the page splits a long video (app.js's MOST_WORKERS).
+// The most ranges a run is split into here, as the page splits a long video (app.js's MOST_WORKERS), and the runs split:
+// the page's default (one detector: the merge tells the shots as each cut is confirmed) and all five detectors at once
+// (each detector's scores merged), not each detector alone again, which would double the check's time.
 const RANGES = 4;
+const SPLIT_RUNS = ['adaptive', 'all'];
 // What a merge that fails says first (Api's NotMerged): the page then detects again with one worker.
 const NOT_MERGED = 'The ranges didn\'t merge: ';
 
@@ -122,7 +126,7 @@ for (const [i, sample] of samples.entries()) {
       fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
     await checkStop(sample, video, run, options, result, statsCsv);
-    await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv);
+    if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv);
   }
   await checkNotMerged(sample);
   checkAudio(sample, video);

@@ -465,3 +465,26 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     Chromium 1.71 s against 16.65 s on the trailer, 243 s against 1,656 s on the film; Firefox 12.92 s against
     20.57 s on the trailer, 410 s against 1,929 s on the film. Not every frame identical in both browsers, so the
     decision's "Not doing" stands and no row builds it; the numbers are there)
+
+- Long videos across several Web Workers
+  - Why: [#19](https://github.com/bisforboman/shotdetector-web/issues/19). ShotDetector 3.16.0's
+    `ShotDetection.ScoreRange`/`ScoreRangeAsync` scores a range of frames on a runtime of its own, and
+    `ShotDetection.Merge` merges the ranges' `RangeScores` (carried as bytes, `ToBytes`/`FromBytes`) into exactly
+    the result `Detect` gives for the whole video. Workers need no shared memory, so this works on Pages, unlike wasm
+    threads. A film could run several times faster on a machine with several cores.
+  - Where: decision [2026-10-26-workers.md](decisions/2026-10-26-workers.md), answered by the owner on 2026-10-26:
+    progress per range with the shots at the end (one worker keeps live shots); Stop merges the ranges finished from
+    the start; several workers above about 10 minutes of video, up to `navigator.hardwareConcurrency` − 1 and at most
+    4, each range starting at a keyframe from the packet list; the audio pass in a worker of its own, in parallel.
+    The page starts the workers, each opens the same `File`, and `tools/app-check.mjs` checks that a run split into
+    ranges gives the same CSVs as one worker, on every sample, and that a stopped split run gives the result for its
+    finished start.
+  - Done when: the same CSVs split and whole; the speed and the heap on the two-hour film with 1, 2 and 4 workers,
+    and the decision's 10 minutes and 4 adjusted to what was measured.
+  - Depends on: "Stop a run and keep what was read" (it drives runs through `DetectAsync`).
+  - Status: Done (2026-10-27: `Mp4Input.Ranges`/`ScoreRangeAsync`/`Merge`, `Api.Ranges.cs`, `app.js`'s split and
+    `panels/ranges.js`, the sound in a worker of its own; NativeCheck's `RangeCheck.cs` and app-check split and stop
+    every sample's default and all-detector runs, the same CSVs. On the two-hour film, 2, 3 and 4 workers ran 1.97,
+    2.93 and 3.60 times as fast, the renderer at 1,065, 1,303 and 1,602 MB against 878; the 10 minutes became 2, the
+    4 stayed: README "Long videos across workers", the decision's "As measured". Stop keeps the ranges from the start
+    up to where the first unfinished one stopped: the decision's "As built")
