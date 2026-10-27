@@ -2,14 +2,20 @@
 // panels what happens. How it is built: docs/decisions/2026-10-24-the-page.md and 2026-10-25-one-page.md. This file
 // keeps the page's states (idle, opening, detecting, stopping, done, stopped, lost, error), the landing that folds into
 // a toolbar once a file is picked, the one-line status, the options, the estimate, stop, the demo and the shot playing
-// under the video (decision 2026-10-26-new-ui.md); what else is shown of a file or a run is in the panels
+// under the video (decision 2026-10-26-new-ui.md), a long video split across workers and the sound's own worker
+// (decision 2026-10-26-workers.md); what else is shown of a file or a run is in the panels
 // (panels/<name>.js, listed in index.html), each a lane of the timeline (timeline.js) or a card. A panel imports from
 // here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
 //                        'chose'    { file }                     a new file: whatever was shown of the last one goes
 //                        'opened'   { video }                    the file's YuvVideo, from Api's Open
-//                        'run'      { video, options }           a run starts: whatever was shown of the last run goes
-//                        'progress' { video, done, expected }    frames done and expected (0 when unknown)
+//                        'run'      { video, options, ranges, fallback }   a run starts: whatever was shown of the
+//                                                                last run goes. ranges: a run split across workers
+//                                                                (decision 2026-10-26-workers.md), Api's Ranges'
+//                                                                [{ firstFrame, endFrame }], else null; fallback: why a
+//                                                                split run is being detected again with one worker
+//                        'progress' { video, done, expected }    frames done and expected (0 when unknown), one worker
+//                        'range'    { video, index, done, of }   a split run's range: its frames done, of how many
 //                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it
 //                        'done'     { video, result, seconds, name }   the run's result (Api's Detect, its CSVs as
 //                                                                scenesCsv and statsCsv); name: the file's, without its
@@ -17,9 +23,10 @@
 //                                                                result.stopped: the result for its frameCount frames
 //                        'cancelled' { video, done, expected }   the run was lost at frame done: the worker didn't
 //                                                                answer a stop and was terminated
-//                        'audio'    { video, audio }             the file's sound, after its first finished run: Api's
-//                                                                Audio (CLAUDE.md "Layout" has its JSON), once per
-//                                                                opened file; a failure as notMeasured
+//                        'audio'    { video, audio }             the file's sound, measured in a worker of its own
+//                                                                alongside the file's first run: Api's Audio
+//                                                                (CLAUDE.md "Layout" has its JSON), once per opened
+//                                                                file; a failure as notMeasured
 //                        'playing'  { shot, paused }             whenever the playhead moves or the shots change: the
 //                                                                shot it is in (null outside the shots known), and
 //                                                                whether the video is paused
@@ -38,6 +45,21 @@ import { secondsOf, setDuration, timecode } from './timeline.js';
 const REFERENCE_FPS = 46;
 const REFERENCE_PIXELS_PER_SECOND = REFERENCE_FPS * 854 * 480;
 const RATE_KEY = 'pixelsPerSecond';
+
+// A long video is split across several workers, each scoring a range of it from a keyframe, and their scores merged
+// (decision 2026-10-26-workers.md): above SPLIT_SECONDS of video, as many workers as the machine has cores but one, at
+// most MOST_WORKERS. The page's address can say how many (?workers=N; 1: never split), whatever the video's length.
+// Measured 2026-10-27 (README "Long videos across workers"): splitting paid from Sintel's 52 s trailer up, so the
+// decision's 10 minutes became 2, below which a run is short enough to keep its live shots (the demo's among them); 4
+// workers took a two-hour film's renderer to 1.6 GB, so 4 stays the most.
+const SPLIT_SECONDS = 120;
+const MOST_WORKERS = 4;
+const ASKED_WORKERS = Number(new URLSearchParams(location.search).get('workers')) || null;
+// What Api's Merge says first when the ranges don't make up the video: the run is detected again with one worker.
+const NOT_MERGED = 'The ranges didn\'t merge: ';
+// How many times as fast a run goes split across 2, 3 and 4 workers as on one, for the estimate: measured on a
+// two-hour film on a 4-core machine (README "Long videos across workers").
+const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
 
 // ShotDetector's default threshold for each detector (DetectionOptions.Threshold), prefilled when one is picked. A
 // threshold left at its default is sent as none, so the run is the library's own default run.
@@ -68,6 +90,10 @@ let framesDone = 0;     // frames the current run has done, as its last progress
 let framesExpected = 0; // and how many it expects (0 when unknown)
 let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
 let running = null;     // the current run's Detect call (a promise), while it goes
+let split = null;       // a split run while it goes: { frames, done (each range's), stopped, stop() resolving it }
+let helpers = [];       // the workers of a split run's ranges after the first, ended with the run
+let listening = null;   // the worker measuring the opened file's sound, until it has
+let shown = null;       // what the status says of the last result, { text, title }
 let shots = [];         // the shots known, for the caption: told while a run goes, the result's once it is done
 let starts = [];        // each one's start in seconds, and its end
 let ends = [];
@@ -98,36 +124,62 @@ export function card(title, { place = 'details', mark, markTitle = '' } = {}) {
   return section;
 }
 
-// The worker and its calls: each call has an id, and the worker answers them in order. A worker that is replaced (one
-// that didn't answer a stop, a crash) takes its calls with it, and a call the worker cancelled ends the same way: they
-// reject with an AbortError, which the page doesn't show.
-let worker, calls = new Map(), lastId = 0;
+// The workers and their calls: the page's own worker (worker), which opens the file and runs, and the workers of a
+// split run's other ranges and of the sound, each a worker.js with a runtime of its own. Each call has an id, and a
+// worker answers its calls in order. A worker that is ended (replaced: one that didn't answer a stop, a crash; or done
+// with) takes its calls with it, and a call the worker cancelled ends the same way: they reject with an AbortError,
+// which the page doesn't show.
+let worker, lastId = 0;
+const calls = new Map(), ended = new WeakSet();
 
 export function call(name, ...args) {
+  return callOn(worker, name, ...args);
+}
+
+function callOn(w, name, ...args) {
   return new Promise((resolve, reject) => {
     const id = ++lastId;
-    calls.set(id, { resolve, reject });
-    worker.postMessage({ type: 'call', id, name, args });
+    calls.set(id, { resolve, reject, worker: w });
+    w.postMessage({ type: 'call', id, name, args });
   });
 }
 
-function newWorker() {
+// A new worker; its progress and shots go to the handlers given (the page's own worker's: fromWorker's), and a failure
+// of its own to failed (the page's own worker's: the page's error).
+function newWorker({ progress = fromWorker.progress, shot = fromWorker.shot, failed } = {}) {
   const w = new Worker('worker.js', { type: 'module' });
-  // Only the current worker's: one terminated may still have messages on their way.
-  w.onmessage = ({ data }) => { if (w === worker) fromWorker[data.type]?.(data); };
+  const handlers = { ...fromWorker, progress, shot };
+  // Only a live worker's: one ended may still have messages on their way.
+  w.onmessage = ({ data }) => { if (!ended.has(w)) handlers[data.type]?.(data); };
   // Not an exception from .NET (those answer a call as 'error'): the worker itself failed, e.g. out of memory.
   w.onerror = e => {
     e.preventDefault();
-    replaceWorker();
-    fail(`The worker stopped: ${e.message || 'unknown error'}`);
+    const message = `The worker stopped: ${e.message || 'unknown error'}`;
+    if (failed) {
+      end(w, new Error(message));
+      failed(message);
+    } else {
+      replaceWorker();
+      fail(message);
+    }
   };
   return w;
 }
 
+// Terminates a worker; its calls reject with error (an AbortError unless said).
+function end(w, error = new DOMException('The worker was replaced.', 'AbortError')) {
+  if (!w || ended.has(w)) return;
+  w.terminate();
+  ended.add(w);
+  for (const [id, c] of calls) {
+    if (c.worker !== w) continue;
+    calls.delete(id);
+    c.reject(error);
+  }
+}
+
 function replaceWorker() {
-  worker?.terminate();
-  for (const { reject } of calls.values()) reject(new DOMException('The worker was replaced.', 'AbortError'));
-  calls = new Map();
+  end(worker);
   worker = newWorker();
   opened = null;
 }
@@ -144,6 +196,7 @@ const fromWorker = {
   cancelled({ id }) { answer(id)?.reject(new DOMException('The call was cancelled.', 'AbortError')); },
   progress({ done, expected }) {
     if (!runGoes()) return;
+    if (split) return rangeProgress(0, done, expected);
     framesDone = done;
     framesExpected = expected;
     if (expected > 0) progress.value = Math.min(done / expected, 1);
@@ -194,15 +247,19 @@ function say(text, title = '') {
 }
 
 // A new file. During a run, the run is abandoned first: cancelled (Api's Cancel through the worker's 'cancel'), so it
-// keeps nothing and the worker stays, or the worker replaced if it doesn't answer.
+// keeps nothing and the worker stays, or the worker replaced if it doesn't answer; a split run's other workers and the
+// sound's are ended.
 async function choose(chosen) {
   if (!chosen || state === 'opening') return;
   if (running) {
     const run = running;
     running = null;
     worker.postMessage({ type: 'cancel' });
+    endHelpers();
     if (!await answered(run)) replaceWorker();
   }
+  end(listening?.worker);
+  listening = null;
   opened = null;
   result.hidden = true;
   setDuration(0);
@@ -242,22 +299,42 @@ async function start() {
   }
 }
 
-// One run on the opened file. Stop (stop) ends it early with the result for the frames read, which is shown as a
-// finished run's is; a new file (choose) abandons it.
+// One run on the opened file, split across workers for a long video (ranges), the sound measured alongside it the
+// first time. Stop (stop) ends it early with the result for the frames read, which is shown as a finished run's is; a
+// new file (choose) abandons it.
 async function detect() {
   setState('detecting');
+  const run = options(), plan = await ranges(opened);
+  listen();
+  await go(run, plan);
+}
+
+// The run itself: on one worker (Api's Detect) or split (plan: splitRun). A split run whose ranges don't merge, or one of
+// whose workers fails, is detected again with one worker, saying why (fallback).
+async function go(run, plan, fallback = null) {
   framesDone = framesExpected = 0;
-  const run = options();
-  emit('run', { video: opened, options: run });
+  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback });
   clearShots();
   result.hidden = false;
   progress.removeAttribute('value');
-  estimate = estimateText(opened);
-  estimated = estimateSeconds(opened);
-  say(`Detecting · about ${duration(estimated)} for ${count(opened.frameCount)} frames`, estimate);
+  const workers = plan?.ranges.length ?? 1;
+  estimate = estimateText(opened, workers);
+  estimated = estimateSeconds(opened, workers);
+  say(`${fallback ? `${fallback} Detecting again with one worker` : 'Detecting'} · about ${duration(estimated)} for ` +
+    `${count(opened.frameCount)} frames${workers > 1 ? ` with ${workers} workers` : ''}`, estimate);
   started = performance.now();
-  const video = opened, detecting = running = call('Detect', JSON.stringify(run));
-  const r = JSON.parse(await detecting);
+  const video = opened, detecting = running = plan ? splitRun(plan, run) : call('Detect', JSON.stringify(run));
+  let json;
+  try {
+    json = await detecting;
+  } catch (e) {
+    if (running !== detecting) return; // abandoned: a new file was chosen
+    if (e.name === 'TimeoutError') return lost(video);
+    if (!plan || state === 'stopping' || e.name === 'AbortError') throw e;
+    running = null;
+    return go(run, null, e.message.startsWith(NOT_MERGED) ? e.message : `A worker failed: ${e.message}`);
+  }
+  const r = JSON.parse(json);
   const seconds = (performance.now() - started) / 1000;
   if (running !== detecting) return; // abandoned: a new file was chosen
   running = null;
@@ -265,8 +342,99 @@ async function detect() {
   r.scenesCsv = await call('ScenesCsv');
   r.statsCsv = await call('StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile
-  show(r, seconds);
-  await sound();
+  show(r, seconds, workers);
+}
+
+// How a run of the opened file is split (decision 2026-10-26-workers.md): above SPLIT_SECONDS of video, into as many
+// ranges as there are cores but one, at most MOST_WORKERS (or as ?workers= says), each from a keyframe (Api's Ranges):
+// { count, frames, ranges }, or null for one worker (a short video, a machine with two cores, too few keyframes).
+async function ranges(video) {
+  const count = ASKED_WORKERS ??
+    (lengthOf(video) > SPLIT_SECONDS ? Math.min((navigator.hardwareConcurrency || 1) - 1, MOST_WORKERS) : 1);
+  if (count < 2) return null;
+  const plan = JSON.parse(await call('Ranges', count));
+  return plan.ranges.length > 1 ? { count, ...plan } : null;
+}
+
+// A run split into ranges: the page's own worker scores the first, a worker of its own each other (it opens the same
+// file), and the page's worker merges their scores (Api's ScoreRange, RangeBytes, Merge): a promise of Merge's JSON,
+// which is Detect's. Stopped (stop), every worker ends its range where it has got to, and the ranges from the start
+// without a gap merge into the result for those frames, as a one-worker run stopped there; a worker that doesn't answer
+// is ended and its range left out, unless it is the page's own (a TimeoutError: the run is lost).
+async function splitRun(plan, run) {
+  const json = JSON.stringify(run);
+  let stopped;
+  split = { frames: plan.frames, done: plan.ranges.map(() => 0), stopped: new Promise(resolve => { stopped = resolve; }) };
+  split.stop = stopped;
+  const quiet = () => {};
+  helpers = plan.ranges.slice(1).map((_, i) => newWorker({
+    progress: ({ done, expected }) => rangeProgress(i + 1, done, expected), shot: quiet, failed: quiet,
+  }));
+  const scored = plan.ranges.map((_, i) => (async () => {
+    const w = i === 0 ? worker : helpers[i - 1];
+    if (i > 0) await callOn(w, 'Open', file);
+    await callOn(w, 'ScoreRange', json, plan.count, i);
+    return callOn(w, 'RangeBytes');
+  })());
+  let first = false; // the first range has its answer
+  scored[0].finally(() => { first = true; });
+  for (const p of scored) p.catch(() => {}); // a failure is taken from Promise.all, once
+  try {
+    let bytes = await Promise.race([Promise.all(scored), split.stopped.then(() => null)]);
+    if (bytes === null) {
+      // Stopped: as long as a few pauses take at the run's rate, and a second more (answered), for every range.
+      const frame = framesDone > 0 ? (performance.now() - started) / framesDone * plan.ranges.length : 0;
+      bytes = await Promise.all(scored.map(p => within(p, 1000 + 24 * frame)));
+      if (bytes[0] === undefined) {
+        replaceWorker();
+        throw new DOMException('The page\'s worker didn\'t answer the stop.', 'TimeoutError');
+      }
+    }
+    const joined = new Uint8Array(bytes.reduce((n, b) => n + (b?.length ?? 0), 0));
+    let at = 0;
+    for (const b of bytes.filter(Boolean)) {
+      joined.set(b, at);
+      at += b.length;
+    }
+    return await call('Merge', json, joined, bytes.map(b => b?.length ?? 0));
+  } finally {
+    split = null;
+    endHelpers();
+    // A range that failed leaves the page's worker scoring the first: cancelled, before the next call (one worker).
+    if (!first) {
+      worker.postMessage({ type: 'cancel' });
+      await within(scored[0], 1000);
+    }
+  }
+}
+
+// A promise's value within ms: undefined if it takes longer, null if it fails.
+function within(promise, ms) {
+  let timer;
+  const late = new Promise(resolve => { timer = setTimeout(resolve, ms); });
+  return Promise.race([promise.catch(() => null), late]).finally(() => clearTimeout(timer));
+}
+
+function endHelpers() {
+  for (const w of helpers) end(w);
+  helpers = [];
+}
+
+// A split run's range has done frames of its own (of: how many it has); the status adds them up.
+function rangeProgress(index, done, of) {
+  if (!runGoes() || !split) return;
+  split.done[index] = Math.min(done, of);
+  framesDone = split.done.reduce((a, b) => a + b, 0);
+  framesExpected = split.frames;
+  progress.value = Math.min(framesDone / framesExpected, 1);
+  const seconds = (performance.now() - started) / 1000;
+  const fps = seconds > 0 ? framesDone / seconds : 0;
+  if (state === 'detecting') {
+    say(`Frame ${count(framesDone)} of ${count(framesExpected)} · ${split.done.length} workers · ` +
+      `${fps.toFixed(0)} frames per second · about ${duration(left(framesDone, framesExpected, seconds, fps))} left`,
+      `${estimate} The time left: at this run's rate so far, after its first ${LEFT_AFTER} seconds.`);
+  }
+  emit('range', { video: opened, index, done: split.done[index], of });
 }
 
 // Whether a call answered (anything: its value, an error, a cancel) within a second or so: as long as the worker takes
@@ -280,38 +448,44 @@ async function answered(call) {
   return ok;
 }
 
-// The file's sound, after its first run, so detection's time and results stay as they are (decision 2026-10-24-audio.md):
-// one pass over the audio packets in the worker. Not the page's error state if it fails: the run's results stand, and
-// the panels say why there is no sound.
-async function sound() {
+// The file's sound, measured once per opened file in a worker of its own alongside its first run (decision
+// 2026-10-26-workers.md, "The audio pass"): one pass over the audio packets, which leaves detection's results as they
+// are. Not the page's error state if it fails: the run's results stand, and the panels say why there is no sound.
+async function listen() {
   if (measured === opened) return;
-  const video = opened, said = statusText.textContent, title = statusText.title;
-  measured = video;
-  say(`${said} · measuring the sound…`, title);
+  const video = measured = opened, quiet = () => {};
+  const w = newWorker({ progress: quiet, shot: quiet, failed: quiet });
+  listening = { worker: w };
   let audio;
   try {
-    audio = JSON.parse(await call('Audio'));
+    await callOn(w, 'Open', file);
+    audio = JSON.parse(await callOn(w, 'Audio'));
   } catch (e) {
     if (e.name === 'AbortError') return;
     audio = { notMeasured: e.message, track: null, waveform: null, referenceTone: [], silences: [], peaks: [], loudness: null };
+  } finally {
+    end(w);
+    if (listening?.worker === w) listening = null;
   }
   if (opened !== video) return;
-  if (state === 'done' || state === 'stopped') say(said, title);
+  if ((state === 'done' || state === 'stopped') && shown) say(shown.text, shown.title);
   emit('audio', { video, audio });
 }
 
-// How long the run will take, from the frame count and picture size: this browser's own rate from its last run, or the
-// reference rate (REFERENCE_FPS) until it has one.
-function estimateText({ width, height, frameCount }) {
+// How long the run will take, from the frame count and picture size: this browser's own rate from its last run on one
+// worker, or the reference rate (REFERENCE_FPS) until it has one; split across workers, SPLIT_SPEEDUP times as fast.
+function estimateText(video, workers) {
+  const { width, height, frameCount } = video;
   const own = storedRate();
-  const rate = own ?? REFERENCE_PIXELS_PER_SECOND;
+  const rate = (own ?? REFERENCE_PIXELS_PER_SECOND) * (SPLIT_SPEEDUP[workers] ?? 1);
   const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
-  return `Estimate: about ${duration(estimateSeconds({ width, height, frameCount }))} for ${frameCount} frames at ` +
-    `${width}x${height} (${(rate / (width * height)).toFixed(0)} frames per second, from ${from}).`;
+  return `Estimate: about ${duration(estimateSeconds(video, workers))} for ${frameCount} frames at ${width}x${height} ` +
+    `(${(rate / (width * height)).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}, ` +
+    `from ${from}).`;
 }
 
-function estimateSeconds({ width, height, frameCount }) {
-  return frameCount * width * height / (storedRate() ?? REFERENCE_PIXELS_PER_SECOND);
+function estimateSeconds({ width, height, frameCount }, workers = 1) {
+  return frameCount * width * height / (storedRate() ?? REFERENCE_PIXELS_PER_SECOND) / (SPLIT_SPEEDUP[workers] ?? 1);
 }
 
 // The time a run has left: at its own rate once it has gone LEFT_AFTER seconds (before, start-up weighs on the rate
@@ -366,12 +540,24 @@ async function stop() {
   }
   if (state !== 'detecting') return;
   setState('stopping');
+  if (split) {
+    // Every worker ends its range at its next pause; splitRun merges what they scored from the start.
+    say(`Stopping ${split.done.length} workers at ${count(framesDone)} frames…`);
+    for (const w of [worker, ...helpers]) w.postMessage({ type: 'stop' });
+    split.stop();
+    return;
+  }
   say(`Stopping at frame ${count(framesDone)}…`);
   const run = running, video = opened;
   worker.postMessage({ type: 'stop' });
   if (await answered(run) || running !== run) return;
   running = null;
   replaceWorker();
+  lost(video);
+}
+
+// The run is gone with the page's worker, which didn't answer a stop and was replaced.
+function lost(video) {
   setState('lost');
   say(`Lost at frame ${count(framesDone)}: the worker didn't answer the stop, so it was restarted, and the run's ` +
     'result went with it.');
@@ -385,17 +571,21 @@ function fail(message) {
   error.textContent = message;
 }
 
-function show(r, seconds) {
+function show(r, seconds, workers) {
   setState(r.stopped ? 'stopped' : 'done');
-  const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second`;
+  const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}`;
   const read = r.frameCount * r.frameRate.den / r.frameRate.num;
-  say(r.stopped
-    ? `Stopped at ${timecode(read)}, frame ${count(r.frameCount)} of ${count(opened.frameCount)}, after ` +
-      `${seconds.toFixed(1)} s (${rate})`
-    : `Done in ${seconds.toFixed(1)} s, ${rate} (${(read / seconds).toFixed(1)} times real time)`,
-    `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, in ${seconds.toFixed(3)} s; ${estimate}`);
-  // A run of a few seconds is mostly start-up: too short to measure this browser's speed by.
-  if (seconds >= 5) storeRate(r.frameCount * opened.width * opened.height / seconds);
+  shown = {
+    text: r.stopped
+      ? `Stopped at ${timecode(read)}, frame ${count(r.frameCount)} of ${count(opened.frameCount)}, after ` +
+        `${seconds.toFixed(1)} s (${rate})`
+      : `Done in ${seconds.toFixed(1)} s, ${rate} (${(read / seconds).toFixed(1)} times real time)`,
+    title: `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, in ${seconds.toFixed(3)} s; ${estimate}`,
+  };
+  say(listening ? `${shown.text} · measuring the sound…` : shown.text, shown.title);
+  // A run of a few seconds is mostly start-up: too short to measure this browser's speed by; a split run's speed is
+  // its workers', not this browser's on one.
+  if (seconds >= 5 && workers === 1) storeRate(r.frameCount * opened.width * opened.height / seconds);
   emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, '') });
   clearShots();
   for (const shot of r.shots) addShot(shot);

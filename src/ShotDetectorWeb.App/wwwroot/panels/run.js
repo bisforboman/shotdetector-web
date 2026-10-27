@@ -64,11 +64,14 @@ on('chose', () => {
   clear();
   options = null;
 });
-on('run', ({ options: o }) => {
+on('run', ({ options: o, ranges }) => {
   clear();
   options = o;
   show(['0', 'shots so far'], ran());
-  summary.textContent = 'The shots appear as they are found.';
+  // A run split across workers decides its shots when their ranges merge (decision 2026-10-26-workers.md).
+  summary.textContent = ranges
+    ? `The shots come once the ${ranges.length} workers' ranges merge.`
+    : 'The shots appear as they are found.';
 });
 on('shot', ({ shot }) => {
   shots.push(shot);

@@ -1,6 +1,6 @@
 // The waveform, a lane of the timeline: the sound's envelope as ManagedCodecs' AAC decoder and FrameReader's
-// WaveformBuilder give it (Api's Audio, after the file's first run), each point's lowest and highest sample on a linear
-// scale, full scale the lane's height. A file without audio has no lane; audio the page can't measure (not AAC, or
+// WaveformBuilder give it (Api's Audio, in a worker of its own alongside the file's first run), each point's lowest and
+// highest sample on a linear scale, full scale the lane's height. A file without audio has no lane; audio the page can't measure (not AAC, or
 // refused by the decoder) gets one line in it saying why.
 import { on } from '../app.js';
 import { lane, x } from '../timeline.js';

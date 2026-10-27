@@ -4,7 +4,8 @@
 // FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV and stats CSV must be equal byte
 // for byte. Writes (a)'s CSVs to --out (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check,
-// and its audio track's description (AudioStreamCheck.cs).
+// and its audio track's description (AudioStreamCheck.cs). And every sample's run with every detector split into ranges at
+// keyframes, scored on their own and merged, against the whole run (RangeCheck.cs).
 //   NativeCheck [--out dir] [--reject file...] sample.mp4...    (SHOTDETECTOR_FFMPEG_LIBS: FFmpeg 8.1's shared libraries)
 // Exit code 0 when everything agreed and every --reject file was refused with an UnsupportedVideoException.
 using System.Globalization;
@@ -100,6 +101,7 @@ foreach (string sample in samples)
 }
 
 failures += PacketCheck.Run(samples, libs, outDir);
+failures += RangeCheck.Run(samples, outDir);
 
 foreach (string reject in rejects)
 {

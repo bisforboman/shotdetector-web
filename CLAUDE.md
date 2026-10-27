@@ -18,7 +18,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 
 - `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
   `DetectAsync`: the frames as an asynchronous source that awaits the caller every N frames and ends early when told;
-  `Audio`, the audio track as ffprobe describes it), `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
+  `Audio`, the audio track as ffprobe describes it; `Mp4Input.Ranges.cs`: `Ranges(count)`, the video split at keyframes
+  from `Packets` into `FrameRange`s about equal in frames, `ScoreRangeAsync` (one range decoded from its keyframe, the
+  packets before it not read, for ShotDetector's `ScoreRangeAsync`), `Merge` and `FromStart` (the ranges that follow
+  each other from the start), `ShownFrames`), `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
   expose, the audio codec's FFmpeg name among them), `SpsInfo` (the SPS's format and VUI colour
   fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by `Mp4Input`'s
   walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
@@ -36,8 +39,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   the worker's next task, `wwwroot/pause.js`); `Api.Csv.cs` has
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
-  `BlobStream` of its own), called by `app.js` after the file's first `Detect` and told to the panels as the `audio`
-  event, its JSON camelCase with times in seconds: `notMeasured` (why not, the core's words: no audio, which the page
+  `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
+  panels as the `audio` event, its JSON camelCase with times in seconds: `notMeasured` (why not, the core's words: no audio, which the page
   shows nothing for, "The file has no audio track.", checked by app-check.mjs; not AAC; refused by the decoder; null
   when measured), `track`
   (`{ codec, sampleRate, channels, start, duration }` or null), `waveform` (`{ start, sampleRate, samplesPerPoint,
@@ -46,7 +49,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   end, level }]`), `silences` (`[{ start, end }]`), `peaks` (`[{ sample, true, fullScale }]` per channel, dBFS and
   dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
   null); `Api.Packets.cs` `Packets()`: `Mp4Input.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
-  discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes).
+  discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes);
+  `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count)` (`{ frames, ranges:
+  [{ firstFrame, endFrame }] }`), `ScoreRange(optionsJson, count, index)` (a promise of `{ frames, stopped }`; progress,
+  pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()` (its `RangeScores` as bytes), `Merge(optionsJson,
+  bytes, lengths)` (the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; a
+  `ShotDetectionException` as "The ranges didn't merge: ...", on which the page detects again with one worker).
   `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
   the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order, one at a time; `progress` and `shot` posted while `Detect` runs; `{ type: 'stop'
@@ -57,10 +65,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
   states, idle, opening, detecting, stopping, done, stopped, lost and error, as `body[data-state]`, `body.picked` once a
   file is picked; the options, the one-line status, the estimate, stop (`terminate()` only for a worker that doesn't
-  answer), the demo, the shot playing as the caption under the video (told as the `playing` event); the events panels
-  listen to, `call(name, ...args)` and `card(title, { place, mark, markTitle })`), `timeline.js` (one axis under the
-  `<video>`, the playhead, click to seek, `lane(label, draw)`, `x()`,
-  `seek()`) and `panels/`: `cuts.js` (a lane), `scores.js` (a lane: a `<canvas>` of the run's score column from
+  answer), the demo, the shot playing as the caption under the video (told as the `playing` event), a long video split
+  across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
+  range and merges) and the sound's worker; the events panels listen to, `call(name, ...args)` and `card(title, {
+  place, mark, markTitle })`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label,
+  draw)`, `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `ranges.js` (a lane: a split run's range per worker,
+  filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads), `shots.js`
@@ -87,13 +97,16 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
-  vs ffprobe's first audio stream; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
+  vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
+  merged, vs the whole run's CSVs; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
   stats CSV the whole run's rows up to there, its shots the whole run's with the next one cut short), one cancelled,
-  `Detect`'s pauses under 1% of the runs' time; `tools/replace-check.mjs`: a bundle
+  `Detect`'s pauses under 1% of the runs' time, the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
+  stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
+  expects; `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
@@ -176,6 +189,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - A `[JSExport]`'s task that ends cancelled (an `OperationCanceledException` out of an `async` method) never settles
   the promise JavaScript holds (.NET 10, seen 2026-10-26): `Api.Detect` turns its token's cancellation into a
   `RunCancelledException`, which rejects it.
+- A split run's Stop stops every worker at its next pause, each range ending where it got to (ShotDetector: "the range
+  ends where the frames stop"), and `Mp4Input.FromStart` keeps the ranges while each reaches into the next one's first
+  frame: the first range stopped short ends the merge, as a one-worker run stopped there. With ranges about equal,
+  waiting for "finished" ranges only would keep nothing until the last minutes of a run.
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames (its window
   after them) is `None`, a cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold
   detector ends a fade-out the stop falls in with a cut (`PostProcess`), as at a file's end.
