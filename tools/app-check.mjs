@@ -13,6 +13,12 @@
 // read; for a sample without audio, the core's words the page shows nothing for (NO_AUDIO); the tone sample's waveform
 // loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native:
 // <sample>.waveform.json), each value within 1; each file of --no-aac answered with why it isn't measured.
+// A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
+// every run split into ranges at keyframes (at most RANGES), each scored on its own and merged from their bytes, must
+// give the whole run's CSVs and shots, the merge telling the shots as Detect does (checkRanges); stopped half-way through
+// the second range (and every range after it, as the page stops every worker), the merge is the result for the frames
+// from the start without a gap, held to the whole run as a stopped run is (checkStopped); ranges scored with other
+// options, or damaged bytes, fail the merge with NOT_MERGED in front, on which the page detects again with one worker.
 // The video's packets (Api's Packets, the bitrate lane's): every sample's against ffprobe's, whose lines the native
 // check wrote (--native: <sample>.packets.txt), exactly.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
@@ -31,6 +37,11 @@ const RUNS = {
   hash: { detector: 'hash' },
   all: { detectors: ['adaptive', 'content', 'threshold', 'histogram', 'hash'].map(kind => ({ kind })) },
 };
+
+// The most ranges a run is split into here, as the page splits a long video (app.js's MOST_WORKERS).
+const RANGES = 4;
+// What a merge that fails says first (Api's NotMerged): the page then detects again with one worker.
+const NOT_MERGED = 'The ranges didn\'t merge: ';
 
 const [wwwroot, outDir, ...rest] = process.argv.slice(2);
 const lists = { samples: [], '--reject': [], '--no-aac': [], '--native': [] };
@@ -62,7 +73,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, Packets, LoadedAssemblies } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, Packets, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -111,7 +122,9 @@ for (const [i, sample] of samples.entries()) {
       fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
     await checkStop(sample, video, run, options, result, statsCsv);
+    await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv);
   }
+  await checkNotMerged(sample);
   checkAudio(sample, video);
   checkPackets(sample);
 }
@@ -175,17 +188,23 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
   } finally {
     stopAt = null;
   }
-  const n = result.frameCount, rate = video.frameRate.num / video.frameRate.den;
+  const n = result.frameCount;
   if (result.stopped !== true || n < half || n >= whole.frameCount) {
     fail(`${name}: at ${half} of ${whole.frameCount} frames, the result has ${n} frames, stopped ${result.stopped}`);
     return;
   }
   if (progress.at(-1)?.[0] !== n) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}, not at ${n}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots told aren't the result's`);
+  checkStopped(name, video, result, StatsCsv(), whole, wholeStats);
+}
+
+// A stopped run's result (n frames) against the whole run's: its stats and shots as checkStop says.
+function checkStopped(name, video, result, statsCsv, whole, wholeStats) {
+  const n = result.frameCount, rate = video.frameRate.num / video.frameRate.den;
 
   // The stats: the whole run's rows for frames 1 to n, but None for the adaptive ratio in the last w.
   const lines = csv => csv.split(/\r?\n/).filter(line => line !== '');
-  const ours = lines(StatsCsv()), theirs = lines(wholeStats);
+  const ours = lines(statsCsv), theirs = lines(wholeStats);
   const header = ours[0].split(',');
   const ratios = header.flatMap((h, i) => /^adaptive_ratio.*\(w=(\d+)\)$/.test(h) ? [i] : []);
   const window = ratios.length > 0 ? Number(/\(w=(\d+)\)$/.exec(header[ratios[0]])[1]) : 0;
@@ -364,4 +383,83 @@ function checkPackets(sample) {
       `${differences.length > 3 ? `; ${differences.length - 3} more` : ''}`);
   else
     console.error(`${name}: Packets() against ffprobe's ${theirs.length} packets: the same`);
+}
+
+// Scores every range of Ranges(RANGES) one after another on this runtime, as the page's workers each score one, each
+// stopped at half its frames from range `stopFrom` on (as the page stops every worker at once): each one's bytes.
+async function scoreRanges(options, plan, stopFrom = plan.ranges.length) {
+  const bytes = [];
+  for (const [i, { firstFrame, endFrame }] of plan.ranges.entries()) {
+    stopAt = i >= stopFrom ? Math.floor((endFrame - firstFrame) / 2) : null;
+    try {
+      const scored = JSON.parse(await ScoreRange(JSON.stringify(options), RANGES, i));
+      if (scored.stopped !== (stopAt !== null)) fail(`range ${i}: stopped ${scored.stopped}`);
+    } finally {
+      stopAt = null;
+    }
+    bytes.push(RangeBytes());
+  }
+  return bytes;
+}
+
+// Merge(options, the ranges' bytes one after another, their lengths), as the page's worker is called.
+function merge(options, bytes) {
+  const joined = new Uint8Array(bytes.reduce((n, b) => n + b.length, 0));
+  let at = 0;
+  for (const b of bytes) {
+    joined.set(b, at);
+    at += b.length;
+  }
+  told = [];
+  return JSON.parse(Merge(JSON.stringify(options), joined, bytes.map(b => b.length)));
+}
+
+// The run split into ranges at keyframes, scored range by range and merged: the whole run's CSVs, shots and frames, the
+// shots told by the merge; then stopped half-way through the second range (the first, with one), the result for the
+// frames from the start.
+async function checkRanges(sample, video, run, options, whole, wholeScenes, wholeStats) {
+  const name = `${basename(sample)} ${run} in ranges`;
+  const plan = JSON.parse(Ranges(RANGES));
+  if (plan.frames !== whole.frameCount) fail(`${name}: Ranges says ${plan.frames} frames, the whole run read ${whole.frameCount}`);
+  const started = performance.now();
+  const bytes = await scoreRanges(options, plan);
+  const result = merge(options, bytes);
+  const seconds = (performance.now() - started) / 1000;
+  const same = ScenesCsv() === wholeScenes && StatsCsv() === wholeStats;
+  if (!same || JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || result.frameCount !== whole.frameCount ||
+    result.stopped !== false || JSON.stringify(result.warnings) !== JSON.stringify(whole.warnings))
+    fail(`${name}: ${same ? 'the same CSVs' : 'other CSVs'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
+      `(stopped ${result.stopped}), the whole run's ${whole.shots.length} of ${whole.frameCount}`);
+  if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots the merge told aren't its result's`);
+  console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
+    `${bytes.map(b => b.length).join(' + ')} bytes, ${seconds.toFixed(2)} s: ${same ? 'the whole run\'s CSVs' : 'DIFFERENT CSVs'}`);
+
+  const stopFrom = Math.min(1, plan.ranges.length - 1), stopped = plan.ranges[stopFrom];
+  const partial = merge(options, await scoreRanges(options, plan, stopFrom));
+  const n = partial.frameCount, half = stopped.firstFrame + Math.floor((stopped.endFrame - stopped.firstFrame) / 2);
+  if (partial.stopped !== true || n < half || n >= stopped.endFrame) {
+    fail(`${name} stopped in range ${stopFrom} (${stopped.firstFrame}-${stopped.endFrame - 1}) at ${half}: ` +
+      `${n} frames, stopped ${partial.stopped}`);
+    return;
+  }
+  checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, StatsCsv(), whole, wholeStats);
+}
+
+// Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other
+// options than the merge's (another fingerprint), or their bytes damaged (the checksum).
+async function checkNotMerged(sample) {
+  const plan = JSON.parse(Ranges(RANGES));
+  const bytes = await scoreRanges(RUNS.content, plan);
+  const damaged = bytes.map(b => b.slice());
+  damaged.at(-1)[damaged.at(-1).length >> 1] ^= 1;
+  for (const [what, options, b] of [['other options', RUNS.adaptive, bytes], ['damaged bytes', RUNS.content, damaged]]) {
+    let message = null;
+    try {
+      merge(options, b);
+    } catch (e) {
+      message = e.message.split('\n')[0];
+    }
+    if (!message?.startsWith(NOT_MERGED)) fail(`${basename(sample)}: ranges with ${what} merged, or failed otherwise: ${message}`);
+    else console.error(`${basename(sample)}: ranges with ${what} don't merge: "${message}"`);
+  }
 }
