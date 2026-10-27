@@ -7,7 +7,8 @@
   <!-- A static mockup of docs/decisions/2026-10-26-new-ui.md's proposed layout, nothing of the real page: no runtime,
        no worker, the Sintel trailer's numbers from a run on the live page (2026-10-26) typed in, the lanes drawn by
        hand to look like it, grey boxes where the thumbnails would be. Open it as a file. ?state=idle, ?state=detecting
-       or ?state=done (the default) shows that state; the toolbar's buttons switch too. The tokens and type are the
+       ?state=done (the default) or ?state=stopped (a run stopped at frame 608, as #42 shows it) shows that state; the
+       toolbar's buttons switch too. The tokens and type are the
        live page's style.css, so what differs is the layout, not the look. -->
   <style>
     :root {
@@ -64,7 +65,8 @@
     .toolbar .actions { display: flex; gap: 0.5rem; margin-left: auto; }
     .status { display: grid; gap: 0.25rem; min-height: 2.25rem; padding: 0.4rem 0; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
     .status progress { width: 100%; height: 0.35rem; }
-    body[data-state="done"] .detecting, body[data-state="detecting"] .done { display: none; }
+    body[data-state="done"] .detecting, body[data-state="detecting"] .done, body[data-state="stopped"] .detecting { display: none; }
+    body[data-state="stopped"] .done-only, body:not([data-state="stopped"]) .stopped { display: none; }
 
     /* The result: the video and the run's card side by side, the timeline across the width, the shots, then the details. */
     .result { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-template-areas: "player run" "timeline timeline" "shots shots" "details details";
@@ -125,7 +127,7 @@
 </head>
 <body data-state="done">
   <p class="banner">A mockup of the proposed layout, with a run's real numbers typed in and the lanes drawn by hand. States:
-    <a href="?state=idle">idle</a> <a href="?state=detecting">detecting</a> <a href="?state=done">done</a></p>
+    <a href="?state=idle">idle</a> <a href="?state=detecting">detecting</a> <a href="?state=done">done</a> <a href="?state=stopped">stopped</a></p>
 
   <!-- Idle: the landing. One screen: the pitch, the drop zone (the demo inside it), the options. -->
   <section class="landing">
@@ -158,27 +160,34 @@
     <div class="actions">
       <button type="button" class="done" onclick="go('detecting')">Detect shots</button>
       <button type="button" class="quiet detecting">Pause</button>
-      <button type="button" class="quiet detecting" onclick="go('done')">Stop</button>
+      <button type="button" class="quiet detecting" onclick="go('stopped')">Stop</button>
     </div>
   </header>
   <div class="status">
     <progress class="detecting" max="1" value="0.33"></progress>
     <span class="detecting">Frame 412 of 1,253 · 52 frames per second · about 16 s left (estimate from this browser's last run)</span>
-    <span class="done">Done in 21.1 s, 59 frames per second (2.5 times real time). The sound measured in 0.6 s.</span>
+    <span class="done done-only">Done in 21.1 s, 59 frames per second (2.5 times real time). The sound measured in 0.6 s.</span>
+    <span class="stopped">Stopped at 00:00:25.333, frame 608 of 1,253, after 10.1 s (60 frames per second). The sound measured in 0.6 s.</span>
   </div>
 
   <main class="result">
     <section class="player">
       <div class="video"></div>
-      <p class="now"><b>Shot 2 of 8</b> · 00:00:13.917 – 00:00:16.500 · 1.2 s in <span class="detecting">· 3 shots so far</span></p>
+      <p class="now"><b>Shot 2 of <span class="done-only">8</span><span class="stopped">5</span></b> · 00:00:13.917 – 00:00:16.500 · 1.2 s in <span class="detecting">· 3 shots so far</span></p>
     </section>
 
     <section class="run card">
       <h2>This run <span class="mark exact" title="The scenes and stats CSVs are what scenedetect writes, byte for byte: checked on every sample, natively and on wasm">scenedetect's, byte for byte</span></h2>
-      <p class="figures done">
+      <p class="figures done done-only">
         <span><strong>8</strong><small>shots</small></span>
         <span><strong>7</strong><small>cuts</small></span>
         <span><strong>52.21 s</strong><small>1,253 frames at 24 fps</small></span>
+        <span><strong>adaptive 3</strong><small>min shot 0.6 s</small></span>
+      </p>
+      <p class="figures stopped">
+        <span><strong>5</strong><small>shots, the last ending where it stopped</small></span>
+        <span><strong>4</strong><small>cuts</small></span>
+        <span><strong>00:00:25.333</strong><small>stopped at: 608 of 1,253 frames read</small></span>
         <span><strong>adaptive 3</strong><small>min shot 0.6 s</small></span>
       </p>
       <p class="figures detecting">
@@ -187,7 +196,7 @@
         <span><strong>adaptive 3</strong><small>min shot 0.6 s</small></span>
       </p>
       <p class="downloads done"><a href="#" download>Scenes CSV</a> <a href="#" download>Stats CSV</a>
-        <small class="note">sintel-trailer.scenes.csv, sintel-trailer.stats.csv: what <code>scenedetect -s</code> writes</small></p>
+        <small class="note">sintel-trailer.scenes.csv, sintel-trailer.stats.csv: what <code>scenedetect -s</code> writes<span class="stopped"> for the part read</span></small></p>
       <p class="downloads detecting"><small class="note">The downloads come when the run finishes or is stopped.</small></p>
       <p class="warnings done">Read sequentially, not in chunks: frames from the caller. <span class="note">(a warning of ShotDetector's, shown here when a run has one; this run had none, the line is for the mockup)</span></p>
     </section>
@@ -203,10 +212,10 @@
         </div>
         <div class="tracks">
           <div class="track">
-            <div class="scanned detecting" style="width: 33%"></div>
+            <div class="scanned detecting" style="width: 33%"></div><div class="scanned stopped" style="width: 48.5%"></div>
             <span class="tick" style="left: 26.66%"></span><span class="tick" style="left: 31.6%"></span>
             <span class="tick done" style="left: 33.5%"></span><span class="tick done" style="left: 45.57%"></span>
-            <span class="tick done" style="left: 49.56%"></span><span class="tick done" style="left: 52.5%"></span><span class="tick done" style="left: 53.63%"></span>
+            <span class="tick done done-only" style="left: 49.56%"></span><span class="tick done done-only" style="left: 52.5%"></span><span class="tick done done-only" style="left: 53.63%"></span>
           </div>
           <div class="track taller">
             <div class="stillspan" style="left: 0; width: 4%"><span>still</span></div>
@@ -217,6 +226,7 @@
               <g fill="var(--fg)" opacity="0.6"><circle cx="266" cy="20" r="3"/><circle cx="316" cy="30" r="3"/><circle cx="335" cy="25" r="3"/><circle cx="455" cy="18" r="3"/><circle cx="495" cy="22" r="3"/><circle cx="525" cy="24" r="3"/><circle cx="536" cy="26" r="3"/></g>
             </svg>
             <span class="legend">adaptive_ratio (w=2)</span><span class="level" style="top: 42%">3</span>
+            <div class="stopped" style="position: absolute; top: 0; bottom: 0; left: 48.5%; right: 0; background: var(--panel); border-left: 1px dashed var(--line)"></div>
           </div>
           <div class="track tall">
             <svg viewBox="0 0 52 1" preserveAspectRatio="none" aria-hidden="true">
@@ -249,10 +259,11 @@
           <tr class="current"><td class="still"><span class="thumb">00:00:13</span></td><td>2</td><td>00:00:13.917</td><td>00:00:16.500</td><td>2.583 s</td></tr>
           <tr><td class="still"><span class="thumb">00:00:16</span></td><td>3</td><td>00:00:16.500</td><td>00:00:17.500</td><td>1.000 s</td></tr>
           <tr class="done"><td class="still"><span class="thumb">00:00:17</span></td><td>4</td><td>00:00:17.500</td><td>00:00:23.792</td><td>6.292 s</td></tr>
-          <tr class="done"><td class="still"><span class="thumb">00:00:23</span></td><td>5</td><td>00:00:23.792</td><td>00:00:25.875</td><td>2.083 s</td></tr>
-          <tr class="done"><td class="still"><span class="thumb">00:00:25</span></td><td>6</td><td>00:00:25.875</td><td>00:00:27.417</td><td>1.542 s</td></tr>
-          <tr class="done"><td class="still"><span class="thumb">00:00:27</span></td><td>7</td><td>00:00:27.417</td><td>00:00:28.000</td><td>0.583 s</td></tr>
-          <tr class="done"><td class="still"><span class="thumb">00:00:28</span></td><td>8</td><td>00:00:28.000</td><td>00:00:52.208</td><td>24.208 s</td></tr>
+          <tr class="stopped"><td class="still"><span class="thumb">00:00:23</span></td><td>5</td><td>00:00:23.792</td><td>00:00:25.333</td><td>1.541 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:23</span></td><td>5</td><td>00:00:23.792</td><td>00:00:25.875</td><td>2.083 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:25</span></td><td>6</td><td>00:00:25.875</td><td>00:00:27.417</td><td>1.542 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:27</span></td><td>7</td><td>00:00:27.417</td><td>00:00:28.000</td><td>0.583 s</td></tr>
+          <tr class="done done-only"><td class="still"><span class="thumb">00:00:28</span></td><td>8</td><td>00:00:28.000</td><td>00:00:52.208</td><td>24.208 s</td></tr>
         </tbody>
       </table>
     </section>
@@ -260,7 +271,7 @@
     <section class="details">
       <section class="card done">
         <h2>Shot statistics <span class="mark" title="Worked out by the page from the shots ShotDetector found, not ShotDetector's numbers">the page's</span></h2>
-        <dl><dt>Shots</dt><dd>8</dd><dt>Average length</dt><dd>6.53 s</dd><dt>Median length</dt><dd>2.33 s</dd>
+        <dl><dt>Shots</dt><dd><span class="done-only">8</span><span class="stopped">5 (the part read; the rest of the card as for the whole run, for the mockup)</span></dd><dt>Average length</dt><dd>6.53 s</dd><dt>Median length</dt><dd>2.33 s</dd>
           <dt>Shortest</dt><dd><a href="#">0.58 s (shot 7)</a></dd><dt>Longest</dt><dd><a href="#">24.21 s (shot 8)</a></dd>
           <dt>Cuts per minute</dt><dd>8.0</dd><dt>Cuts on a keyframe</dt><dd>5 of 7</dd></dl>
         <p class="note">From the run's shots: their lengths as in the scenes CSV. Exact values in the tooltips.</p>
@@ -300,7 +311,7 @@
 
   <script>
     const state = new URLSearchParams(location.search).get('state');
-    if (['idle', 'detecting', 'done'].includes(state)) document.body.dataset.state = state;
+    if (['idle', 'detecting', 'done', 'stopped'].includes(state)) document.body.dataset.state = state;
     function go(s) { document.body.dataset.state = s; history.replaceState(null, '', `?state=${s}`); }
   </script>
 </body>

@@ -122,12 +122,13 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
     `card(title, { place })`, the "Now" line out of `panels/stats.js`; the lanes unchanged. The mockup:
     [mockups/2026-10-26-new-ui.html](mockups/2026-10-26-new-ui.html).
   - Done when: the direction the owner chose, on the Sintel trailer in headless Chromium at 1280 px and 390 px in
-    every state (idle, opening, detecting, paused, stopped, done, error), the video, the run and the whole timeline in
-    the first screen at 1280 px; screenshots in the PR; `tools/check.sh wasm` green, the CSVs unchanged (the page's
-    exports don't change).
+    every state (idle, opening, detecting, stopping, done, stopped, lost, error, and paused if the pause row has
+    landed), the video, the run and the whole timeline in the first screen at 1280 px; screenshots in the PR;
+    `tools/check.sh wasm` green, the CSVs unchanged (the page's exports don't change).
   - Not: no framework, no build step; no change to what any panel computes or says; no new export.
-  - Depends on: the panel rows open on 2026-10-26 (#36, #39, #42) landed first, so it moves their panels rather than
-    editing beside them; the owner's choice in the decision.
+  - Depends on: the owner's choice in the decision. The scores, warnings and Stop rows landed on 2026-10-26, so it
+    moves their panels rather than editing beside them; "Pause and resume a run" edits `app.js`'s buttons too, so
+    whichever lands second merges the other.
   - Status: Open (proposed 2026-10-26; waiting on the owner's choice)
 
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
