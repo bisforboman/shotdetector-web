@@ -126,10 +126,10 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
     landed), the video, the run and the whole timeline in the first screen at 1280 px; screenshots in the PR;
     `tools/check.sh wasm` green, the CSVs unchanged (the page's exports don't change).
   - Not: no framework, no build step; no change to what any panel computes or says; no new export.
-  - Depends on: the owner's choice in the decision. The scores, warnings and Stop rows landed on 2026-10-26, so it
+  - Depends on: the scores, warnings and Stop rows landed on 2026-10-26, so it
     moves their panels rather than editing beside them; "Pause and resume a run" edits `app.js`'s buttons too, so
     whichever lands second merges the other.
-  - Status: Open (proposed 2026-10-26; waiting on the owner's choice)
+  - Status: Open (decided 2026-10-27: the decision's B and its one provenance chip, the owner's choice)
 
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
