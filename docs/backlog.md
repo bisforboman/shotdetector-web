@@ -58,7 +58,7 @@ The WebCodecs one is measured and done ([backlog-done.md](backlog-done.md)): the
   - Done when: the same CSVs split and whole; the speed and the heap on the two-hour film with 1, 2 and 4 workers,
     and the decision's 10 minutes and 4 adjusted to what was measured.
   - Depends on: "Stop a run and keep what was read" (it drives runs through `DetectAsync`).
-  - Status: Open (decided 2026-10-26)
+  - Status: In progress (2026-10-27; decided 2026-10-26)
 
 - Resume after Stop, across visits
   - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
