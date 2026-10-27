@@ -45,7 +45,7 @@ function show(...figs) {
 function ran() {
   const { detector, threshold, minSceneLength } = options;
   return [detector, `${threshold == null ? 'default threshold' : `threshold ${threshold}`} · ` +
-    `${minSceneLength == null ? 'default minimum shot' : `minimum shot ${minSceneLength}`}`,
+    `${minSceneLength == null ? 'default minimum shot length' : `minimum shot length ${minSceneLength}`}`,
     'The detector, threshold and minimum shot length the run used; a default is ShotDetector\'s own'];
 }
 
