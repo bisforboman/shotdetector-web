@@ -39,14 +39,17 @@ const RATE_KEY = 'pixelsPerSecond';
 // A long video is split across several workers, each scoring a range of it from a keyframe, and their scores merged
 // (decision 2026-10-26-workers.md): above SPLIT_SECONDS of video, as many workers as the machine has cores but one, at
 // most MOST_WORKERS. The page's address can say how many (?workers=N; 1: never split), whatever the video's length.
-const SPLIT_SECONDS = 600;
+// Measured 2026-10-27 (README "Long videos across workers"): splitting paid from Sintel's 52 s trailer up, so the
+// decision's 10 minutes became 2, below which a run is short enough to keep its live shots (the demo's among them); 4
+// workers took a two-hour film's renderer to 1.6 GB, so 4 stays the most.
+const SPLIT_SECONDS = 120;
 const MOST_WORKERS = 4;
 const ASKED_WORKERS = Number(new URLSearchParams(location.search).get('workers')) || null;
 // What Api's Merge says first when the ranges don't make up the video: the run is detected again with one worker.
 const NOT_MERGED = 'The ranges didn\'t merge: ';
-// How many times as fast a run goes split across 2, 3 and 4 workers as on one, for the estimate: measured on the
-// two-hour film (README "Long videos across workers").
-const SPLIT_SPEEDUP = { 2: 1.8, 3: 2.4, 4: 3 };
+// How many times as fast a run goes split across 2, 3 and 4 workers as on one, for the estimate: measured on a
+// two-hour film on a 4-core machine (README "Long videos across workers").
+const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
 
 // ShotDetector's default threshold for each detector (DetectionOptions.Threshold), prefilled when one is picked. A
 // threshold left at its default is sent as none, so the run is the library's own default run.
