@@ -138,13 +138,10 @@ derives for display is labelled as the page's own; the CSVs stay the only output
   - Not: no change to the core library.
   - Status: Open
 
-## Waiting
+### Unblocked by ShotDetector 3.20.0 and ManagedCodecs 0.1.0
 
-The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
-[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
-[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
-asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
-in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are under Next.
+These waited on shotdetector#519 and ManagedCodecs#138 (filed 2026-10-26); the packages the page builds against
+since 2026-10-28 carry what they asked for, or part of it.
 
 - ShotDetector: the stats CSV written row by row
   - Why: the half of this that stored the stats by column shipped in ShotDetector 3.16.1
@@ -157,8 +154,9 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
     position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
     `[JSImport]` the worker gives), so the whole CSV is never one string.
-  - Status: Waiting on upstream ([shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519), filed
-    2026-10-26; the columns shipped in 3.16.1 on 2026-10-25)
+  - Status: Open (2026-10-28: `Stats.WriteCsv(TextWriter, position)` shipped in ShotDetector 3.20.0, the version the
+    page builds against since 2026-10-28; [shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519)
+    was filed 2026-10-26, the columns shipped in 3.16.1 on 2026-10-25)
 
 - ManagedCodecs: the MP4 index without its copies
   - Why: `Mp4Demuxer` allocates about 275 B a sample to index a file and keeps 56 (140 MB and 28.5 MB for a two-hour
@@ -167,21 +165,19 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`). Their rows are
   - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23): each track's samples filled once, a smaller
     `Sample`, optionally only the tracks asked for. Then here: the submodule bumped, the steps measured again.
-  - Status: Waiting on upstream ([ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed
-    2026-10-26)
+  - Status: Open (2026-10-28: ManagedCodecs 0.1.0, the package the page builds against since 2026-10-28, builds the
+    sample table once at its final size (ManagedCodecs#123); whether that is all of
+    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed 2026-10-26, the steps measured
+    again will say)
 
-- ManagedCodecs' license
-  - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to
-    every visitor and should say under what terms.
-  - Where: upstream (bisforboman/ManagedCodecs): a LICENSE file; then here: bump the submodule, update
-    THIRD-PARTY-NOTICES.md and the page's footer.
-  - Status: Waiting on the owner (2026-10-24)
+## Waiting
 
-- ManagedCodecs from NuGet instead of the submodule
-  - Why: a package pins a version in Directory.Packages.props like the others, and a clone needs no `--recursive`.
-  - Where: when it is on nuget.org: replace the two project references in the core csproj with a package reference,
-    delete `external/` and `.gitmodules`, update README "Packages" and CLAUDE.md, `ci.yml`'s `submodules: true`.
-  - Status: Waiting on upstream (2026-10-24: not on NuGet)
+The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
+[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
+[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
+asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
+in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
+3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are under Next.
 
 ## Maybe
 
