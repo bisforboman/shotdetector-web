@@ -50,7 +50,7 @@ enc -filter_complex "$(three 352x288 25 1.5)" -c:v libx264 -pix_fmt yuv420p -out
 # An edit list that ends 3 s in (of 4.5 s): FFmpeg plays 75 frames, while nb_frames (and so OpenCV's frame count) stays
 # the track's 112 samples. Movie timescale 1000; libx264's 2-frame delay is media_time 1024 in 1/12800.
 enc -filter_complex "$(three 352x288 25 1.5)" -c:v libx264 -pix_fmt yuv420p "$out/edit-end-352x288-25.mp4"
-python3 -I external/ManagedCodecs/tools/mp4-edit-list.py "$out/edit-end-352x288-25.mp4" 0 3000:1024
+python3 -I tools/mp4-edit-list.py "$out/edit-end-352x288-25.mp4" 0 3000:1024
 
 # 720p, untagged: ShotDetector's size rule picks BT.709 there.
 enc -filter_complex "$(three 1280x720 25 1),$untagged" -c:v libx264 -preset veryfast -pix_fmt yuv420p "$out/cuts-1280x720-25.mp4"

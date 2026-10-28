@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\external\ManagedCodecs\src\ManagedCodecs.H264\ManagedCodecs.H264.csproj" />
+    <PackageReference Include="ManagedCodecs.H264" />
   </ItemGroup>
 
 </Project>
