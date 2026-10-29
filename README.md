@@ -337,9 +337,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's run with all five detectors split
   into ranges at keyframes as the page splits a long video (`Mp4Input.Ranges`, at most 4: 2 to 4 on the samples), each
-  scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`); and
+  scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
   each sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio
-  stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`). Markdown tables go
+  stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`); and the page's
+  defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
+  every sample the cuts of the run without it, as the page sends a default as none (`DefaultsCheck.cs`; Sintel's
+  trailer is the sample that tells histogram's 0.05 from 0.2). Markdown tables go
   to `out/native-report.md`, (a)'s CSVs to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
