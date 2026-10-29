@@ -5,8 +5,8 @@
 #   wasm:   the same library on browser-wasm under Node, through the page's own exports (src/ShotDetectorWeb.App,
 #           driven by tools/app-check.mjs), its CSVs against the native run's;
 #   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
-#           PAGE_SAMPLE picked on one worker and on two, and the demo, each run's downloaded CSVs against the native
-#           run's (the samples named are not used: always those two). Reuses the bundle wasm published in the same
+#           PAGE_SAMPLE picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
+#           run's downloaded CSVs against the native run's (the samples named are not used: always those two). Reuses the bundle wasm published in the same
 #           call, else publishes one.
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
@@ -112,7 +112,7 @@ if [[ $page == true ]]; then
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" --native out/native || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "picked, on two workers and the demo, the downloaded CSVs identical to the native run's" || echo "FAILED")."
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "picked, on two workers, the demo paused and resumed and stopped while paused, the downloaded CSVs the native run's" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi
