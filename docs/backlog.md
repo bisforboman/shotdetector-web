@@ -77,15 +77,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
   - Not: no change to how a browser's own rate is kept.
   - Status: Open
 
-- Thumbnails per shot
-  - Why: a table of times is hard to read; a still per shot shows what was found. Decision "Pictures of shots".
-  - Where: `app.js`: for each shot, seek the `<video>` to the shot's first frame, `drawImage` to a small canvas,
-    lazily as rows scroll into view (one seek at a time; `seeked` events).
-  - Done when: a trailer's shots each show a still within a few seconds of the run finishing, and the detection
-    result is unchanged (the stills are the browser's decode, not the library's).
-  - Not: no second decode in .NET, no image export.
-  - Status: Open
-
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
 (decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
