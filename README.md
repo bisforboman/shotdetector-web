@@ -409,12 +409,16 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   served as Pages serves it, the demo clip in `demo/` (`sintel_trailer-480p.mp4`, as `pages.yml` puts it), and the
   page loaded fresh three times: `with-audio-320x240-25.mp4` set on the file input and detected with the options as
   the page prefills them; the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers" in the
-  status); and "Try the demo". Each run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a
-  visitor clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the
-  shots table must have a row per shot of the CSV; the demo's sound must be measured. Any exception, console error (the
+  status); "Try the demo", paused a quarter of the way in (the button reading Resume, the bar and the status unchanged
+  for 2 s once the run has reached the pause it waits at) and resumed; and the demo detected again, paused and stopped
+  while paused. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
+  clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the shots
+  table must have a row per shot of the CSV; the demo's sound must be measured. The stopped run must end `stopped` at
+  the frame it was paused at, its stats CSV the whole run's rows up to there (the adaptive ratio `None` in the last
+  frames of its window, as app-check.mjs holds it), its last shot ending there. Any exception, console error (the
   workers' too), failed request or HTTP error fails it. It reuses the bundle `wasm` published in the same call, else
-  publishes one (interpreted unless `aot`): the three runs take about 2 minutes interpreted, most of it the demo's, and
-  about 25 s compiled ahead of time (2026-10-29).
+  publishes one (interpreted unless `aot`): about 2 min 20 s interpreted, most of it the demo's run, and well under a
+  minute compiled ahead of time (2026-10-29).
 - **replace** (`tools/replace-check.mjs`, under Node): LGPL-2.1, FastYuv replaceable (Licensing). It clones shotdetector
   at the tag of the packaged FastYuv, makes its converter's constructor throw, builds it, publishes the App against it
   (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement.

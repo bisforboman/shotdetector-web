@@ -56,17 +56,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### After the first release
 
-- The page check: pause, resume and stop
-  - Why: `tools/page-check` (the real-browser smoke test, done 2026-10-29) runs the page to the end; the buttons that
-    change a run while it goes are the page's own JavaScript too: Stop, and Pause and Resume once PR #55 ("Pause and
-    resume a run") is on `main`, with its `paused` state.
-  - Where: `tools/page-check/page-check.mjs`: the demo (or a split run) paused half-way, the progress bar and status
-    held still, resumed to the CSVs of the run never paused; a run stopped half-way ending `stopped` with the stats CSV
-    the whole run's rows up to there, as app-check.mjs holds the exports to it.
-  - Done when: `tools/check.sh page` covers both and CI is green; it fails when `app.js`'s pause or stop is broken.
-  - Not: app-check.mjs's checks of the exports; another browser.
-  - Status: Open (waits on PR #55)
-
 - The estimate's reference rate measured again
   - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
     3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on

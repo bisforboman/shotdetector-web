@@ -117,8 +117,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   expects; `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
-  the demo clip, a sample picked on one worker and on two and the demo, each run's downloaded CSVs against the native
-  run's, any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  the demo clip, a sample picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
+  run's downloaded CSVs against the native run's, any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
   frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane
