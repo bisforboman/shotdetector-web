@@ -56,16 +56,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### After the first release
 
-- Real-browser smoke test
-  - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
-    needs a check of its own. Decision "Testing the page".
-  - Where: a CI job (Linux, Playwright, Chromium only) that serves the published `wwwroot`, loads the page, sets the
-    file input to one sample, runs with the defaults, downloads the scenes CSV and compares it with `out/native/`'s;
-    `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
-  - Done when: the job fails when `app.js` breaks the download and passes on `main`.
-  - Not: no cross-browser matrix, no visual tests.
-  - Status: Open
-
 - The estimate's reference rate measured again
   - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
     3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on
@@ -116,6 +106,16 @@ since 2026-10-28 carry what they asked for, or part of it.
     sample table once at its final size (ManagedCodecs#123); whether that is all of
     [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed 2026-10-26, the steps measured
     again will say)
+
+- The frame a paused run is held at
+  - Why: paused, the status says "Paused at frame N" from the last `progress` (frames processed), but the run is held
+    at its next pause, by frames read, up to 8 frames on (Api's `PauseEvery`): stopped there, the result says another
+    frame (seen 2026-10-29 by `tools/page-check` on the AOT bundle: "Paused at frame 196", stopped at frame 200).
+  - Where: `app.js`'s paused status, and the `pause(framesRead)` import (`pause.js`, `worker.js`), which knows the frame
+    the run waits at; README "Pausing a run".
+  - Done when: the paused status names the frame a stop would end at; `tools/page-check` holds the stop to it exactly.
+  - Not: the stopped result, which is right.
+  - Status: Open
 
 ## Waiting
 

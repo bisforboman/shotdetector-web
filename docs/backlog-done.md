@@ -617,3 +617,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     into view, kept by the time taken at. Seen in headless Chromium on Sintel's trailer: stills while it runs, all
     there as it ends, a stopped run's shortened last shot its own middle; no .NET or worker change, so the result is
     the same. Not seen in Firefox: this cloud session's Playwright has Chromium only)
+
+- Real-browser smoke test
+  - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
+    needs a check of its own. Decision "Testing the page".
+  - Where: a CI job (Linux, Playwright, Chromium only) that serves the published `wwwroot`, loads the page, sets the
+    file input to one sample, runs with the defaults, downloads the scenes CSV and compares it with `out/native/`'s;
+    `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
+  - Done when: the job fails when `app.js` breaks the download and passes on `main`.
+  - Not: no cross-browser matrix, no visual tests.
+  - Status: Done (2026-10-29: `tools/page-check/page-check.mjs`, `tools/check.sh page`, Playwright 1.63.0 by its
+    lockfile; a sample picked, the same on two workers, and the demo paused a quarter in (the bar and status held
+    still), resumed, then detected again and stopped while paused; each whole run's downloaded CSVs identical to the
+    native run's, the stopped one's stats the whole run's rows up to its frame; interpreted in 2 min 20 s; CI's page
+    tier for the page's own files, and on the AOT bundle in the full run and `pages.yml`. A copy of the bundle whose
+    `app.js` changes the scenes CSV fails all three whole runs, one whose Pause doesn't pause the worker fails the
+    pause)

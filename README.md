@@ -342,6 +342,7 @@ whose JSON is 13.5 KB. Under Node, the trailer's pass takes 0.46 s compiled ahea
 tools/make-samples.sh        # once: samples/ (FFMPEG=<an ffmpeg with libx264>; SINTEL=<Sintel's 1080p trailer MP4>)
 export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # also put on LD_LIBRARY_PATH by the script
 tools/check.sh               # native, then wasm (interpreted); tools/check.sh wasm aot for the AOT build
+tools/check.sh page          # the page in Chromium (Playwright: npm ci and npx playwright install chromium in tools/page-check)
 tools/check.sh replace       # FastYuv replaced from its source (needs github.com); add aot for the AOT build
 tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named (the files to refuse and without AAC all)
 ```
@@ -405,12 +406,30 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads some assemblies at start that
   the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only if the runs load one. No FFmpeg
   library exists in the browser either way.
+- **page** (`tools/page-check/page-check.mjs`, Playwright 1.63.0 pinned by its lockfile, Chromium only): the page's own
+  JavaScript (`app.js`, `worker.js`, the panels) in a browser, as a visitor drives it. The published `wwwroot` is
+  served as Pages serves it, the demo clip in `demo/` (`sintel_trailer-480p.mp4`, as `pages.yml` puts it), and the
+  page loaded fresh three times: `with-audio-320x240-25.mp4` set on the file input and detected with the options as
+  the page prefills them; the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers" in the
+  status); "Try the demo", paused a quarter of the way in (the button reading Resume, the bar and the status unchanged
+  for 2 s once the run has reached the pause it waits at) and resumed; and the demo detected again, paused and stopped
+  while paused. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
+  clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the shots
+  table must have a row per shot of the CSV; the demo's sound must be measured. The stopped run must end `stopped` at
+  the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held
+  at"), its stats CSV the whole run's rows up to there (the adaptive ratio `None` in the last
+  frames of its window, as app-check.mjs holds it), its last shot ending there. Any exception, console error (the
+  workers' too), failed request or HTTP error fails it. It reuses the bundle `wasm` published in the same call, else
+  publishes one (interpreted unless `aot`): about 2 min 20 s interpreted, most of it the demo's run, and well under a
+  minute compiled ahead of time (2026-10-29).
 - **replace** (`tools/replace-check.mjs`, under Node): LGPL-2.1, FastYuv replaceable (Licensing). It clones shotdetector
   at the tag of the packaged FastYuv, makes its converter's constructor throw, builds it, publishes the App against it
   (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement.
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
-browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution).
+browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution), and for
+page Playwright with its Chromium (`npm ci`, then `npx playwright install chromium`, in `tools/page-check`; a cloud
+session's pre-installed Playwright does too).
 What runs when, on Linux (measured 2026-10-26, before these runs were split: one run of everything took 29 min, of
 which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1 min 47 s):
 
@@ -418,24 +437,26 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
   files need, by `tools/ci-scope.sh` (git diff against its base; the widest any file needs):
   - **none** for `docs/`, `*.md`, `LICENSE` and the WebCodecs measurement (`tools/webcodecs/`,
     `tools/WebCodecsCheck/`, `tools/WebCodecsWasm/`): `build` runs and passes without a check, which can't see them;
-  - **native** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
-    `versions.js`, `worker.js`, `panels/`) and `tools/NativeCheck/`: the native check alone, `DefaultsCheck.cs` reading
-    `app.js` among it;
+  - **native** for `tools/NativeCheck/`: the native check alone;
+  - **page** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
+    `versions.js`, `worker.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
+    `app.js` among it, then the page in Chromium on an interpreted publish (`tools/check.sh page`);
   - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js` and
     `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
     All of it is: native on every sample;
   wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
   shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly
-  loaded at all"; wasm AOT, the build the page deploys, on every sample. About 7 minutes (7 min 21 s on 2026-10-27, with
+  loaded at all"; wasm AOT, the build the page deploys, on every sample, and the page in Chromium on that bundle. About 7 minutes (7 min 21 s on 2026-10-27, with
   the default and all-detector runs also split into ranges and stopped there; 5 min 21 s on 2026-10-26).
   A newer push to the pull request cancels its run in progress. A filter that skips too much is caught before
-  anything deploys: `pages.yml` runs native, AOT and replace on every push to `main`, and the daily run all of it.
-  No check runs the page's own JavaScript in a browser yet (backlog, "Real-browser smoke test").
+  anything deploys: `pages.yml` runs native, AOT, the page and replace on every push to `main`, and the daily run all
+  of it.
 - **Every day on `main`, and by hand** (`ci.yml`, `schedule` and `workflow_dispatch`): all of it, wasm interpreted on
   every sample and replace with AOT included.
 - **A push to `main`** (`.github/workflows/pages.yml`; `ci.yml` doesn't run on it): `main` needn't be up to date with a
   pull request before it merges, so this checks the merged tree before it deploys. Native on every sample, wasm AOT on
-  every sample (that publish is the bundle deployed, copied out as it is, not a second one), and replace with AOT.
+  every sample (that publish is the bundle deployed, copied out as it is, not a second one), the page in Chromium on
+  that bundle with the demo clip, and replace with AOT.
   Then it adds FastYuv's license, the demo clip and `.nojekyll`, fails unless the uploaded site has
   `_framework/ShotDetector.FastYuv.wasm` and `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files of their own, and
   deploys it to GitHub Pages only if all of that passed. `workflow_dispatch` does the same for `main` by hand.

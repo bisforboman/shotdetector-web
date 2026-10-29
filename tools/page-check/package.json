@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "The page's smoke test in Chromium (page-check.mjs): Playwright, pinned with its lockfile (npm ci).",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}
