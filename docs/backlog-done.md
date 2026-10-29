@@ -573,8 +573,8 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     summary still says 0.05 and 0.395: a run without a threshold gives exactly the cuts of 0.2 (8 shots; 0.05 gives 17)
     and of 0.35 (20 shots; 0.395 gives 18). `DEFAULT_THRESHOLDS` now 0.2 and 0.35, and NativeCheck's
     `DefaultsCheck.cs` reads the page's defaults from app.js and checks each against the run without it on every
-    sample: with the old values it fails on Sintel's trailer, histogram and hash. The stale summary in ShotDetector is
-    the owner's to report upstream)
+    sample: with the old values it fails on Sintel's trailer, histogram and hash. The stale summary in ShotDetector, and
+    its CLI's help, filed as [shotdetector#591](https://github.com/bisforboman/shotdetector/issues/591))
 
 - CI's checks picked from a pull request's files
   - Why: the owner (2026-10-29): a filter in the pipeline rather than a rule in CLAUDE.md. Every pull request ran every

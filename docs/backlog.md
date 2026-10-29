@@ -186,7 +186,7 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
       say.
     ManagedCodecs' own wasm check (its ci.yml's `wasm` job, `tools/wasm-check.sh`) runs ahead of time only, so it
     can't see the interpreted fault.
-  - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file with the above: (1) the H.264
+  - Where: upstream (bisforboman/ManagedCodecs), filed as #206 with the above: (1) the H.264
     decoder's output under the Mono interpreter on browser-wasm with SIMD, wrong and varying between decodes, right
     with SIMD off and compiled ahead of time. To reproduce here: ManagedCodecs 0.2.0 in Directory.Packages.props,
     `tools/check.sh wasm` (the samples from `tools/make-samples.sh`). Then here: the bump, with the page's frames per
@@ -194,7 +194,8 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
   - Done when: a ManagedCodecs release decodes every sample to the native CSVs interpreted as well as ahead of time
     (`tools/check.sh`, `tools/check.sh wasm aot`), and its speed on wasm is measured against 0.1.0's.
   - Not: no work-around here (CLAUDE.md: a bug in ManagedCodecs is reported there); `WasmEnableSIMD` stays on.
-  - Status: Waiting on upstream (2026-10-29: measured here; the issue is the owner's to file)
+  - Status: Waiting on upstream ([ManagedCodecs#206](https://github.com/bisforboman/ManagedCodecs/issues/206), filed
+    2026-10-29)
 
 ## Maybe
 
