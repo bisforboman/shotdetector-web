@@ -585,3 +585,20 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     and CLAUDE.md's rule for what to run before pushing.
   - Status: Done (2026-10-29: the classifier's cases checked locally, the step's script run against the last six merges,
     all of which need all; `pages.yml` and the daily run still run everything)
+
+- Pause and resume a run
+  - Why: the owner asked (2026-10-26) to resume after stopping. While the page stays open, that is a pause: the run
+    stays in memory and goes on where it was.
+  - Where: the asynchronous frame source from "Stop a run and keep what was read": a `pause` message makes it wait,
+    at its next yield, on a promise that a `resume` message settles. `DetectAsync` simply waits meanwhile; nothing is
+    cancelled or ended. `app.js`: a Pause button beside Stop while a run goes, then Resume; the progress bar and the
+    frames-per-second figure hold still; live shots stay as they were told. Stop works while paused too.
+  - Done when: on the Sintel trailer, a run paused mid-way and resumed gives exactly the CSVs of a run never paused
+    (`tools/app-check.mjs` pauses and resumes at a frame on every sample, and compares); in headless Chromium and
+    Firefox the buttons and the bar behave (screenshots in the PR).
+  - Not: nothing kept across a reload (the next row); no change to the result.
+  - Depends on: "Stop a run and keep what was read".
+  - Status: Done (2026-10-29: `pause.js`'s `hold` and `release`, the worker's `pause` and `resume`, a Pause/Resume
+    button and the paused state in `app.js`, the run's time without its pauses (`runMs()`); app-check pauses every
+    sample's default run half-way and compares, and stops one while paused. Seen in headless Chromium on Sintel's
+    trailer: README "Pausing a run". Not seen in Firefox: this cloud session's Playwright has Chromium only)
