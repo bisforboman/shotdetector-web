@@ -80,7 +80,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads), `shots.js`
-  (the table below the timeline; marks the shot playing's row), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
+  decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of

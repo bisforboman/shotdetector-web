@@ -63,7 +63,9 @@ file, the options and one button: Detect, Stop while a run goes, Cancel while it
 it; then the video, with the shot playing as its caption, beside the run's card (the shots, cuts, length and options
 large, the downloads, the warnings when ShotDetector has any); the timeline across the whole width; the shots as a table
 whose rows play the video from the shot, the row of the shot playing marked, each row as soon as ShotDetector knows the
-shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`); and last a grid of cards: the shots'
+shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`) and starting with a still of the shot's middle
+frame (the browser's own decode, not ShotDetector's frame: a hidden second `<video>` on the same file, sought one still
+at a time as rows come into the table's view; on Sintel's trailer every still is there as the run ends); and last a grid of cards: the shots'
 statistics (the number of shots, average and median shot length, shortest and longest, cuts per minute, the run's speed
 against real time: the page's own figures, worked out from the shots), the sound's measures, the bitrate's numbers and
 how many cuts fall on a keyframe, and, as soon as the file is opened, "About this file": the core's description of it
