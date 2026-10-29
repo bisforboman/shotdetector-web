@@ -60,14 +60,17 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
   the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order, one at a time; `progress` and `shot` posted while `Detect` runs; `{ type: 'stop'
-  }` and `{ type: 'cancel' }` handled at once, between `Detect`'s pauses, a cancelled call answered `cancelled`),
-  `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`);
+  }`, `{ type: 'cancel' }`, `{ type: 'pause' }` and `{ type: 'resume' }` handled at once, between `Detect`'s pauses, a
+  cancelled call answered `cancelled`; a stop or cancel while paused releases the run to end there),
+  `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`; `hold`
+  and `release`: while held the promise stays unresolved, so the run waits there, README "Pausing a run");
   `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel). The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
   toolbar once a file is picked, the status line, the result's four rows: the video beside the run's cards, the timeline
   across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
-  states, idle, opening, detecting, stopping, done, stopped, lost and error, as `body[data-state]`, `body.picked` once a
-  file is picked; the options, the one-line status, the estimate, stop (`terminate()` only for a worker that doesn't
+  states, idle, opening, detecting, paused, stopping, done, stopped, lost and error, as `body[data-state]`, `body.picked` once a
+  file is picked; the options, the one-line status, the estimate, pause and resume (`runMs()`: the run's time, pauses
+  left out), stop (`terminate()` only for a worker that doesn't
   answer), the demo, the shot playing as the caption under the video (told as the `playing` event), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
   range and merges) and the sound's worker; the events panels listen to, `call(name, ...args)` and `card(title, {
@@ -108,7 +111,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
   stats CSV the whole run's rows up to there, its shots the whole run's with the next one cut short), one cancelled,
-  `Detect`'s pauses under 1% of the runs' time, the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
+  `Detect`'s pauses under 1% of the runs' time, every sample's default run paused half-way (no progress while held,
+  the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects; `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in

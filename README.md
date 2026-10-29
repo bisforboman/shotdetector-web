@@ -108,6 +108,20 @@ pause takes about 0.3 ms, the pauses were 0.25% of app-check's runs AOT and 0.05
 the Sintel trailer, AOT, stopped at frame 600: Detect answered the stop in 201 ms in headless Chromium and 136 ms in
 Firefox 136, and the next run's first progress came 98 and 129 ms after its click, without opening the file again.
 
+### Pausing a run
+
+Pause, beside Stop while a run goes, holds the run where it is and Resume goes on from there (backlog-done, "Pause and
+resume a run"). The worker's `pause` makes `pause.js` keep the promise `Detect` awaits every 8 frames unresolved
+(`hold`), and `resume` resolves it (`release`): .NET simply waits, nothing cancelled or ended, so the result is the one
+the run would have had. Every worker of a split run is paused; the sound's worker goes on (its one pass has no
+pauses). The bar and the status hold still, and the run's time, its frames per second and the rate the browser keeps
+for its estimate leave the pause out. Stop works while paused: the worker's `stop` tells .NET first, then releases the
+run, which ends at the pause it waits at. `tools/app-check.mjs` holds every sample's default run half-way for 150 ms,
+fails on any progress meanwhile, and compares the resumed run's CSVs and shots with the run never paused; on the first
+sample a run stopped while paused ends at the frame it was paused at. Seen 2026-10-29 in headless Chromium on Sintel's
+trailer: paused at frame 320 of 1,253, the bar and status unchanged 4 s later, Resume going on from there to its 8
+shots in 107.5 s, the pause left out; paused at 192 and stopped, the result for 192 frames.
+
 ## Long videos across workers
 
 A video longer than 2 minutes is split across several Web Workers, each with a .NET runtime of its own, and their
@@ -235,8 +249,11 @@ load, empty cache:
 
 The second row's transfer is the publish's files through `gzip -6`, which comes within 0.2% of what Pages sends for
 the files that didn't change. `dotnet.native.wasm` is most of it: 4.0 MB transferred, 13.3 MB raw (the runtime and
-every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path runs (backlog, the trimming row), costs
-103 KB transferred (447 KB raw); FrameReader 26 KB (80 KB). Pages answers with `cache-control: max-age=600` and an
+every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path runs, costs 103 KB transferred (447 KB
+raw); FrameReader 26 KB (80 KB). The publish already trims every assembly; they stay because ShotDetector's frame-source
+path shares code with its FFmpeg path. Measured 2026-10-29 with that code cut off (backlog, the trimming row, waiting on
+ShotDetector), the AOT bundle would be 620 KB smaller compressed (5.76 to 5.14 MB, 2.88 MB raw), most of it AOT code in
+`dotnet.native.wasm`. Pages answers with `cache-control: max-age=600` and an
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
 The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's

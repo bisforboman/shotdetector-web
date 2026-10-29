@@ -586,6 +586,23 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-29: the classifier's cases checked locally, the step's script run against the last six merges,
     all of which need all; `pages.yml` and the daily run still run everything)
 
+- Pause and resume a run
+  - Why: the owner asked (2026-10-26) to resume after stopping. While the page stays open, that is a pause: the run
+    stays in memory and goes on where it was.
+  - Where: the asynchronous frame source from "Stop a run and keep what was read": a `pause` message makes it wait,
+    at its next yield, on a promise that a `resume` message settles. `DetectAsync` simply waits meanwhile; nothing is
+    cancelled or ended. `app.js`: a Pause button beside Stop while a run goes, then Resume; the progress bar and the
+    frames-per-second figure hold still; live shots stay as they were told. Stop works while paused too.
+  - Done when: on the Sintel trailer, a run paused mid-way and resumed gives exactly the CSVs of a run never paused
+    (`tools/app-check.mjs` pauses and resumes at a frame on every sample, and compares); in headless Chromium and
+    Firefox the buttons and the bar behave (screenshots in the PR).
+  - Not: nothing kept across a reload (the next row); no change to the result.
+  - Depends on: "Stop a run and keep what was read".
+  - Status: Done (2026-10-29: `pause.js`'s `hold` and `release`, the worker's `pause` and `resume`, a Pause/Resume
+    button and the paused state in `app.js`, the run's time without its pauses (`runMs()`); app-check pauses every
+    sample's default run half-way and compares, and stops one while paused. Seen in headless Chromium on Sintel's
+    trailer: README "Pausing a run". Not seen in Firefox: this cloud session's Playwright has Chromium only)
+
 - Real-browser smoke test
   - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
     needs a check of its own. Decision "Testing the page".
@@ -595,7 +612,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Done when: the job fails when `app.js` breaks the download and passes on `main`.
   - Not: no cross-browser matrix, no visual tests.
   - Status: Done (2026-10-29: `tools/page-check/page-check.mjs`, `tools/check.sh page`, Playwright 1.63.0 by its
-    lockfile; a sample picked, the same on two workers and the demo, each run's downloaded CSVs identical to the native
-    run's, interpreted in 1 min 49 s (the demo 17.6 s on the AOT bundle); CI's page tier for the page's own files, and
-    on the AOT bundle in the full run and `pages.yml`. A copy of the bundle whose `app.js` changes the scenes CSV fails
-    all three runs)
+    lockfile; a sample picked, the same on two workers, and the demo paused a quarter in (the bar and status held
+    still), resumed, then detected again and stopped while paused; each whole run's downloaded CSVs identical to the
+    native run's, the stopped one's stats the whole run's rows up to its frame; interpreted in 2 min 20 s; CI's page
+    tier for the page's own files, and on the AOT bundle in the full run and `pages.yml`. A copy of the bundle whose
+    `app.js` changes the scenes CSV fails all three whole runs, one whose Pause doesn't pause the worker fails the
+    pause)

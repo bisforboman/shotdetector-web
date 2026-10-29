@@ -40,8 +40,8 @@ class FileReaderSync {
 export async function host(wwwroot) {
   globalThis.FileReaderSync ??= FileReaderSync;
   const { read } = await import(pathToFileURL(resolve(wwwroot, 'blob-read.js')).href);
-  const { pause } = await import(pathToFileURL(resolve(wwwroot, 'pause.js')).href);
-  return { read, pause };
+  const { pause, hold, release } = await import(pathToFileURL(resolve(wwwroot, 'pause.js')).href);
+  return { read, pause, hold, release };
 }
 
 // A file as the page gets one: a Blob (a File is one) of its bytes.

@@ -12,11 +12,13 @@
 //                            result for the frames read (Api's Stop; decision "Cancelling a run").
 //        { type: 'cancel' }  the running call is abandoned (Api's Cancel): out: { type: 'cancelled', id } instead of
 //                            its answer (an OperationCanceledException is not an error).
+//        { type: 'pause' }   the run waits at its next pause until 'resume' (pause.js's hold and release): nothing is
+//        { type: 'resume' }  cancelled or ended. A stop or a cancel while paused ends the run there.
 // A worker that doesn't answer at all (a long decode between two pauses, a crash) the page terminates. The file is read
 // in slices as .NET needs them (blob-read.js), not copied into memory.
 import { dotnet } from './_framework/dotnet.js';
 import { read } from './blob-read.js';
-import { pause } from './pause.js';
+import { hold, pause, release } from './pause.js';
 
 async function start() {
   const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
@@ -37,11 +39,17 @@ let turn = Promise.resolve(); // the last call's answer: the next call starts af
 let running = null;           // the call running, { id, cancelled }
 
 const now = {
-  async stop() { (await api).Stop(); },
+  async stop() {
+    (await api).Stop();
+    release();
+  },
   async cancel() {
     if (running) running.cancelled = true;
     (await api).Cancel();
+    release();
   },
+  pause() { hold(); },
+  resume() { release(); },
 };
 
 async function answer({ type, id, name, args = [] }) {

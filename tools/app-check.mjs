@@ -62,6 +62,11 @@ let progress = [], told = [], toldAt = [];
 // frame to stop the run at, at the first pause from there (as the worker does on a 'stop' message: Api's Stop, between
 // two pauses), or to cancel it (Api's Cancel).
 let pauses = 0, pausing = 0, stopAt = null, cancelAt = null;
+// The frame to pause the run at (the worker's 'pause': pause.js's hold), and what to do once it has been held long
+// enough to show it stays still (holding: a callback, run before it is released).
+let holdAt = null, holding = null;
+// How long a paused run is held before it is released: long enough for frames that kept coming to show.
+const HELD_MS = 150;
 const { dotnet } = await import(pathToFileURL(resolve(wwwroot, '_framework/dotnet.js')).href);
 const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
 const hostImports = await host(wwwroot);
@@ -70,6 +75,13 @@ setModuleImports('host', {
   progress: (done, expected) => progress.push([done, expected]),
   shot: json => { told.push(JSON.parse(json)); toldAt.push(progress.at(-1)?.[0] ?? 0); },
   pause: async framesRead => {
+    if (holdAt !== null && framesRead >= holdAt) {
+      holdAt = null;
+      hostImports.hold();
+      const then = holding, reports = progress.length;
+      // The callback learns the frame held at and how many progress reports came while held (none, if it stays still).
+      setTimeout(() => { then(framesRead, progress.length - reports); hostImports.release(); }, HELD_MS);
+    }
     const started = performance.now();
     await hostImports.pause();
     pauses++;
@@ -142,6 +154,7 @@ for (const [i, sample] of samples.entries()) {
       fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
     await checkStop(sample, video, run, options, result, statsCsv);
+    if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv);
   }
   await checkNotMerged(sample);
@@ -216,6 +229,38 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
   if (progress.at(-1)?.[0] !== n) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}, not at ${n}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots told aren't the result's`);
   checkStopped(name, video, result, StatsCsv(), whole, wholeStats);
+}
+
+// A run paused half-way (the worker's 'pause') stays where it is while held, no frame read and no progress told, and
+// once resumed gives exactly the CSVs and shots of the run never paused. On the first sample also a run stopped while
+// paused (the worker's 'stop': Api's Stop, then the release), which ends at the frame it was paused at.
+async function checkPause(sample, video, options, whole, wholeScenes, wholeStats, alsoStop) {
+  const name = `${basename(sample)} adaptive paused`;
+  const half = Math.floor(video.frameCount / 2);
+  let still = null;
+  progress = [];
+  told = [];
+  holdAt = half;
+  holding = (framesRead, moved) => { still = { framesRead, moved }; };
+  const result = JSON.parse(await Detect(JSON.stringify(options)));
+  if (still === null) fail(`${name}: never held (at ${half} of ${video.frameCount} frames)`);
+  else if (still.moved > 0) fail(`${name}: ${still.moved} progress reports while held at frame ${still.framesRead}`);
+  if (result.stopped !== false || ScenesCsv() !== wholeScenes || StatsCsv() !== wholeStats ||
+    JSON.stringify(result.shots) !== JSON.stringify(whole.shots))
+    fail(`${name}: resumed, the result isn't the run never paused's (stopped ${result.stopped})`);
+  else console.error(`${name} at ${still?.framesRead} of ${video.frameCount} frames, held ${HELD_MS} ms with no ` +
+    'frame read, then resumed: the CSVs and shots of the run never paused');
+  if (!alsoStop) return;
+
+  progress = [];
+  told = [];
+  holdAt = half;
+  let pausedAt = null;
+  holding = framesRead => { pausedAt = framesRead; Stop(); };
+  const stopped = JSON.parse(await Detect(JSON.stringify(options)));
+  if (stopped.stopped !== true || stopped.frameCount !== pausedAt)
+    fail(`${name}, then stopped: ${stopped.frameCount} frames, stopped ${stopped.stopped}, paused at ${pausedAt}`);
+  else console.error(`${name}, then stopped: ends at frame ${pausedAt}, where it was paused`);
 }
 
 // A stopped run's result (n frames) against the whole run's: its stats and shots as checkStop says.
