@@ -18,25 +18,6 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Unblocked by ShotDetector 3.15.0
-
-This waited on shotdetector#492, which shipped in ShotDetector 3.15.0 (2026-10-25). It changes `Api.Detect` and
-`worker.js`, so it runs after the page's structure row.
-
-- Pause and resume a run
-  - Why: the owner asked (2026-10-26) to resume after stopping. While the page stays open, that is a pause: the run
-    stays in memory and goes on where it was.
-  - Where: the asynchronous frame source from "Stop a run and keep what was read": a `pause` message makes it wait,
-    at its next yield, on a promise that a `resume` message settles. `DetectAsync` simply waits meanwhile; nothing is
-    cancelled or ended. `app.js`: a Pause button beside Stop while a run goes, then Resume; the progress bar and the
-    frames-per-second figure hold still; live shots stay as they were told. Stop works while paused too.
-  - Done when: on the Sintel trailer, a run paused mid-way and resumed gives exactly the CSVs of a run never paused
-    (`tools/app-check.mjs` pauses and resumes at a frame on every sample, and compares); in headless Chromium and
-    Firefox the buttons and the bar behave (screenshots in the PR).
-  - Not: nothing kept across a reload (the next row); no change to the result.
-  - Depends on: "Stop a run and keep what was read".
-  - Status: Open
-
 ### Decisions to make first
 
 The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
