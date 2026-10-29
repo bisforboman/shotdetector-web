@@ -46,7 +46,9 @@ Then open http://localhost:8000. Any static server works if it serves `.wasm` as
 page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeline.js` and a module per panel in
 `panels/`, native ES modules with no build step and no dependencies; `worker.js` owns the .NET runtime and calls the
 exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
-its threshold (prefilled with ShotDetector's default for it) and the minimum shot length, and detect. Under the player
+its threshold (prefilled with ShotDetector's default for it), the minimum shot length and, for adaptive, its window
+and minimum content_val (scenedetect's `window_width` and `min_content_val`, prefilled 2 and 15; issue #50), and
+detect. Under the player
 is a timeline: one time axis, a playhead that follows the video, a click anywhere on it seeks, and one lane per thing
 over time, today the cuts (a tick at each, as soon as it is known, and the part of the file read so far shaded), a long
 video's ranges (a band per worker, filled as far as it has got: Long videos across workers, below), the

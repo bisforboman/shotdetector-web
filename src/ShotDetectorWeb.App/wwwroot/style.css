@@ -106,6 +106,9 @@ body.dragging .drop, .drop:has(input:focus-visible) { border-color: var(--accent
 .options { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: end; }
 .options label { display: grid; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
 .options select, .options input { width: 9rem; }
+/* The adaptive detector's own settings (window, minimum content_val), only while it is picked. */
+.options label.adaptive { display: none; }
+form[data-detector="adaptive"] .options label.adaptive { display: grid; }
 .actions { display: flex; gap: 0.5rem; }
 
 /* A file picked: the landing folds into a toolbar, the title and the file on the left, the options, the one button at

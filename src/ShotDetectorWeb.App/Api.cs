@@ -177,13 +177,17 @@ public static partial class Api
 
 /// <summary>
 /// The options the page offers: the detector and its threshold (null: the detector's default), the minimum shot length
-/// in scenedetect's forms (null: its default, "0.6s"), or several detectors in one run.
+/// in scenedetect's forms (null: its default, "0.6s"), the adaptive detector's window (<c>frameWindow</c>: frames on
+/// each side averaged, scenedetect's <c>window_width</c>; null: 2) and minimum content_val for a cut
+/// (<c>minContentVal</c>, scenedetect's <c>min_content_val</c>; null: 15), or several detectors in one run.
 /// </summary>
 sealed record DetectRequest
 {
     public DetectorKind Detector { get; init; } = DetectorKind.Adaptive;
     public double? Threshold { get; init; }
     public string? MinSceneLength { get; init; }
+    public int? FrameWindow { get; init; }
+    public double? MinContentVal { get; init; }
     public IReadOnlyList<DetectorRequest>? Detectors { get; init; }
 
     public DetectionOptions ToOptions(IProgress<DetectionProgress> progress, IProgress<Shot> onShot)
@@ -197,7 +201,13 @@ sealed record DetectRequest
             Progress = progress,
             OnShot = onShot,
         };
-        return MinSceneLength is null ? options : options with { MinSceneLength = MinSceneLength };
+        if (MinSceneLength is not null)
+            options = options with { MinSceneLength = MinSceneLength };
+        if (FrameWindow is { } window)
+            options = options with { FrameWindow = window };
+        if (MinContentVal is { } minContentVal)
+            options = options with { MinContentVal = minContentVal };
+        return options;
     }
 }
 

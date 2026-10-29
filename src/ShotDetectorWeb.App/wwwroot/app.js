@@ -65,10 +65,14 @@ const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
 // threshold left at its default is sent as none, so the run is the library's own default run.
 const DEFAULT_THRESHOLDS = { adaptive: 3, content: 27, threshold: 12, histogram: 0.05, hash: 0.395 };
 const DEFAULT_MIN_LENGTH = '0.6s';
+// The adaptive detector's window (frames on each side averaged, scenedetect's window_width) and minimum content_val
+// (DetectionOptions.FrameWindow and MinContentVal), shown while it is picked; at their defaults they are sent as none.
+const DEFAULT_WINDOW = 2, DEFAULT_MIN_CONTENT = 15;
 
 const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
+const windowInput = $('window'), minContent = $('min-content');
 const detectButton = $('detect'), stopButton = $('stop'), demoButton = $('demo'), changeButton = $('change');
 const fileName = $('file-name'), fileFacts = $('file-facts');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
@@ -227,7 +231,7 @@ function setState(next) {
   document.body.dataset.state = next;
   // While a run goes, another file can be chosen: the run is abandoned (choose).
   fileInput.disabled = changeButton.disabled = next === 'opening';
-  for (const input of [detector, threshold, minLength]) input.disabled = busy;
+  for (const input of [detector, threshold, minLength, windowInput, minContent]) input.disabled = busy;
   detectButton.disabled = busy || !file;
   demoButton.disabled = busy;
   detectButton.hidden = busy;
@@ -520,11 +524,17 @@ function options() {
   const kind = detector.value;
   const t = threshold.value.trim();
   const m = minLength.value.trim();
-  return {
+  const run = {
     detector: kind,
     threshold: t === '' || Number(t) === DEFAULT_THRESHOLDS[kind] ? null : Number(t),
     minSceneLength: m === '' || m === DEFAULT_MIN_LENGTH ? null : m,
   };
+  if (kind === 'adaptive') {
+    const w = windowInput.value.trim(), c = minContent.value.trim();
+    run.frameWindow = w === '' || Number(w) === DEFAULT_WINDOW ? null : Number(w);
+    run.minContentVal = c === '' || Number(c) === DEFAULT_MIN_CONTENT ? null : Number(c);
+  }
+  return run;
 }
 
 // Stops the run where it has got to (decision "Cancelling a run"): the worker's 'stop' ends Detect's frames at its next
@@ -649,8 +659,9 @@ function megabytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
-detector.onchange = () => { threshold.value = DEFAULT_THRESHOLDS[detector.value]; };
+detector.onchange = () => { threshold.value = DEFAULT_THRESHOLDS[detector.value]; form.dataset.detector = detector.value; };
 threshold.value = DEFAULT_THRESHOLDS[detector.value];
+form.dataset.detector = detector.value;
 fileInput.onchange = () => choose(fileInput.files[0]);
 changeButton.onclick = () => fileInput.click();
 // The whole drop zone picks a file, not only its label: all but the demo's line.
