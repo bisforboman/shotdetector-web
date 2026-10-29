@@ -21,8 +21,8 @@ it is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time, a
 in `dotnet.native.wasm` ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)).
 
 FFmpeg.AutoGen (MIT, Ruslan Balanukhin; LICENSE.txt in its package) comes in because
-ShotDetector's package references it; the trimmer keeps its assembly in the WebAssembly bundle, but nothing on this
-path uses it (tools/app-check.mjs checks that the interpreted runtime never loads it).
+ShotDetector's package references it; the trimmer keeps part of it in the WebAssembly bundle (ShotDetector's
+frame-source path shares code with its FFmpeg path, so it is reachable), but nothing on this path runs it (tools/app-check.mjs checks that the interpreted runtime never loads it).
 
 ## Sintel's trailer
 
