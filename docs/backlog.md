@@ -116,6 +116,16 @@ since 2026-10-28 carry what they asked for, or part of it.
     [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed 2026-10-26, the steps measured
     again will say)
 
+- The frame a paused run is held at
+  - Why: paused, the status says "Paused at frame N" from the last `progress` (frames processed), but the run is held
+    at its next pause, by frames read, up to 8 frames on (Api's `PauseEvery`): stopped there, the result says another
+    frame (seen 2026-10-29 by `tools/page-check` on the AOT bundle: "Paused at frame 196", stopped at frame 200).
+  - Where: `app.js`'s paused status, and the `pause(framesRead)` import (`pause.js`, `worker.js`), which knows the frame
+    the run waits at; README "Pausing a run".
+  - Done when: the paused status names the frame a stop would end at; `tools/page-check` holds the stop to it exactly.
+  - Not: the stopped result, which is right.
+  - Status: Open
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:

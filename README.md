@@ -414,7 +414,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   while paused. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
   clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the shots
   table must have a row per shot of the CSV; the demo's sound must be measured. The stopped run must end `stopped` at
-  the frame it was paused at, its stats CSV the whole run's rows up to there (the adaptive ratio `None` in the last
+  the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held
+  at"), its stats CSV the whole run's rows up to there (the adaptive ratio `None` in the last
   frames of its window, as app-check.mjs holds it), its last shot ending there. Any exception, console error (the
   workers' too), failed request or HTTP error fails it. It reuses the bundle `wasm` published in the same call, else
   publishes one (interpreted unless `aot`): about 2 min 20 s interpreted, most of it the demo's run, and well under a
