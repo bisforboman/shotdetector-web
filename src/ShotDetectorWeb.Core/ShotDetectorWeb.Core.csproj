@@ -10,7 +10,10 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- FrameReader is referenced here, not only through ShotDetector: Mp4Audio uses it directly, and a central version
+       pins only the packages a project references (a transitive one resolves to the lowest its dependant allows). -->
   <ItemGroup>
+    <PackageReference Include="FrameReader" />
     <PackageReference Include="ShotDetector" />
     <PackageReference Include="ShotDetector.FastYuv" GeneratePathProperty="true" />
   </ItemGroup>
