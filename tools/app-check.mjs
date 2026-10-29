@@ -77,7 +77,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, Packets, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, Packets, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -89,6 +89,21 @@ const fail = message => { console.error(message); failed = true; };
 let runSeconds = 0, pauseSeconds = 0;
 
 mkdirSync(outDir, { recursive: true });
+
+// The versions the bundle carries (Api's Versions, the page's footer) are the ones Directory.Packages.props pins: a
+// central version pins only the packages a project references, so a pin nothing references changes nothing (seen
+// 2026-10-29: FrameReader).
+const versions = JSON.parse(Versions());
+writeFileSync(`${outDir}/versions.json`, JSON.stringify(versions, null, 2));
+console.error(`Versions: ${versions.runtime}; ${Object.entries(versions.packages).map(([id, v]) => `${id} ${v}`).join(', ')}`);
+const props = readFileSync(new URL('../Directory.Packages.props', import.meta.url), 'utf8');
+const pins = Object.fromEntries([...props.matchAll(/<PackageVersion Include="([^"]+)" Version="([^"]+)"/g)].map(m => [m[1], m[2]]));
+for (const [id, version] of Object.entries(versions.packages)) {
+  // ManagedCodecs.Core comes with each ManagedCodecs package at exactly its own version, so it isn't pinned itself.
+  const pinned = pins[id] ?? (id === 'ManagedCodecs.Core' ? pins['ManagedCodecs.H264'] : undefined);
+  if (pinned === undefined) fail(`${id} ${version}: not pinned in Directory.Packages.props.`);
+  else if (pinned !== version) fail(`${id} ${version}: Directory.Packages.props pins ${pinned}.`);
+}
 for (const [i, sample] of samples.entries()) {
   const video = JSON.parse(Open(fileBlob(sample)));
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frameCount} frames, ${video.duration} s`);

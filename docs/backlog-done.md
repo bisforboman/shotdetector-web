@@ -533,3 +533,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `.Core`; the submodule, `.gitmodules` and the workflows' `submodules: true` gone; `tools/mp4-edit-list.py` kept from
     it for make-samples.sh. ShotDetector/FastYuv 3.20.0 and FrameReader 2.14.0 in the same change, the CSVs unchanged
     (`tools/check.sh`); `Mp4Demuxer` moved to `ManagedCodecs.Containers`, the only API change this path saw)
+
+- The packages' versions on the page
+  - Why: the owner asked (2026-10-29) whether the footer shows the NuGet versions; it named the libraries without
+    them. And a version the page reads from its own bundle is a check the pins can't give: a central version pins only
+    the packages a project references, and FrameReader's 2.15.0 line (#48) had pinned nothing, the bundle still
+    carrying 2.14.0 through ShotDetector's own range.
+  - Where: `Api.Versions.cs` (`Versions()`: the runtime and each package's version from its assembly's informational
+    version), `wwwroot/versions.js` filling the footer's slots, `tools/app-check.mjs` failing when the bundle's
+    versions aren't Directory.Packages.props'; the core referencing FrameReader directly, which it uses.
+  - Status: Done (2026-10-29: the footer says "ManagedCodecs 0.1.0 demuxes ... ShotDetector.FastYuv 3.20.0 converts
+    ... ShotDetector 3.20.0 finds the shots and FrameReader 2.15.0 measures the sound, all of it .NET 10.0.x";
+    app-check's versions check; FrameReader really 2.15.0, the checks run again on it)
