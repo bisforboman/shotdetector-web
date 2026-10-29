@@ -585,3 +585,16 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     and CLAUDE.md's rule for what to run before pushing.
   - Status: Done (2026-10-29: the classifier's cases checked locally, the step's script run against the last six merges,
     all of which need all; `pages.yml` and the daily run still run everything)
+
+- Real-browser smoke test
+  - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
+    needs a check of its own. Decision "Testing the page".
+  - Where: a CI job (Linux, Playwright, Chromium only) that serves the published `wwwroot`, loads the page, sets the
+    file input to one sample, runs with the defaults, downloads the scenes CSV and compares it with `out/native/`'s;
+    `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
+  - Done when: the job fails when `app.js` breaks the download and passes on `main`.
+  - Not: no cross-browser matrix, no visual tests.
+  - Status: Done (2026-10-29: `tools/page-check/page-check.mjs`, `tools/check.sh page`, Playwright 1.63.0 by its
+    lockfile; a sample picked, the same on two workers and the demo, each run's downloaded CSVs identical to the native
+    run's, interpreted in 1 min 49 s (the demo 17.6 s on the AOT bundle); CI's page tier for the page's own files, and on the AOT bundle in the full run and
+    `pages.yml`. A copy of the bundle whose `app.js` changes the scenes CSV fails all three runs)

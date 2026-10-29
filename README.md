@@ -396,7 +396,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   visitor clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the
   shots table must have a row per shot of the CSV; the demo's sound must be measured. Any exception, console error (the
   workers' too), failed request or HTTP error fails it. It reuses the bundle `wasm` published in the same call, else
-  publishes one (interpreted unless `aot`): about 2 minutes interpreted, most of it the demo's run.
+  publishes one (interpreted unless `aot`): the three runs take about 2 minutes interpreted, most of it the demo's, and
+  about 25 s compiled ahead of time (2026-10-29).
 - **replace** (`tools/replace-check.mjs`, under Node): LGPL-2.1, FastYuv replaceable (Licensing). It clones shotdetector
   at the tag of the packaged FastYuv, makes its converter's constructor throw, builds it, publishes the App against it
   (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement.
