@@ -315,8 +315,8 @@ video {
 #warnings li + li { margin-top: 0.25rem; }
 
 /* The shots table, in a scroll box of its own: its columns from the right (Length, End, Start, Shot), so a column added
-   first (a still per shot) leaves these rules as they are. At phone width the End column goes: it is the next row's
-   start. */
+   first (the still per shot, below) leaves these rules as they are. At phone width the End column goes: it is the next
+   row's start. */
 #shots-card { max-height: 70vh; overflow: auto; padding-top: 0; }
 #shots-card h2 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 0.75rem 0 0.5rem; background: var(--panel); }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
@@ -327,8 +327,17 @@ tbody tr:hover, tbody tr:focus { background: var(--bg); }
 tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 tbody tr.unfinished { color: var(--muted); font-style: italic; }
 tbody tr.unfinished td { border-bottom-style: dashed; }
+/* A still per shot, first: the browser's decode (panels/shots.js), a grey box of the video's shape until it comes. */
+#shots th.still, #shots td.still { text-align: left; width: 6rem; padding-top: 0.2rem; padding-bottom: 0.2rem; }
+#shots .thumb {
+  width: 6rem; aspect-ratio: var(--still-aspect, 16 / 9); border-radius: 0.2rem; overflow: hidden;
+  background: color-mix(in srgb, var(--muted) 25%, transparent);
+}
+#shots .thumb canvas { display: block; width: 100%; height: 100%; }
 @media (max-width: 30rem) {
   #shots th:nth-last-child(2), #shots td:nth-last-child(2) { display: none; }
+  #shots th.still, #shots td.still { width: 4rem; }
+  #shots .thumb { width: 4rem; }
 }
 
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
