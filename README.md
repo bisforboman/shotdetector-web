@@ -457,10 +457,12 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.20.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.14.0,
-which ShotDetector 3.20.0 depends on), ManagedCodecs (0.1.0, its first release on nuget.org, 2026-10-28: the
+ShotDetector and ShotDetector.FastYuv (3.20.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.15.0;
+ShotDetector 3.20.0 asks for 2.14.0 or later), ManagedCodecs (0.1.0, its first release on nuget.org, 2026-10-28: the
 `ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each pinning `ManagedCodecs.Core` at
-its own version; until then a git submodule referenced by project) and what they depend on come from nuget.org.
+its own version; until then a git submodule referenced by project. Not 0.2.0, whose H.264 decoder gives other pixels
+under the wasm interpreter: backlog, Waiting, "ManagedCodecs 0.2.0 on wasm") and what they depend on come from
+nuget.org.
 Versions are central, in Directory.Packages.props. `tools/mp4-edit-list.py`, which `tools/make-samples.sh` rewrites an
 edit list with, is ManagedCodecs' `tools/mp4-edit-list.py` as it was in the submodule (MIT).
 
@@ -480,7 +482,7 @@ in the shotdetector repository at the package's version (3.20.0, Directory.Packa
 ```
 git clone --branch v3.20.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.20.0 -p:FrameReaderVersion=2.14.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.20.0 -p:FrameReaderVersion=2.15.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
