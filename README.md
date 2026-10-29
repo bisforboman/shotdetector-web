@@ -235,8 +235,11 @@ load, empty cache:
 
 The second row's transfer is the publish's files through `gzip -6`, which comes within 0.2% of what Pages sends for
 the files that didn't change. `dotnet.native.wasm` is most of it: 4.0 MB transferred, 13.3 MB raw (the runtime and
-every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path runs (backlog, the trimming row), costs
-103 KB transferred (447 KB raw); FrameReader 26 KB (80 KB). Pages answers with `cache-control: max-age=600` and an
+every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path runs, costs 103 KB transferred (447 KB
+raw); FrameReader 26 KB (80 KB). The publish already trims every assembly; they stay because ShotDetector's frame-source
+path shares code with its FFmpeg path. Measured 2026-10-29 with that code cut off (backlog, the trimming row, waiting on
+ShotDetector), the AOT bundle would be 620 KB smaller compressed (5.76 to 5.14 MB, 2.88 MB raw), most of it AOT code in
+`dotnet.native.wasm`. Pages answers with `cache-control: max-age=600` and an
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
 The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's
