@@ -38,7 +38,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
   the worker's next task, `wwwroot/pause.js`); `Api.Csv.cs` has
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
-  `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
+  `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
+  each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
   panels as the `audio` event, its JSON camelCase with times in seconds: `notMeasured` (why not, the core's words: no audio, which the page
   shows nothing for, "The file has no audio track.", checked by app-check.mjs; not AAC; refused by the decoder; null
@@ -59,7 +60,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order, one at a time; `progress` and `shot` posted while `Detect` runs; `{ type: 'stop'
   }` and `{ type: 'cancel' }` handled at once, between `Detect`'s pauses, a cancelled call answered `cancelled`),
-  `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`). The page (no build step, no dependency, native ES modules; README "Running the page";
+  `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`);
+  `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel). The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
   toolbar once a file is picked, the status line, the result's four rows: the video beside the run's cards, the timeline
   across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
@@ -155,6 +157,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 
 - `dotnet workload list` can show wasm-tools installed with no packs in `~/.dotnet/packs` (NETSDK1147 on build):
   `dotnet workload install wasm-tools` again installs them.
+- A central package version (Directory.Packages.props) pins only the packages a project references: a transitive one
+  resolves to the lowest its dependant allows, whatever the props say (FrameReader stayed 2.14.0 under a 2.15.0 line
+  until the core referenced it, 2026-10-29). app-check.mjs compares the bundle's versions (`Versions()`) with the pins.
 - ShotDetector's file path reports `DetectedVideo.Duration` from ffprobe's format duration text (six decimals), to the
   nearest tick since 3.15.0 (3.14.0 went through `TimeSpan.FromSeconds(double)`, which truncates: 4.56 s came out
   4.5599999): `Mp4Input` and NativeCheck's oracle do the same.

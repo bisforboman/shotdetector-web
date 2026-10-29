@@ -67,8 +67,10 @@ against real time: the page's own figures, worked out from the shots), the sound
 how many cuts fall on a keyframe, and, as soon as the file is opened, "About this file": the core's description of it
 (`Api.Open`: the `YuvVideo` below and the audio track) in a viewer's words, "BT.709" for `bt709`, each field's own value
 in its tooltip and Open's JSON one click away. Each card's title has one chip saying whose numbers they are
-("scenedetect's, byte for byte", "measured", "the core's", "the page's"; the footer says what the words mean). At phone
-width it is one column in the same order. The scenes and stats CSVs
+("scenedetect's, byte for byte", "measured", "the core's", "the page's"; the footer says what the words mean, and
+names each library with the version its assembly in the bundle carries, `Api.Versions` filled in by `versions.js`,
+which app-check.mjs checks against Directory.Packages.props' pins). At phone width it is one column in the same
+order. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
@@ -463,8 +465,11 @@ ShotDetector 3.20.0 asks for 2.14.0 or later), ManagedCodecs (0.1.0, its first r
 its own version; until then a git submodule referenced by project. Not 0.2.0, whose H.264 decoder gives other pixels
 under the wasm interpreter: backlog, Waiting, "ManagedCodecs 0.2.0 on wasm") and what they depend on come from
 nuget.org.
-Versions are central, in Directory.Packages.props. `tools/mp4-edit-list.py`, which `tools/make-samples.sh` rewrites an
-edit list with, is ManagedCodecs' `tools/mp4-edit-list.py` as it was in the submodule (MIT).
+Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
+(a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
+referenced it, 2026-10-29). The page's footer shows the versions its bundle carries (`Api.Versions`), and
+`tools/app-check.mjs` fails when they aren't the pinned ones. `tools/mp4-edit-list.py`, which `tools/make-samples.sh`
+rewrites an edit list with, is ManagedCodecs' `tools/mp4-edit-list.py` as it was in the submodule (MIT).
 
 ## Licensing
 
