@@ -146,11 +146,11 @@ Every run gave the same 1,105 shots and the same scenes and stats CSVs, byte for
 Node, each range's runtime on its own, the same bundle): 174 MB once it has opened the file, most of it ManagedCodecs'
 sample index (What the heap holds, below), and 208 MB at the end of its range, as a one-worker run's; the merge, in the
 page's own worker, took 1.5 s for the four ranges' 16.8 MB and left its heap as it was. So each worker costs about
-190 to 300 MB of renderer on a two-hour film, most of it the index every runtime builds again (backlog, Waiting:
-"ManagedCodecs: the MP4 index without its copies"). On Sintel's 52 s trailer splitting paid too: 19.0 s on one
-worker, 11.1 s on two, 10.0 s on three, 6.7 s on four (the median of two each; the three ranges at keyframes are less
-equal than the four), each worker about 100 MB more of renderer; below 2 minutes the page keeps one worker anyway, for
-its live shots (the decision's "As measured").
+190 to 300 MB of renderer on a two-hour film, most of it the index every runtime builds again (measured with the
+submodule's 2026-10-24 commit; backlog, Next: "ManagedCodecs: the MP4 index without its copies"). On Sintel's 52 s
+trailer splitting paid too: 19.0 s on one worker, 11.1 s on two, 10.0 s on three, 6.7 s on four (the median of two
+each; the three ranges at keyframes are less equal than the four), each worker about 100 MB more of renderer; below 2
+minutes the page keeps one worker anyway, for its live shots (the decision's "As measured").
 
 ## Large files
 
@@ -209,9 +209,9 @@ So the heap grew with the frame count because of what the end of a run builds, n
 frame, but in room the heap already has on this film: the demuxer's index allocates about 1 KB a frame with this file's
 audio, and keeps a fifth of it). In headless Chromium as in the table above, the control's run ended with a wasm heap of
 432 MB on 2026-10-25 (734 MB before) and the renderer's peak at 788 MB (1,043 MB), the same 1,105 shots; with 3.16.1 the
-heap ends where the run leaves it, 208 MB under Node. The CSVs are unchanged (`tools/check.sh`). What is left waits
-upstream (backlog, Waiting): the stats CSV written row by row rather than built as one string, ManagedCodecs' index
-built without its copies.
+heap ends where the run leaves it, 208 MB under Node. The CSVs are unchanged (`tools/check.sh`). What was left shipped
+upstream on 2026-10-27 and 2026-10-28 (ShotDetector 3.20.0's `Stats.WriteCsv`, ManagedCodecs 0.1.0's sample table
+built once at its final size) and waits to be used and measured here (backlog, Next).
 
 An open file also holds its video packet list (`Mp4Input.Packets`, below; in the 2026-10-26 numbers): 13 bytes a frame,
 2.25 MB on a two-hour film.
@@ -457,12 +457,12 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.16.1; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.11.0,
-which ShotDetector 3.16.1 depends on) and what they depend on come from nuget.org. Versions are central, in
-Directory.Packages.props.
-
-ManagedCodecs isn't on NuGet: it is a git submodule, `external/ManagedCodecs` (`git clone --recursive`, or
-`git submodule update --init`), referenced by project.
+ShotDetector and ShotDetector.FastYuv (3.20.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.14.0,
+which ShotDetector 3.20.0 depends on), ManagedCodecs (0.1.0, its first release on nuget.org, 2026-10-28: the
+`ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each pinning `ManagedCodecs.Core` at
+its own version; until then a git submodule referenced by project) and what they depend on come from nuget.org.
+Versions are central, in Directory.Packages.props. `tools/mp4-edit-list.py`, which `tools/make-samples.sh` rewrites an
+edit list with, is ManagedCodecs' `tools/mp4-edit-list.py` as it was in the submodule (MIT).
 
 ## Licensing
 
@@ -475,13 +475,13 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.16.1, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.20.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.16.1 https://github.com/bisforboman/shotdetector
+git clone --branch v3.20.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.16.1 -p:FrameReaderVersion=2.11.0
-git clone --recursive https://github.com/bisforboman/shotdetector-web
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.20.0 -p:FrameReaderVersion=2.14.0
+git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
   -p:FastYuvAssembly=$PWD/shotdetector/src/ShotDetector.FastYuv/bin/Release/net10.0/ShotDetector.FastYuv.dll

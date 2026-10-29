@@ -1,6 +1,6 @@
 # shotdetector-web
 
-Shot detection entirely in the browser: ManagedCodecs (submodule `external/ManagedCodecs`) decodes H.264 in MP4,
+Shot detection entirely in the browser: ManagedCodecs (from nuget.org since 2026-10-28) decodes H.264 in MP4,
 ShotDetector.FastYuv converts, ShotDetector detects through `ShotDetection.Detect(YuvVideo, IEnumerable<YuvFrame>, ...)`.
 Repo: `github.com/bisforboman/shotdetector-web`, MIT. README.md has the layout, status and how to run the checks; the
 owner's decisions are in shotdetector's docs/decisions/2026-10-24-managedcodecs-showcase.md.
@@ -144,8 +144,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - Before pushing: `tools/make-samples.sh` (once) and `tools/check.sh` (native + wasm interpreted, a few minutes),
   `tools/check.sh wasm aot` for anything that could differ under AOT.
-- Packages: ShotDetector/FastYuv 3.16.1 and FrameReader 2.11.0 from nuget.org, versions central in
-  `Directory.Packages.props`; ManagedCodecs is the submodule, referenced by project. README, "Packages".
+- Packages: ShotDetector/FastYuv 3.20.0, FrameReader 2.14.0 and ManagedCodecs 0.1.0 (Containers, H264, Aac, each
+  pinning Core) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
   file (`docs/decisions/2026-10-24-fastyuv-replaceable.md`; `tools/check.sh replace aot` in CI). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.

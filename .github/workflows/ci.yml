@@ -30,7 +30,6 @@ jobs:
       # Two commits deep: a pull request's merge commit and its first parent, the base it's compared with.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          submodules: true
           fetch-depth: 2
 
       # build is the required check, so a pull request that changes only documentation still runs it, and it passes

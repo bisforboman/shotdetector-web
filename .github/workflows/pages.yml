@@ -31,8 +31,6 @@ jobs:
       SINTEL_SHA256: '34bbd52a4b89fdf63c8ace50b268da26653a59508288100cd3c23de276db7931'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          submodules: true
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:

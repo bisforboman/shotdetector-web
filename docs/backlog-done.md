@@ -516,3 +516,20 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     2.93 and 3.60 times as fast, the renderer at 1,065, 1,303 and 1,602 MB against 878; the 10 minutes became 2, the
     4 stayed: README "Long videos across workers", the decision's "As measured". Stop keeps the ranges from the start
     up to where the first unfinished one stopped: the decision's "As built")
+
+- ManagedCodecs' license
+  - Why: THIRD-PARTY-NOTICES.md says the submodule's pinned commit has no LICENSE file; the page ships its code to
+    every visitor and should say under what terms.
+  - Where: upstream (bisforboman/ManagedCodecs): a LICENSE file; then here: bump the submodule, update
+    THIRD-PARTY-NOTICES.md and the page's footer.
+  - Status: Done (2026-10-28: ManagedCodecs 0.1.0 on nuget.org is MIT, with a LICENSE file upstream;
+    THIRD-PARTY-NOTICES.md says so. The page's footer names ManagedCodecs and links its repository, as before)
+
+- ManagedCodecs from NuGet instead of the submodule
+  - Why: a package pins a version in Directory.Packages.props like the others, and a clone needs no `--recursive`.
+  - Where: when it is on nuget.org: replace the two project references in the core csproj with a package reference,
+    delete `external/` and `.gitmodules`, update README "Packages" and CLAUDE.md, `ci.yml`'s `submodules: true`.
+  - Status: Done (2026-10-28: `ManagedCodecs.Containers`, `.H264` and `.Aac` 0.1.0 from nuget.org, each pinning
+    `.Core`; the submodule, `.gitmodules` and the workflows' `submodules: true` gone; `tools/mp4-edit-list.py` kept from
+    it for make-samples.sh. ShotDetector/FastYuv 3.20.0 and FrameReader 2.14.0 in the same change, the CSVs unchanged
+    (`tools/check.sh`); `Mp4Demuxer` moved to `ManagedCodecs.Containers`, the only API change this path saw)
