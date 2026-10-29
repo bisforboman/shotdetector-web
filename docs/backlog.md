@@ -84,7 +84,9 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
   - Done when: a trailer's shots each show a still within a few seconds of the run finishing, and the detection
     result is unchanged (the stills are the browser's decode, not the library's).
   - Not: no second decode in .NET, no image export.
-  - Status: Open
+  - The owner's choices (2026-10-29): the stills from a hidden second `<video>` on the same file, not the player; taken
+    as rows come into view, live shots during a run included.
+  - Status: In progress (2026-10-29)
 
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
