@@ -133,7 +133,7 @@ since 2026-10-28 carry what they asked for, or part of it.
   - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23): each track's samples filled once, a smaller
     `Sample`, optionally only the tracks asked for. Then here: the submodule bumped, the steps measured again.
-  - Status: Open (2026-10-28: ManagedCodecs 0.1.0, the package the page builds against since 2026-10-28, builds the
+  - Status: In progress (2026-10-29). Open (2026-10-28: ManagedCodecs 0.1.0, the package the page builds against since 2026-10-28, builds the
     sample table once at its final size (ManagedCodecs#123); whether that is all of
     [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed 2026-10-26, the steps measured
     again will say)
