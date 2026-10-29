@@ -1,0 +1,184 @@
+// The page's smoke test (README "Checks", page; decision 2026-10-24-the-page.md, "Testing the page"): the published
+// wwwroot served as Pages serves it, with the demo clip in demo/ (pages.yml's "Make the site"), and the page itself in
+// Chromium through Playwright, its own JavaScript (app.js, worker.js, the panels) as a visitor drives it:
+//   1. a sample set on the file input, detected with the options as the page prefills them, its scenes and stats CSVs
+//      downloaded from the run's card and compared with the native check's run of that detector byte for byte, the
+//      shots table one row per shot of the CSV;
+//   2. the same sample split across two workers (?workers=2): the ranges lane, and the same CSVs;
+//   3. "Try the demo": the clip fetched and run as picked, the same comparison, the sound measured.
+// Any error on the page, in its workers or a failed request fails the check.
+//
+// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>
+//   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
+//   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded CSVs.
+import { createServer } from 'node:http';
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { basename, extname, join, normalize, resolve } from 'node:path';
+
+const args = process.argv.slice(2);
+const at = args.indexOf('--native');
+if (at < 0 || args.length !== 6) {
+  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>');
+  process.exit(2);
+}
+const nativeDir = resolve(args[at + 1]);
+const [root, outDir, sample, demo] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
+mkdirSync(outDir, { recursive: true });
+
+let playwright;
+try {
+  playwright = await import('playwright');
+} catch {
+  playwright = createRequire(import.meta.url)('playwright');
+}
+const { chromium } = playwright;
+
+// Pages' types for what the bundle has; anything else as bytes. .wasm must be application/wasm (README, "Running the
+// page").
+const TYPES = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
+  '.json': 'application/json', '.wasm': 'application/wasm', '.mp4': 'video/mp4', '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon', '.png': 'image/png', '.txt': 'text/plain',
+};
+const server = createServer((req, res) => {
+  const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  const file = path === '/demo/sintel-trailer.mp4' ? demo
+    : join(root, normalize(path === '/' ? '/index.html' : path));
+  if (!file.startsWith(root) && file !== demo || !existsSync(file) || !statSync(file).isFile()) {
+    res.writeHead(404).end();
+    return;
+  }
+  res.writeHead(200, {
+    'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
+    'Content-Length': statSync(file).size,
+  });
+  createReadStream(file).pipe(res);
+});
+await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+const base = `http://127.0.0.1:${server.address().port}/`;
+
+const browser = await chromium.launch();
+const failures = [];
+const fail = message => { failures.push(message); console.log(`FAIL ${message}`); };
+
+// A fresh page each time, as a visitor's first visit (no rate kept from an earlier run), its errors collected:
+// exceptions, console errors (the workers' too) and failed or missing requests.
+async function open(query = '') {
+  const context = await browser.newContext({ acceptDownloads: true });
+  const page = await context.newPage();
+  const errors = [];
+  const watch = (where, target) => {
+    target.on('console', m => { if (m.type() === 'error') errors.push(`${where} console: ${m.text()}`); });
+    target.on('pageerror', e => errors.push(`${where}: ${e.message}`));
+  };
+  watch('page', page);
+  page.on('worker', w => w.on('console', m => { if (m.type() === 'error') errors.push(`worker console: ${m.text()}`); }));
+  // The <video> aborts its own range requests of the file's blob URL as it seeks and buffers: not an error.
+  page.on('requestfailed', r => {
+    const why = r.failure()?.errorText;
+    if (!(r.resourceType() === 'media' && why === 'net::ERR_ABORTED')) errors.push(`request failed: ${r.url()} (${why})`);
+  });
+  page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()}: ${r.url()}`); });
+  await page.goto(base + query);
+  return { context, page, errors };
+}
+
+// Waits for the run to end: done, or any other end state, which fails with what the page says.
+async function finished(page, what) {
+  const started = Date.now();
+  await page.waitForFunction(() => ['done', 'stopped', 'lost', 'error'].includes(document.body.dataset.state),
+    null, { timeout: 15 * 60 * 1000, polling: 250 });
+  const state = await page.evaluate(() => document.body.dataset.state);
+  const status = await page.textContent('#status-text');
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  if (state !== 'done') {
+    fail(`${what}: the page ended ${state}: ${(await page.textContent('#error')) || status}`);
+    return null;
+  }
+  console.log(`${what}: done (${seconds} s): ${status}`);
+  return status;
+}
+
+// The run's downloads, as a visitor clicks them, against the native check's CSVs of the same run; the shots table
+// against the scenes CSV.
+async function compare(page, what, name, run) {
+  for (const kind of ['scenes', 'stats']) {
+    const link = page.locator(`#${kind}-csv`);
+    if (!await link.isVisible()) {
+      fail(`${what}: no ${kind} CSV to download`);
+      continue;
+    }
+    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    const expectedName = `${basename(name, '.mp4')}.${kind}.csv`;
+    if (download.suggestedFilename() !== expectedName) {
+      fail(`${what}: the ${kind} CSV downloads as ${download.suggestedFilename()}, not ${expectedName}`);
+    }
+    const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${kind}.csv`);
+    await download.saveAs(saved);
+    const native = join(nativeDir, `${basename(name === 'sintel-trailer.mp4' ? demo : sample, '.mp4')}.${run}.${kind}.csv`);
+    if (!existsSync(native)) {
+      fail(`${what}: no native CSV ${native} (tools/check.sh native first)`);
+    } else if (!readFileSync(saved).equals(readFileSync(native))) {
+      fail(`${what}: the downloaded ${kind} CSV (${saved}) differs from ${native}`);
+    } else {
+      console.log(`${what}: ${expectedName} identical to ${basename(native)}`);
+    }
+    if (kind === 'scenes') {
+      // scenedetect's list-scenes CSV: the cuts' timecodes on the first line, the header on the second, a shot a line.
+      const shots = readFileSync(saved, 'utf8').split('\n').filter(Boolean).length - 2;
+      const rows = await page.locator('#shots tbody tr').count();
+      if (shots < 1 || rows !== shots) fail(`${what}: the shots table has ${rows} rows for the CSV's ${shots} shots`);
+    }
+  }
+}
+
+function report(what, errors) {
+  if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
+}
+
+async function picked(query, what) {
+  const { context, page, errors } = await open(query);
+  await page.setInputFiles('#file', sample);
+  await page.click('#detect');
+  const run = await page.inputValue('#detector');
+  const status = await finished(page, what);
+  if (status !== null) {
+    if (query && !/with 2 workers/.test(status)) fail(`${what}: not split across 2 workers: ${status}`);
+    if (query) {
+      const bands = await page.locator('.range').count();
+      if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
+    }
+    await compare(page, what, basename(sample), run);
+  }
+  report(what, errors);
+  await context.close();
+}
+
+try {
+  await picked('', `${basename(sample)}, picked`);
+  await picked('?workers=2', `${basename(sample)}, two workers`);
+
+  const what = 'the demo';
+  const { context, page, errors } = await open();
+  await page.click('#demo');
+  const run = await page.inputValue('#detector');
+  if (await finished(page, what) !== null) {
+    await compare(page, what, 'sintel-trailer.mp4', run);
+    // The sound's worker, alongside the run: done when the status no longer says it is measuring.
+    await page.waitForFunction(() => !document.getElementById('status-text').textContent.includes('measuring the sound'),
+      null, { timeout: 5 * 60 * 1000 });
+    console.log(`${what}: the sound measured`);
+  }
+  report(what, errors);
+  await context.close();
+} finally {
+  await browser.close();
+  server.close();
+}
+
+if (failures.length > 0) {
+  console.log(`The page check failed: ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}.`);
+  process.exit(1);
+}
+console.log('The page check passed: picked, split across two workers and the demo, the CSVs identical to the native run\'s.');

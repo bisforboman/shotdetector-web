@@ -4,32 +4,38 @@
 #           every detector, scene and stats CSVs byte for byte (tools/NativeCheck);
 #   wasm:   the same library on browser-wasm under Node, through the page's own exports (src/ShotDetectorWeb.App,
 #           driven by tools/app-check.mjs), its CSVs against the native run's;
+#   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
+#           PAGE_SAMPLE picked on one worker and on two, and the demo, each run's downloaded CSVs against the native
+#           run's (the samples named are not used: always those two). Reuses the bundle wasm published in the same
+#           call, else publishes one.
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
 #
-# Usage: tools/check.sh [native] [wasm] [replace] [aot] [<sample.mp4>...]
+# Usage: tools/check.sh [native] [wasm] [page] [replace] [aot] [<sample.mp4>...]
 #   (default: native wasm; aot: the wasm and replace bundles compiled ahead of time; samples named: only those, instead
 #   of every samples/*.mp4, the files to refuse and those without AAC still all: CI's interpreted check on a pull
 #   request, README "Checks". wasm compares the CSVs of the samples it ran, so native may have run more.)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
-#   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm and
-#   replace, and git with access to github.com for replace.
+#   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm, page
+#   and replace, Playwright and its Chromium for page (npm ci in tools/page-check, then npx playwright install
+#   chromium there; or one require finds), and git with access to github.com for replace.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-native=false wasm=false replace=false aot=false
+native=false wasm=false page=false replace=false aot=false
 samples=()
 for arg in "$@"; do
   case $arg in
     native) native=true ;;
     wasm) wasm=true ;;
+    page) page=true ;;
     replace) replace=true ;;
     aot) aot=true ;;
     *.mp4) [[ -f $arg ]] || { echo "No such sample: $arg" >&2; exit 2; }; samples+=("$arg") ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
-if [[ $native == false && $wasm == false && $replace == false ]]; then native=true wasm=true; fi
+if [[ $native == false && $wasm == false && $page == false && $replace == false ]]; then native=true wasm=true; fi
 
 shopt -s nullglob
 if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4); fi
@@ -90,6 +96,26 @@ if [[ $wasm == true ]]; then
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $differ != 0 || $extra != 0 || $missing != 0 ]]; then exit 1; fi
+fi
+
+if [[ $page == true ]]; then
+  # A short sample with audio and keyframes enough for two ranges, and the demo clip as pages.yml makes it.
+  sample=${PAGE_SAMPLE:-samples/with-audio-320x240-25.mp4}
+  demo=samples/sintel_trailer-480p.mp4
+  for f in "$sample" "$demo"; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
+  if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
+  publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
+  if [[ $wasm == false ]]; then
+    rm -rf "$publish"
+    dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot
+  fi
+  rm -rf out/page
+  status=0
+  node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" --native out/native || status=$?
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "picked, on two workers and the demo, the downloaded CSVs identical to the native run's" || echo "FAILED")."
+  echo "$summary"
+  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+  if [[ $status != 0 ]]; then exit 1; fi
 fi
 
 if [[ $replace == true ]]; then
