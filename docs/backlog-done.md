@@ -595,8 +595,7 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Done when: the job fails when `app.js` breaks the download and passes on `main`.
   - Not: no cross-browser matrix, no visual tests.
   - Status: Done (2026-10-29: `tools/page-check/page-check.mjs`, `tools/check.sh page`, Playwright 1.63.0 by its
-    lockfile;
-    a sample picked, the same on two workers and the demo, each run's downloaded CSVs identical to the native run's,
-    interpreted in 1 min 49 s (the demo 17.6 s on the AOT bundle); CI's page tier for the page's own files, and on the
-    AOT bundle in the full run and `pages.yml`. A copy of the bundle whose `app.js` changes the scenes CSV fails all
-    three runs)
+    lockfile; a sample picked, the same on two workers and the demo, each run's downloaded CSVs identical to the native
+    run's, interpreted in 1 min 49 s (the demo 17.6 s on the AOT bundle); CI's page tier for the page's own files, and
+    on the AOT bundle in the full run and `pages.yml`. A copy of the bundle whose `app.js` changes the scenes CSV fails
+    all three runs)
