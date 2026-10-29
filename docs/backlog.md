@@ -83,7 +83,7 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
     `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
   - Done when: the job fails when `app.js` breaks the download and passes on `main`.
   - Not: no cross-browser matrix, no visual tests.
-  - Status: Open
+  - Status: In progress (2026-10-29)
 
 - The estimate's reference rate measured again
   - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
