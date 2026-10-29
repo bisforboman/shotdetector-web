@@ -575,3 +575,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `DefaultsCheck.cs` reads the page's defaults from app.js and checks each against the run without it on every
     sample: with the old values it fails on Sintel's trailer, histogram and hash. The stale summary in ShotDetector is
     the owner's to report upstream)
+
+- CI's checks picked from a pull request's files
+  - Why: the owner (2026-10-29): a filter in the pipeline rather than a rule in CLAUDE.md. Every pull request ran every
+    check (about 7 minutes in CI), and the rule to run them all locally first cost about an hour in a cloud session,
+    for a change to one constant in app.js as much as for a package bump.
+  - Where: `tools/ci-scope.sh` (the changed paths on standard input, none, native or all out; a path no rule names is
+    all), `ci.yml`'s step "What the change touches" (outputs checks and wasm, the steps gated on them); README "Checks"
+    and CLAUDE.md's rule for what to run before pushing.
+  - Status: Done (2026-10-29: the classifier's cases checked locally, the step's script run against the last six merges,
+    all of which need all; `pages.yml` and the daily run still run everything)

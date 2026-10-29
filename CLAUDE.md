@@ -118,8 +118,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   compared, timed against `tools/WebCodecsWasm`, ManagedCodecs' decoder on wasm): the WebCodecs measurement (README
   "WebCodecs"), not in the checks or CI.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`:
-  pull requests (interpreted on one sample, AOT on all; docs-only ones pass without checks) and the whole of it daily on
-  `main` (README "Checks");
+  pull requests (the checks their files need, `tools/ci-scope.sh`: none, native, or all, which is interpreted on one
+  sample and AOT on all) and the whole of it daily on `main` (README "Checks");
   `.github/workflows/pages.yml`: on a push to `main`, the native, AOT and replace checks, then the AOT check's own
   publish's `wwwroot/` plus FastYuv's license,
   `.nojekyll` and the demo clip (`demo/sintel-trailer.mp4`: Sintel's trailer, downloaded pinned by the same SHA-256 as
@@ -146,8 +146,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   make-samples.sh and the checks passing on it.
 - A new sample isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg tags its
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
-- Before pushing: `tools/make-samples.sh` (once) and `tools/check.sh` (native + wasm interpreted, a few minutes),
-  `tools/check.sh wasm aot` for anything that could differ under AOT.
+- Before pushing: run what the change could break, not everything: CI picks the checks from the pull request's files
+  (`tools/ci-scope.sh`), and `pages.yml` and the daily run check all of it on `main`. Locally `tools/make-samples.sh`
+  (once), then `tools/check.sh native` for the core, the page's defaults or NativeCheck, `tools/check.sh wasm` when the
+  App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
+  AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
 - Packages: ShotDetector/FastYuv 3.20.0, FrameReader 2.15.0 and ManagedCodecs 0.1.0 (Containers, H264, Aac, each
   pinning Core) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output

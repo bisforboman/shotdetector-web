@@ -32,33 +32,34 @@ jobs:
         with:
           fetch-depth: 2
 
-      # build is the required check, so a pull request that changes only documentation still runs it, and it passes
-      # without the checks, which can't see those files (not paths-ignore: the check would never report). Every other
-      # step runs only if checks is true.
+      # Which checks the change needs, from its files (tools/ci-scope.sh: none, native or all; README "Checks"). build
+      # is the required check, so a pull request that needs none still runs it and passes without the checks (not
+      # paths-ignore: the check would never report). checks: the native check and what it needs; wasm: the WebAssembly
+      # checks too, which compare against the native run. Anything but a pull request runs all of it.
       - name: What the change touches
         id: scope
         env:
           EVENT: ${{ github.event_name }}
         run: |
           if [[ $EVENT != pull_request ]] || ! git rev-parse -q --verify HEAD^2 > /dev/null; then
-            echo "checks=true" >> "$GITHUB_OUTPUT"; echo "Every check ($EVENT)."; exit 0
-          fi
-          changed=$(git diff --name-only HEAD^1 HEAD)
-          echo "$changed"
-          code=$(grep -vE '^(docs/.*|.*\.md|LICENSE)$' <<< "$changed" || true)
-          if [[ -z $code ]]; then
-            echo "checks=false" >> "$GITHUB_OUTPUT"
-            echo "Only documentation changed (docs/, *.md, LICENSE): no check runs." | tee -a "$GITHUB_STEP_SUMMARY"
+            tier=all; echo "Every check ($EVENT)."
           else
-            echo "checks=true" >> "$GITHUB_OUTPUT"
+            tier=$(git diff --name-only HEAD^1 HEAD | tools/ci-scope.sh)
           fi
+          echo "checks=$([[ $tier != none ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "wasm=$([[ $tier == all ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          case $tier in
+            none) echo "Nothing a check can see changed: no check runs." ;;
+            native) echo "Only files the native check alone covers changed: native, no WebAssembly check." ;;
+            all) echo "Every check this event runs." ;;
+          esac | tee -a "$GITHUB_STEP_SUMMARY"
 
       - if: steps.scope.outputs.checks == 'true'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: 10.0.x
 
-      - if: steps.scope.outputs.checks == 'true'
+      - if: steps.scope.outputs.wasm == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -73,7 +74,7 @@ jobs:
           build: gpl-shared
 
       - name: Install the wasm-tools workload
-        if: steps.scope.outputs.checks == 'true'
+        if: steps.scope.outputs.wasm == 'true'
         run: dotnet workload install wasm-tools
 
       # Sintel's trailer (Blender Foundation, CC-BY 3.0), the real trailer the checks run and the page's demo is made
@@ -126,19 +127,19 @@ jobs:
       # refuse and those without AAC; every sample once a day and by hand. The AOT check below, what the page deploys,
       # runs every sample on every pull request.
       - name: WebAssembly check, interpreted
-        if: steps.scope.outputs.checks == 'true'
+        if: steps.scope.outputs.wasm == 'true'
         env:
           SAMPLES: ${{ github.event_name == 'pull_request' && 'samples/with-audio-320x240-25.mp4' || '' }}
         run: tools/check.sh wasm $SAMPLES
 
       - name: WebAssembly check, AOT
-        if: steps.scope.outputs.checks == 'true'
+        if: steps.scope.outputs.wasm == 'true'
         run: tools/check.sh wasm aot
 
       # LGPL-2.1: a FastYuv built from its source replaces the package's in a rebuilt bundle, and runs (README, Licensing).
       # Not on a pull request: pages.yml runs it before every deploy.
       - name: FastYuv replaced from its source, AOT
-        if: steps.scope.outputs.checks == 'true' && github.event_name != 'pull_request'
+        if: steps.scope.outputs.wasm == 'true' && github.event_name != 'pull_request'
         run: tools/check.sh replace aot
 
       - name: Results
