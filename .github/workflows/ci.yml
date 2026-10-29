@@ -32,10 +32,11 @@ jobs:
         with:
           fetch-depth: 2
 
-      # Which checks the change needs, from its files (tools/ci-scope.sh: none, native or all; README "Checks"). build
-      # is the required check, so a pull request that needs none still runs it and passes without the checks (not
-      # paths-ignore: the check would never report). checks: the native check and what it needs; wasm: the WebAssembly
-      # checks too, which compare against the native run. Anything but a pull request runs all of it.
+      # Which checks the change needs, from its files (tools/ci-scope.sh: none, native, page or all; README "Checks").
+      # build is the required check, so a pull request that needs none still runs it and passes without the checks (not
+      # paths-ignore: the check would never report). checks: the native check and what it needs; page: the page's smoke
+      # test in Chromium too; wasm: the WebAssembly checks too, which compare against the native run, with the smoke
+      # test on their AOT bundle. Anything but a pull request runs all of it.
       - name: What the change touches
         id: scope
         env:
@@ -47,10 +48,12 @@ jobs:
             tier=$(git diff --name-only HEAD^1 HEAD | tools/ci-scope.sh)
           fi
           echo "checks=$([[ $tier != none ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "page=$([[ $tier == page || $tier == all ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "wasm=$([[ $tier == all ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           case $tier in
             none) echo "Nothing a check can see changed: no check runs." ;;
             native) echo "Only files the native check alone covers changed: native, no WebAssembly check." ;;
+            page) echo "Only the page's own files changed: native, and the page in Chromium (interpreted)." ;;
             all) echo "Every check this event runs." ;;
           esac | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -59,7 +62,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - if: steps.scope.outputs.wasm == 'true'
+      - if: steps.scope.outputs.page == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -74,8 +77,16 @@ jobs:
           build: gpl-shared
 
       - name: Install the wasm-tools workload
-        if: steps.scope.outputs.wasm == 'true'
+        if: steps.scope.outputs.page == 'true'
         run: dotnet workload install wasm-tools
+
+      # Playwright for the page's smoke test, pinned by tools/page-check's lockfile, and the Chromium of that version.
+      - name: Install Playwright and Chromium
+        if: steps.scope.outputs.page == 'true'
+        working-directory: tools/page-check
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       # Sintel's trailer (Blender Foundation, CC-BY 3.0), the real trailer the checks run and the page's demo is made
       # from: sintel_trailer-1080p.mp4, the largest of Blender's H.264 MP4s of it (1920x1080, 24 fps, 52 s, 14.6 MB), so
@@ -132,9 +143,15 @@ jobs:
           SAMPLES: ${{ github.event_name == 'pull_request' && 'samples/with-audio-320x240-25.mp4' || '' }}
         run: tools/check.sh wasm $SAMPLES
 
-      - name: WebAssembly check, AOT
+      # The page in Chromium (tools/page-check) on the bundle this step publishes, the one Pages deploys.
+      - name: WebAssembly check and the page, AOT
         if: steps.scope.outputs.wasm == 'true'
-        run: tools/check.sh wasm aot
+        run: tools/check.sh wasm page aot
+
+      # Only the page's own files changed: the page in Chromium on an interpreted publish, which builds faster.
+      - name: The page in Chromium, interpreted
+        if: steps.scope.outputs.page == 'true' && steps.scope.outputs.wasm != 'true'
+        run: tools/check.sh page
 
       # LGPL-2.1: a FastYuv built from its source replaces the package's in a rebuilt bundle, and runs (README, Licensing).
       # Not on a pull request: pages.yml runs it before every deploy.

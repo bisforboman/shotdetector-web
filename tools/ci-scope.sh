@@ -3,8 +3,10 @@
 # changed paths on standard input, one a line, and prints the widest tier any of them needs:
 #   none    nothing a check can see: docs/, *.md, LICENSE, and the WebCodecs measurement (tools/webcodecs/,
 #           tools/WebCodecsCheck/, tools/WebCodecsWasm/), which no check builds
-#   native  the native check alone: the page's own files that no wasm check loads (index.html, style.css, app.js, which
-#           NativeCheck's DefaultsCheck reads, timeline.js, versions.js, worker.js, panels/) and tools/NativeCheck/
+#   native  the native check alone: tools/NativeCheck/
+#   page    the native check and the page's smoke test in Chromium (tools/check.sh page, interpreted): the page's own
+#           files that no wasm check loads (index.html, style.css, app.js, which NativeCheck's DefaultsCheck reads,
+#           timeline.js, versions.js, worker.js, panels/) and the smoke test itself (tools/page-check/)
 #   all     everything else: the core, the App's .NET side, blob-read.js and pause.js (the wasm checks import them from
 #           the bundle), the packages, the samples' recipe, the checks' scripts, the workflows, and any path not named
 #           here. A wasm check always needs the native one: it compares the native run's CSVs.
@@ -22,14 +24,19 @@ while IFS= read -r path; do
     src/ShotDetectorWeb.App/wwwroot/index.html | src/ShotDetectorWeb.App/wwwroot/style.css | \
     src/ShotDetectorWeb.App/wwwroot/app.js | src/ShotDetectorWeb.App/wwwroot/timeline.js | \
     src/ShotDetectorWeb.App/wwwroot/versions.js | src/ShotDetectorWeb.App/wwwroot/worker.js | \
-    src/ShotDetectorWeb.App/wwwroot/panels/* | tools/NativeCheck/*)
+    src/ShotDetectorWeb.App/wwwroot/panels/* | tools/page-check/*)
+      need=page ;;
+    tools/NativeCheck/*)
       need=native ;;
     *)
       need=all ;;
   esac
   echo "$need  $path" >&2
-  if [[ $need == all ]]; then tier=all
-  elif [[ $need == native && $tier == none ]]; then tier=native
-  fi
+  # The widest so far: none, native, page, all.
+  case $need:$tier in
+    all:*) tier=all ;;
+    page:none | page:native) tier=page ;;
+    native:none) tier=native ;;
+  esac
 done
 echo "$tier"
