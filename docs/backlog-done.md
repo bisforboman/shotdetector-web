@@ -603,6 +603,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     sample's default run half-way and compares, and stops one while paused. Seen in headless Chromium on Sintel's
     trailer: README "Pausing a run". Not seen in Firefox: this cloud session's Playwright has Chromium only)
 
+- Thumbnails per shot
+  - Why: a table of times is hard to read; a still per shot shows what was found. Decision "Pictures of shots".
+  - Where: `app.js`: for each shot, seek the `<video>` to the shot's first frame, `drawImage` to a small canvas,
+    lazily as rows scroll into view (one seek at a time; `seeked` events).
+  - Done when: a trailer's shots each show a still within a few seconds of the run finishing, and the detection
+    result is unchanged (the stills are the browser's decode, not the library's).
+  - Not: no second decode in .NET, no image export.
+  - The owner's choices (2026-10-29): the stills from a hidden second `<video>` on the same file, not the player; taken
+    as rows come into view, live shots during a run included; the shot's middle frame, not its first.
+  - Status: Done (2026-10-29: `panels/shots.js`, a Still column first, the middle frame of each shot (the owner's
+    choice: the first frame is often black from a fade in) from a hidden `<video>` on the same file, as rows come
+    into view, kept by the time taken at. Seen in headless Chromium on Sintel's trailer: stills while it runs, all
+    there as it ends, a stopped run's shortened last shot its own middle; no .NET or worker change, so the result is
+    the same. Not seen in Firefox: this cloud session's Playwright has Chromium only)
+
 - Real-browser smoke test
   - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
     needs a check of its own. Decision "Testing the page".
