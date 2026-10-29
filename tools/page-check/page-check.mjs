@@ -7,7 +7,7 @@
 //   2. the same sample split across two workers (?workers=2): the ranges lane, and the same CSVs;
 //   3. "Try the demo": the clip fetched and run as picked, paused a quarter of the way in (the bar and the status held
 //      still, the button reading Resume), resumed, the same comparison, the sound measured;
-//   4. the demo detected again, paused and stopped while paused: it ends stopped at the frame it was paused at, its
+//   4. the demo detected again, paused and stopped while paused: it ends stopped at the pause it was held at, its
 //      stats CSV the native run's first rows up to there, the shots table a row per shot of its scenes CSV.
 // Any error on the page, in its workers or a failed request fails the check.
 //
@@ -239,7 +239,11 @@ try {
       const status = await finished(page, again, 'stopped');
       if (status !== null) {
         const frames = Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
-        if (frames !== at) fail(`${again}: stopped at frame ${frames}, not at ${at} where it was paused: ${status}`);
+        // The status says the frames processed (progress), the result counts the frames read, which can be ahead by
+        // up to a pause's 8 frames (Api's PauseEvery): the run is held at the pause after the last progress told.
+        if (!(frames >= at && frames <= at + 8)) {
+          fail(`${again}: stopped at frame ${frames}, not at the pause from ${at} where it was held: ${status}`);
+        }
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
       }
     }
