@@ -123,7 +123,7 @@ derives for display is labelled as the page's own; the CSVs stay the only output
     "FFmpeg not loaded" check turns into "FFmpeg not bundled". Update THIRD-PARTY-NOTICES.md.
   - Done when: `_framework/` has no `FFmpeg.AutoGen.wasm`, the checks are green, and the README's sizes are updated.
   - Not: no change to the core library.
-  - Status: Open
+  - Status: In progress (2026-10-29)
 
 ### Unblocked by ShotDetector 3.20.0 and ManagedCodecs 0.1.0
 
