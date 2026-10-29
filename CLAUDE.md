@@ -101,7 +101,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
-  merged, vs the whole run's CSVs; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
+  merged, vs the whole run's CSVs; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
+  the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`

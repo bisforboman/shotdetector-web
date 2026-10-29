@@ -145,7 +145,6 @@ for (const [i, sample] of samples.entries()) {
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv);
   }
   await checkNotMerged(sample);
-  if (i === 0) await checkAdaptiveDefaults(sample);
   checkAudio(sample, video);
   checkPackets(sample);
 }
@@ -469,17 +468,6 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
 
 // Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other
 // options than the merge's (another fingerprint), or their bytes damaged (the checksum).
-// The adaptive settings sent as their defaults (frameWindow 2, minContentVal 15, scenedetect's window_width and
-// min_content_val) give the default run's CSVs: the page sends a setting left at its default as none, and a visitor
-// who types the default gets the same run.
-async function checkAdaptiveDefaults(sample) {
-  await Detect(JSON.stringify({ detector: 'adaptive', frameWindow: 2, minContentVal: 15 }));
-  const name = join(outDir, `${basename(sample, extname(sample))}.adaptive`);
-  const same = ScenesCsv() === readFileSync(`${name}.scenes.csv`, 'utf8') && StatsCsv() === readFileSync(`${name}.stats.csv`, 'utf8');
-  if (same) console.error(`${basename(sample)}: adaptive with its defaults typed in (window 2, min content_val 15): the default run's CSVs`);
-  else fail(`${basename(sample)}: adaptive with frameWindow 2 and minContentVal 15 differs from the default run.`);
-}
-
 async function checkNotMerged(sample) {
   const plan = JSON.parse(Ranges(RANGES));
   const bytes = await scoreRanges(RUNS.content, plan);

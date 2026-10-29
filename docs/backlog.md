@@ -113,19 +113,6 @@ shots strip", read a lane of the timeline. The waveform, audio measures and bitr
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
 derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
 
-- The form's default thresholds for histogram and hash
-  - Why: `app.js`'s `DEFAULT_THRESHOLDS` prefills histogram 0.05 and hash 0.395, scenedetect 0.7.1's defaults, and
-    sends a threshold equal to its default as none. ShotDetector's defaults follow `DetectionOptions.Compatibility`,
-    0.7.2 unless set, whose are 0.2 and 0.35 (`ShotDetection`'s detector setup). So the form says 0.05 while the run
-    compares against 0.2, and a visitor who types 0.05 gets 0.2. Found 2026-10-26 by "A graph of the scores": the
-    lane draws the threshold the run used, and Sintel's histogram cuts all sit under 0.8, not 0.95.
-  - Where: `app.js`'s `DEFAULT_THRESHOLDS` (histogram 0.2, hash 0.35) and its comment; `panels/scores.js` keeps the
-    same defaults to draw the line (its `DETECTORS`).
-  - Done when: the form prefills 0.2 and 0.35, and a histogram run with 0.05 typed in compares against 0.05 (the
-    scores lane's line at 0.95, and more cuts than the default's on the Sintel trailer).
-  - Not: no other compatibility than ShotDetector's default.
-  - Status: Open
-
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships (the trimmer keeps whole assemblies that don't opt in:
     ShotDetector's package isn't marked `IsTrimmable`), and THIRD-PARTY-NOTICES.md has to list it.

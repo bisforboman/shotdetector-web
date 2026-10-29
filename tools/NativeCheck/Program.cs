@@ -5,7 +5,8 @@
 // for byte. Writes (a)'s CSVs to --out (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check,
 // and its audio track's description (AudioStreamCheck.cs). And every sample's run with every detector split into ranges at
-// keyframes, scored on their own and merged, against the whole run (RangeCheck.cs).
+// keyframes, scored on their own and merged, against the whole run (RangeCheck.cs). And the page's defaults, read from
+// its app.js, against ShotDetector's own (DefaultsCheck.cs).
 //   NativeCheck [--out dir] [--reject file...] sample.mp4...    (SHOTDETECTOR_FFMPEG_LIBS: FFmpeg 8.1's shared libraries)
 // Exit code 0 when everything agreed and every --reject file was refused with an UnsupportedVideoException.
 using System.Globalization;
@@ -124,6 +125,7 @@ foreach (string reject in rejects)
 
 failures += AudioCheck.Run(samples, libs, outDir);
 failures += AudioStreamCheck.Run(samples);
+failures += DefaultsCheck.Run(samples);
 
 Console.WriteLine(failures == 0 ? "All agree." : $"{failures} differences or failures.");
 return failures == 0 ? 0 : 1;
