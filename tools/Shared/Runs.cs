@@ -8,10 +8,14 @@ namespace ShotDetectorWeb.Checks;
 /// </summary>
 internal static class Runs
 {
-    /// <summary>Each of the five detectors with scenedetect's defaults, and all five in one run, every one with stats.</summary>
+    /// <summary>
+    /// Each of the five detectors with scenedetect's defaults, the adaptive detector with its window and minimum
+    /// content_val changed (the page's two adaptive settings, issue #50), and all five in one run, every one with stats.
+    /// </summary>
     public static readonly (string Name, DetectionOptions Options)[] All =
     [
         ("adaptive", new DetectionOptions { Detector = DetectorKind.Adaptive, CollectStats = true }),
+        ("adaptive-window", new DetectionOptions { Detector = DetectorKind.Adaptive, FrameWindow = 1, MinContentVal = 5, CollectStats = true }),
         ("content", new DetectionOptions { Detector = DetectorKind.Content, CollectStats = true }),
         ("threshold", new DetectionOptions { Detector = DetectorKind.Threshold, CollectStats = true }),
         ("histogram", new DetectionOptions { Detector = DetectorKind.Histogram, CollectStats = true }),

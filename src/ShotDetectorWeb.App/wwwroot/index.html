@@ -70,6 +70,14 @@
           <input type="text" id="min-length" value="0.6s" required
             title="Frames (15), seconds (0.6s or 0.6) or HH:MM:SS.mmm, as scenedetect takes it">
         </label>
+        <label class="adaptive">Window
+          <input type="number" id="window" min="1" step="1" value="2" required
+            title="Frames on each side of a frame averaged for its ratio, at least 1: scenedetect's window_width">
+        </label>
+        <label class="adaptive">Minimum content_val
+          <input type="number" id="min-content" min="0" step="any" value="15" required
+            title="The content_val a frame must reach as well for a cut: scenedetect's min_content_val">
+        </label>
       </div>
 
       <div class="actions">

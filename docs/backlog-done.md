@@ -545,3 +545,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-29: the footer says "ManagedCodecs 0.1.0 demuxes ... ShotDetector.FastYuv 3.20.0 converts
     ... ShotDetector 3.20.0 finds the shots and FrameReader 2.15.0 measures the sound, all of it .NET 10.0.x";
     app-check's versions check; FrameReader really 2.15.0, the checks run again on it)
+
+- The adaptive detector's window and minimum content_val in the form
+  - Why: a colleague's request, filed by the owner as
+    [#50](https://github.com/bisforboman/shotdetector-web/issues/50) (2026-10-29): scenedetect's `window_width` and
+    `min_content_val` toggled in the UI. ShotDetector has them as `DetectionOptions.FrameWindow` and `MinContentVal`.
+  - Where: two inputs shown while adaptive is picked (`index.html`, `style.css`'s `form[data-detector]`, `app.js`'s
+    `options()`: at their defaults sent as none), `DetectRequest`'s `frameWindow` and `minContentVal`, the scores
+    lane's rule naming the run's minimum content_val; `tools/Shared/Runs.cs` and app-check's RUNS get the
+    "adaptive-window" run (window 1, minimum content_val 5) against the FFmpeg path, and app-check checks that the
+    defaults typed in give the default run's CSVs.
+  - Status: Done (2026-10-29: the two fields, adaptive only, prefilled 2 and 15; the adaptive-window run byte for
+    byte natively, interpreted and ahead of time)

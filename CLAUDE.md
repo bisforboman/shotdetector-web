@@ -31,8 +31,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `audio`: `{ codec, sampleRate,
-  channels }` from `Mp4Input.Audio`, or null), `Detect(string optionsJson)` (a promise: shots,
-  frame count, rate, duration, `stopped` and `warnings` as JSON; `Mp4Input.DetectAsync`, pausing every 8 frames, `PauseEvery`),
+  channels }` from `Mp4Input.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
+  frameWindow, minContentVal }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
+  rate, duration, `stopped` and `warnings` as JSON; `Mp4Input.DetectAsync`, pausing every 8 frames, `PauseEvery`),
   `Stop()` (the run's frames end at its next pause: the result for the frames read, `stopped` true) and `Cancel()` (the
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in

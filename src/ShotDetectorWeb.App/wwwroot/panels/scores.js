@@ -16,7 +16,7 @@ import { lane, secondsOf, timecode, x } from '../timeline.js';
 // column's scale, and how the detector compares them (the lane's legend says it).
 const DETECTORS = {
   adaptive: { column: 'adaptive_ratio', threshold: 3, line: t => t,
-    rule: t => `a cut where it is ${t} or more and content_val is 15 or more` },
+    rule: (t, { minContentVal }) => `a cut where it is ${t} or more and content_val is ${minContentVal ?? 15} or more` },
   content: { column: 'content_val', threshold: 27, line: t => t,
     rule: t => `a cut where it is ${t} or more` },
   // The detector truncates its threshold to an integer (scenedetect's int(threshold)).
@@ -78,10 +78,11 @@ function clear() {
 }
 
 // What the run compared, from the options the page sent: the detector, and the threshold (none: the default).
-function runOf({ detector, threshold }) {
+function runOf(options) {
+  const { detector, threshold } = options;
   const d = DETECTORS[detector];
   const t = threshold ?? d.threshold;
-  return { kind: detector, threshold: t, line: d.line(t), rule: d.rule(t), column: d.column };
+  return { kind: detector, threshold: t, line: d.line(t), rule: d.rule(t, options), column: d.column };
 }
 
 // The stats CSV, once: the frames' times (their timecodes) and the run's scores, both as typed arrays, the lowest and
