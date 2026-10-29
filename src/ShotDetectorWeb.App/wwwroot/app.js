@@ -1,9 +1,9 @@
 // The page: picks a file, has the worker (worker.js, which owns the .NET runtime) open it and detect, and tells the
 // panels what happens. How it is built: docs/decisions/2026-10-24-the-page.md and 2026-10-25-one-page.md. This file
-// keeps the page's states (idle, opening, detecting, stopping, done, stopped, lost, error), the landing that folds into
-// a toolbar once a file is picked, the one-line status, the options, the estimate, stop, the demo and the shot playing
-// under the video (decision 2026-10-26-new-ui.md), a long video split across workers and the sound's own worker
-// (decision 2026-10-26-workers.md); what else is shown of a file or a run is in the panels
+// keeps the page's states (idle, opening, detecting, paused, stopping, done, stopped, lost, error), the landing that
+// folds into a toolbar once a file is picked, the one-line status, the options, the estimate, pause and resume, stop,
+// the demo and the shot playing under the video (decision 2026-10-26-new-ui.md), a long video split across workers
+// and the sound's own worker (decision 2026-10-26-workers.md); what else is shown of a file or a run is in the panels
 // (panels/<name>.js, listed in index.html), each a lane of the timeline (timeline.js) or a card. A panel imports from
 // here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
@@ -75,7 +75,8 @@ const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
 const windowInput = $('window'), minContent = $('min-content');
-const detectButton = $('detect'), stopButton = $('stop'), demoButton = $('demo'), changeButton = $('change');
+const detectButton = $('detect'), pauseButton = $('pause'), stopButton = $('stop');
+const demoButton = $('demo'), changeButton = $('change');
 const fileName = $('file-name'), fileFacts = $('file-facts');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
 const result = $('result'), video = $('video'), now = $('now');
@@ -92,6 +93,8 @@ let estimate = '';      // the estimate of the current run, as the status's tool
 let estimated = 0;      // and its seconds
 let state = 'idle';
 let started = 0;        // when the current detection started (performance.now())
+let pausedFor = 0;      // how long it has been paused, in ms, before the pause going on (if any)
+let pausedSince = 0;    // when the pause going on started
 let framesDone = 0;     // frames the current run has done, as its last progress report said
 let framesExpected = 0; // and how many it expects (0 when unknown)
 let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
@@ -206,9 +209,10 @@ const fromWorker = {
     framesDone = done;
     framesExpected = expected;
     if (expected > 0) progress.value = Math.min(done / expected, 1);
-    const seconds = (performance.now() - started) / 1000;
+    const seconds = runMs() / 1000;
     const fps = seconds > 0 ? done / seconds : 0;
     if (state === 'stopping') say(`Stopping at frame ${count(done)}…`);
+    else if (state === 'paused') sayPaused();
     else say(`Frame ${count(done)}${expected > 0 ? ` of ${count(expected)}` : ''} · ${fps.toFixed(0)} frames per second` +
       `${expected > 0 ? ` · about ${duration(left(done, expected, seconds, fps))} left` : ''}`,
       `${estimate} The time left: at this run's rate so far, after its first ${LEFT_AFTER} seconds.`);
@@ -223,10 +227,39 @@ const fromWorker = {
   },
 };
 
-const runGoes = () => state === 'detecting' || state === 'stopping';
+const runGoes = () => state === 'detecting' || state === 'paused' || state === 'stopping';
 
-// The states: idle (a file picked or not), opening, detecting, stopping (told to stop, its result to come), done,
-// stopped (a stopped run's result, shown as a finished one's), lost (a run whose worker didn't answer a stop) and error.
+// How long the current run has gone, in ms, its pauses left out: the frames-per-second figures, the time left and the
+// rate this browser keeps (storeRate) hold still while it is paused.
+function runMs() {
+  return performance.now() - started - pausedFor - (state === 'paused' ? performance.now() - pausedSince : 0);
+}
+
+// Pause and resume (backlog "Pause and resume a run"): the worker's 'pause' holds the run at its next pause (pause.js),
+// every worker of a split run's, until 'resume'; nothing is cancelled or ended, so the run goes on where it was and
+// its result is the one it would have had. The sound's worker goes on: its pass has no pauses, and is quick.
+function pauseOrResume() {
+  if (state === 'detecting') {
+    pausedSince = performance.now();
+    setState('paused');
+    for (const w of [worker, ...helpers]) w.postMessage({ type: 'pause' });
+    sayPaused();
+  } else if (state === 'paused') {
+    pausedFor += performance.now() - pausedSince;
+    setState('detecting');
+    for (const w of [worker, ...helpers]) w.postMessage({ type: 'resume' });
+    say(`Resuming at frame ${count(framesDone)}…`);
+  }
+}
+
+function sayPaused() {
+  say(`Paused at frame ${count(framesDone)}${framesExpected > 0 ? ` of ${count(framesExpected)}` : ''}: Resume goes ` +
+    'on where it is, Stop shows the result for the frames read.');
+}
+
+// The states: idle (a file picked or not), opening, detecting, paused (a run held where it is until resumed), stopping
+// (told to stop, its result to come), done, stopped (a stopped run's result, shown as a finished one's), lost (a run
+// whose worker didn't answer a stop) and error.
 function setState(next) {
   state = next;
   const busy = next === 'opening' || runGoes();
@@ -238,6 +271,8 @@ function setState(next) {
   demoButton.disabled = busy;
   detectButton.hidden = busy;
   // Opening can't be stopped half-way, only abandoned: the worker is terminated (stop).
+  pauseButton.hidden = next !== 'detecting' && next !== 'paused';
+  pauseButton.textContent = next === 'paused' ? 'Resume' : 'Pause';
   stopButton.hidden = !busy;
   stopButton.disabled = next === 'stopping';
   stopButton.textContent = next === 'opening' ? 'Cancel' : 'Stop';
@@ -329,6 +364,7 @@ async function go(run, plan, fallback = null) {
   say(`${fallback ? `${fallback} Detecting again with one worker` : 'Detecting'} · about ${duration(estimated)} for ` +
     `${count(opened.frameCount)} frames${workers > 1 ? ` with ${workers} workers` : ''}`, estimate);
   started = performance.now();
+  pausedFor = 0;
   const video = opened, detecting = running = plan ? splitRun(plan, run) : call('Detect', JSON.stringify(run));
   let json;
   try {
@@ -341,7 +377,7 @@ async function go(run, plan, fallback = null) {
     return go(run, null, e.message.startsWith(NOT_MERGED) ? e.message : `A worker failed: ${e.message}`);
   }
   const r = JSON.parse(json);
-  const seconds = (performance.now() - started) / 1000;
+  const seconds = runMs() / 1000;
   if (running !== detecting) return; // abandoned: a new file was chosen
   running = null;
   // The CSVs come as strings of their own, not inside Detect's JSON (README "Large files").
@@ -389,7 +425,7 @@ async function splitRun(plan, run) {
     let bytes = await Promise.race([Promise.all(scored), split.stopped.then(() => null)]);
     if (bytes === null) {
       // Stopped: as long as a few pauses take at the run's rate, and a second more (answered), for every range.
-      const frame = framesDone > 0 ? (performance.now() - started) / framesDone * plan.ranges.length : 0;
+      const frame = framesDone > 0 ? runMs() / framesDone * plan.ranges.length : 0;
       bytes = await Promise.all(scored.map(p => within(p, 1000 + 24 * frame)));
       if (bytes[0] === undefined) {
         replaceWorker();
@@ -433,8 +469,9 @@ function rangeProgress(index, done, of) {
   framesDone = split.done.reduce((a, b) => a + b, 0);
   framesExpected = split.frames;
   progress.value = Math.min(framesDone / framesExpected, 1);
-  const seconds = (performance.now() - started) / 1000;
+  const seconds = runMs() / 1000;
   const fps = seconds > 0 ? framesDone / seconds : 0;
+  if (state === 'paused') sayPaused();
   if (state === 'detecting') {
     say(`Frame ${count(framesDone)} of ${count(framesExpected)} · ${split.done.length} workers · ` +
       `${fps.toFixed(0)} frames per second · about ${duration(left(framesDone, framesExpected, seconds, fps))} left`,
@@ -446,7 +483,7 @@ function rangeProgress(index, done, of) {
 // Whether a call answered (anything: its value, an error, a cancel) within a second or so: as long as the worker takes
 // for a few pauses of Detect's (8 frames apart, Api's PauseEvery) at the rate the run has had, and a second more.
 async function answered(call) {
-  const frame = framesDone > 0 ? (performance.now() - started) / framesDone : 0;
+  const frame = framesDone > 0 ? runMs() / framesDone : 0;
   let timer;
   const late = new Promise(resolve => { timer = setTimeout(() => resolve(false), 1000 + 24 * frame); });
   const ok = await Promise.race([call.then(() => true, () => true), late]);
@@ -550,7 +587,9 @@ async function stop() {
     say('Cancelled.');
     return;
   }
-  if (state !== 'detecting') return;
+  if (state !== 'detecting' && state !== 'paused') return;
+  // Stopped while paused: the worker's 'stop' also lets the held run go on, to end at the pause it waits at.
+  if (state === 'paused') pausedFor += performance.now() - pausedSince;
   setState('stopping');
   if (split) {
     // Every worker ends its range at its next pause; splitRun merges what they scored from the start.
@@ -671,6 +710,7 @@ drop.onclick = e => { if (e.target === drop) fileInput.click(); };
 for (const type of ['timeupdate', 'seeking', 'emptied', 'play', 'pause']) video.addEventListener(type, follow);
 form.onsubmit = e => { e.preventDefault(); start(); };
 stopButton.onclick = stop;
+pauseButton.onclick = pauseOrResume;
 // The demo clip, next to the page (pages.yml), run as if it had been picked.
 demoButton.onclick = async () => {
   demoButton.disabled = true;
