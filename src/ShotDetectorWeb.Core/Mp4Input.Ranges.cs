@@ -89,26 +89,27 @@ public sealed partial class Mp4Input
     /// The frames ShotDetector's <see cref="ShotDetection.ScoreRangeAsync"/> takes for <paramref name="range"/>: decoded
     /// from its keyframe (the packets before it neither decoded nor read), the frame before its first, its own, and the
     /// next range's first (the overlap frame), or to the video's end for the last range; paused as
-    /// <see cref="FramesAsync"/> is.
+    /// <see cref="FramesAsync"/> is; each frame given measured by <paramref name="picture"/>, if any (a meter of the
+    /// range, which measures only its own frames).
     /// </summary>
     public IAsyncEnumerable<YuvFrame> RangeFramesAsync(FrameRange range, int every, Func<int, ValueTask<bool>> between,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, PictureMeter? picture = null)
     {
         ArgumentNullException.ThrowIfNull(range);
         int from = Math.Max(range.FirstFrame - 1, 0);
         int limit = range.EndFrame >= ShownFrames ? int.MaxValue : range.EndFrame - from + 1;
-        return Paused(Frames(range.Keyframe), limit, every, between, cancellationToken);
+        return Paused(Measured(Frames(range.Keyframe), picture), limit, every, between, cancellationToken);
     }
 
     /// <summary>
     /// Scores <paramref name="range"/> (<see cref="ShotDetection.ScoreRangeAsync"/> on <see cref="RangeFramesAsync"/>),
     /// with ShotDetector.FastYuv's converter unless the options name another. Frames that end early (<paramref name="between"/>
-    /// false) end the range there.
+    /// false) end the range there. <paramref name="picture"/>, a meter of the range, measures its frames as they are read.
     /// </summary>
     public Task<RangeScores> ScoreRangeAsync(FrameRange range, int every, Func<int, ValueTask<bool>> between,
-        DetectionOptions? options = null, CancellationToken cancellationToken = default) =>
-        ShotDetection.ScoreRangeAsync(Video, RangeFramesAsync(range, every, between, cancellationToken), range.FirstFrame,
-            WithConverter(options), cancellationToken);
+        DetectionOptions? options = null, CancellationToken cancellationToken = default, PictureMeter? picture = null) =>
+        ShotDetection.ScoreRangeAsync(Video, RangeFramesAsync(range, every, between, cancellationToken, picture),
+            range.FirstFrame, WithConverter(options), cancellationToken);
 
     /// <summary>
     /// Merges ranges' scores (<see cref="ShotDetection.Merge"/>) with the options they were scored with: the whole
