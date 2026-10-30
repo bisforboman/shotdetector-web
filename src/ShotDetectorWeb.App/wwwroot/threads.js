@@ -15,8 +15,9 @@ import { append, blob, parts } from './blob-write.js';
 const THREADED = {
   Open: 'OpenThreaded', Detect: 'Detect', ScenesCsv: 'ScenesCsvThreaded', StatsCsv: 'StatsCsvThreaded',
   ShotsJson: 'ShotsJsonThreaded', ShotsHtml: 'ShotsHtmlThreaded', Picture: 'PictureThreaded',
+  FrameTypes: 'FrameTypesThreaded',
 };
-export const RESULTS = new Set(['ScenesCsv', 'StatsCsv', 'ShotsJson', 'ShotsHtml', 'Picture']);
+export const RESULTS = new Set(['ScenesCsv', 'StatsCsv', 'ShotsJson', 'ShotsHtml', 'Picture', 'FrameTypes']);
 
 let api = null;     // the runtime's Api, once started (a promise)
 let current = null; // the runner whose run the runtime's imports report to
