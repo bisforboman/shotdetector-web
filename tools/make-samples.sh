@@ -74,6 +74,32 @@ for s in "$f" "$out/fragmented-moov-320x240-25.mp4"; do
 done
 [[ $got == '25/1,1024,N/A 25/1,1024,38 ' ]] || { echo "fragmented samples: avg_frame_rate, start_pts, nb_frames are $got" >&2; exit 1; }
 
+# Interlaced (decision 2026-10-30-interlaced.md): three() at 50 fps woven into 25 fps frames of two fields each, coded as
+# MBAFF frames by libx264 (-flags +ilme+ildct), top field first and bottom field first; and libx264's fake-interlaced,
+# whose SPS allows field coding (frame_mbs_only_flag 0) while every picture is a progressive frame. Deinterlacing off
+# (ShotDetector's default): the frames as decoded, woven.
+weave="tinterlace=interleave_top"
+enc -filter_complex "$(three 320x240 50 1.5),$weave,setfield=tff" -c:v libx264 -flags +ilme+ildct -pix_fmt yuv420p \
+  "$out/interlaced-tff-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 50 1.5),$weave,setfield=bff" -c:v libx264 -flags +ilme+ildct -x264-params bff=1 \
+  -pix_fmt yuv420p "$out/interlaced-bff-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 50 1.5),$weave" -c:v libx264 -x264-params fake-interlaced=1 -pix_fmt yuv420p \
+  "$out/interlaced-fake-320x240-25.mp4"
+# What they must be, from the bitstream (trace_headers: every SPS's frame_mbs_only_flag and mb_adaptive_frame_field_flag,
+# every slice's field_pic_flag: frames, never field pictures) and from FFmpeg (the stream's field order, each frame's
+# interlaced_frame,top_field_first), at 25 fps.
+for f in tff:0:1:0:tt:1,1 bff:0:1:0:bb:1,0 fake:0:0:0:progressive:0,0; do
+  IFS=: read -r name mbs mbaff field order flags <<< "$f"
+  s="$out/interlaced-$name-320x240-25.mp4"
+  trace=$("$ff" -hide_banner -i "$s" -c copy -bsf:v trace_headers -f null - 2>&1)
+  values() { awk -v n="$1" '$5 == n {print $NF}' <<< "$trace" | sort -u | tr '\n' ' '; }
+  got="$(values frame_mbs_only_flag)$(values mb_adaptive_frame_field_flag)$(values field_pic_flag)"
+  got+="$("$fp" -v error -select_streams v:0 -show_entries stream=field_order,avg_frame_rate -of csv=p=0 "$s") "
+  got+=$("$fp" -v error -select_streams v:0 -show_entries frame=interlaced_frame,top_field_first -of csv=p=0 "$s" | cut -d, -f1,2 | sort -u | tr '\n' ' ')
+  want="$mbs $mbaff $field $order,25/1 $flags "
+  [[ $got == "$want" ]] || { echo "$s: frame_mbs_only, MBAFF, field_pic, rate, field order, frame flags are '$got', not '$want'." >&2; exit 1; }
+done
+
 # Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
 # 0.1), 3 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 15 s of video. The
 # gap is 3 s, not 2, because FFmpeg's AAC encoder spreads the tone's edges into it by a few milliseconds: a 2 s gap
