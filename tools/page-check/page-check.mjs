@@ -83,26 +83,46 @@ const browser = await chromium.launch();
 const failures = [];
 const fail = message => { failures.push(message); console.log(`FAIL ${message}`); };
 
+// Each page's switch for the leave-out below, for a reload the check makes itself (resumedAfterReload).
+const settlings = new WeakMap();
+
 // A fresh page each time, as a visitor's first visit (no rate kept from an earlier run), its errors collected:
 // exceptions, console errors (the workers' too) and failed or missing requests.
 async function open(query = '', on = browser) {
   const context = await on.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   const errors = [];
+  // A first visit reloads once its service worker takes over (app.js, serve), which aborts the replaced document's
+  // runtime as it loads: Firefox reports that ("error loading dynamically imported module", requests
+  // NS_BINDING_ABORTED; CI, 2026-10-30), Chromium doesn't. That isn't the page's error, and the reloaded document loads
+  // it all again under watch: until the page has settled, a request aborted, what a replaced document or its worker
+  // says, and the aborted import itself (Firefox's page reports its worker's too, after the reload) are left out. A
+  // runtime that really doesn't load fails the runs that follow. Each document counts as one; its workers belong to it.
+  let documents = 0, settling = true;
+  settlings.set(page, on => { settling = on; });
+  const aborted = /error loading dynamically imported module/;
+  const counted = (doc, text) => { if (!(settling && (doc < documents || aborted.test(text)))) errors.push(text); };
+  page.on('framenavigated', f => { if (f === page.mainFrame()) documents++; });
   const watch = (where, target) => {
-    target.on('console', m => { if (m.type() === 'error') errors.push(`${where} console: ${m.text()}`); });
-    target.on('pageerror', e => errors.push(`${where}: ${e.message}`));
+    target.on('console', m => { if (m.type() === 'error') counted(documents, `${where} console: ${m.text()}`); });
+    target.on('pageerror', e => counted(documents, `${where}: ${e.message}`));
   };
   watch('page', page);
-  page.on('worker', w => w.on('console', m => { if (m.type() === 'error') errors.push(`worker console: ${m.text()}`); }));
+  page.on('worker', w => {
+    const doc = documents;
+    w.on('console', m => { if (m.type() === 'error') counted(doc, `worker console: ${m.text()}`); });
+  });
   // The <video> aborts its own range requests of the file's blob URL as it seeks and buffers: not an error.
   page.on('requestfailed', r => {
     const why = r.failure()?.errorText;
-    if (!(r.resourceType() === 'media' && why === 'net::ERR_ABORTED')) errors.push(`request failed: ${r.url()} (${why})`);
+    if (r.resourceType() === 'media' && why === 'net::ERR_ABORTED') return;
+    if (settling && /ABORTED/.test(why ?? '')) return;
+    errors.push(`request failed: ${r.url()} (${why})`);
   });
   page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()}: ${r.url()}`); });
   await page.goto(base + query);
   await (on === browser ? isolated(page) : served(page));
+  settling = false;
   return { context, page, errors };
 }
 
@@ -126,8 +146,10 @@ async function stopped(page, what, at) {
 // The page reloaded (a later visit) and the demo picked again: the stopped run kept in this browser shown at once,
 // stopped at frames, with Resume and Forget, its downloads the stopped run's; then resumed to the whole run's.
 async function resumedAfterReload(page, what, frames, run, settle, threads) {
+  settlings.get(page)(true);
   await page.reload();
   await settle(page);
+  settlings.get(page)(false);
   await page.click('#demo');
   const status = await finished(page, `${what}, shown again`, 'stopped');
   if (status === null) return;
