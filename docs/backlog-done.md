@@ -750,9 +750,10 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-30: ManagedCodecs 0.2.3 fixed #206 (narrowing that saturated under the interpreter,
     dotnet/runtime#136688); with ShotDetector 3.21.0 and FrameReader 2.16.0, natively every check agrees, and on
     browser-wasm 154 of 154 CSVs are identical interpreted and ahead of time, the page check and the replace check
-    passing. Speed against 0.1.0 not settled: the cloud VM is too noisy; AOT under Node, Sintel's trailer took 18.2 s
-    adaptive and 20.5 s all detectors, against 21.5 and 25.1 for 0.1.0 on 2026-10-29, a different hour of the same
-    kind of machine; `REFERENCE_FPS`, measured on 0.1.0 the same day, measured again in CI would tell)
+    passing. Speed against 0.1.0, timed in CI on one runner (AMD EPYC 9V45, 2026-10-30, run 41067439223): the AOT
+    bundle under Node, adaptive, six interleaved rounds of three runs each, Sintel's trailer at 480p 9.57 s with 0.1.0
+    and 7.23 s with 0.2.3 (median; 131 and 173 frames per second), the 1080p original 32.46 and 25.21 s (39 and 50):
+    0.2.3 takes 24 and 22% less time, and every one of its runs was faster than every one of 0.1.0's)
 
 - Threads in the browser
   - Why: ManagedCodecs decodes a 720p P chain in about half the time on 4 threads (`H264Decoder.Threads`). Wasm
