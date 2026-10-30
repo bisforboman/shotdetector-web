@@ -16,18 +16,18 @@ namespace ShotDetectorWeb.App;
 [SupportedOSPlatform("browser")]
 public static partial class Api
 {
-    static Mp4Input? _input;
+    static VideoInput? _input;
     static JSObject? _file;
     static DetectionResult? _result;
 
     /// <summary>What a damaged file's message starts with on the page (decision "A damaged file's message").</summary>
-    const string Damaged = "The file is damaged or not an MP4 this page can read: ";
+    const string Damaged = "The file is damaged or not a video this page can read: ";
 
     /// <summary>
-    /// Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with the frames it shows
-    /// (<see cref="Mp4Input.ShownFrames"/>, what a whole run reads, where <c>frameCount</c> is FFmpeg's nb_frames: null in a
+    /// Opens an MP4 or an AVI for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with the frames it shows
+    /// (<see cref="VideoInput.ShownFrames"/>, what a whole run reads, where <c>frameCount</c> is FFmpeg's nb_frames: null in a
     /// fragmented file, the track's samples past an edit list's end) as <c>frames</c>, and its audio track
-    /// (<see cref="Mp4Input.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one; or the
+    /// (<see cref="VideoInput.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one; or the
     /// library's exception (a damaged file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
     /// in slices as the library needs them (<see cref="BlobStream"/>), never copied in whole.
     /// </summary>
@@ -39,11 +39,11 @@ public static partial class Api
         _picture = null;
         _file?.Dispose();
         _file = file;
-        return Opened(DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file))));
+        return Opened(DamagedPrefixed(() => VideoInput.Open(() => new BlobStream(file))));
     }
 
     /// <summary><see cref="Open"/>'s JSON of the file just opened, which <see cref="Detect"/> then runs on.</summary>
-    static string Opened(Mp4Input input)
+    static string Opened(VideoInput input)
     {
         _input = input;
         var json = JsonSerializer.SerializeToNode(input.Video, ApiJson.Default.YuvVideo)!.AsObject();
@@ -70,7 +70,7 @@ public static partial class Api
 
     /// <summary>
     /// <see cref="Detect"/> on the opened file going on from <paramref name="earlier"/>'s scores
-    /// (<see cref="Mp4Input.Continue"/>), the rest of the video scored from the place a range can start before where they
+    /// (<see cref="VideoInput.Continue"/>), the rest of the video scored from the place a range can start before where they
     /// end, each shot of the rest told as <see cref="Detect"/> tells them, and the result the whole run's.
     /// </summary>
     static async Task<string> Continued(string optionsJson, KeptRun earlier)
@@ -105,7 +105,7 @@ public static partial class Api
                     }
                 }
 
-                var merged = Mp4Input.FromStart(scored);
+                var merged = VideoInput.FromStart(scored);
                 // The shots were told as the frames were scored, the merge's would be told twice.
                 return (input.Merge(merged, options with { OnShot = null, Progress = null }), merged);
             }));
@@ -130,7 +130,7 @@ public static partial class Api
     /// A run's result kept for the exports that show more of it (<see cref="Picture"/> for the frames it read,
     /// <see cref="Kept"/> its ranges), and its answer as JSON (<see cref="DetectResponse"/>).
     /// </summary>
-    static string Answered(Mp4Input input, DetectionResult result, IReadOnlyList<RangeScores> ranges, PictureMeasures? picture)
+    static string Answered(VideoInput input, DetectionResult result, IReadOnlyList<RangeScores> ranges, PictureMeasures? picture)
     {
         _result = result;
         _picture = picture?.Take(result.FrameCount);

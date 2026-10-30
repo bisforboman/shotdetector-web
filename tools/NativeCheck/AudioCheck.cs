@@ -1,4 +1,4 @@
-// The audio check (README, "Checks"): for each sample with audio, ShotDetectorWeb.Core's Mp4Audio (ManagedCodecs' AAC
+// The audio check (README, "Checks"): for each sample with audio (an AVI's answered with a reason: not measured), ShotDetectorWeb.Core's Mp4Audio (ManagedCodecs' AAC
 // decoder, no FFmpeg) against FFmpeg's measures of the same file, within tolerances, since the decoded samples aren't
 // FFmpeg's to the bit (3e-7) and the measures aren't computed by the same code:
 // - the waveform against FrameReader's WaveformData.Read (FFmpeg decoding): the same points, each value within 1;
@@ -81,7 +81,8 @@ static class AudioCheck
         if (ours.Track is not { } track)
         {
             cells.Add(ours.NotMeasured ?? "");
-            if (hasAudio)
+            // An AVI's audio is described (AudioStreamCheck), not measured: a reason, not a measure, is right there.
+            if (hasAudio && !(ours.NotMeasured is not null && Path.GetExtension(sample) == ".avi"))
                 problems.Add("FFmpeg finds an audio stream");
             return;
         }

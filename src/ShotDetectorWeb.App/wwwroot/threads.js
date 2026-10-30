@@ -63,7 +63,7 @@ function start() {
 whenHeld(frames => current?.tell({ type: 'held', frames }));
 
 export class ThreadedRunner {
-  // threads: the decoder's, Mp4Input.DecoderThreads.
+  // threads: the decoder's, VideoInput.DecoderThreads.
   constructor(threads) {
     this.threads = threads;
     this.onmessage = null;

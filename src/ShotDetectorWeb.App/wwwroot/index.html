@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Shot detection in the browser</title>
-  <meta name="description" content="Finds the shots in an MP4 on WebAssembly, with scenedetect's results byte for byte. Nothing leaves the machine.">
+  <meta name="description" content="Finds the shots in an MP4 or an AVI on WebAssembly, with scenedetect's results byte for byte. Nothing leaves the machine.">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
   <script type="module" src="versions.js"></script>
@@ -30,25 +30,25 @@
   <header id="top">
     <div class="title">
       <h1>Shot detection in the browser</h1>
-      <p class="pitch">Pick an MP4 and get its shots, the same as <a href="https://www.scenedetect.com/">scenedetect</a>
+      <p class="pitch">Pick an MP4 or an AVI and get its shots, the same as <a href="https://www.scenedetect.com/">scenedetect</a>
         finds them, byte for byte. The video is decoded and analysed here, on this machine.</p>
       <p class="file" id="file-line">
         <span id="file-name"></span>
         <small id="file-facts"></small>
-        <button type="button" class="link" id="change" title="Choose another MP4 (or drop one anywhere on the page)">Change</button>
+        <button type="button" class="link" id="change" title="Choose another video (or drop one anywhere on the page)">Change</button>
       </p>
     </div>
 
     <form id="form">
       <div class="drop" id="drop">
-        <input type="file" id="file" accept=".mp4,video/mp4">
+        <input type="file" id="file" accept=".mp4,.avi,video/mp4,video/x-msvideo">
         <label for="file">
-          <strong id="drop-text">Choose an MP4, or drop one here</strong>
-          <small>8-bit 4:2:0 H.264, progressive or MBAFF interlaced, constant frame rate, any size: it is read in parts, never uploaded</small>
+          <strong id="drop-text">Choose an MP4 or an AVI, or drop one here</strong>
+          <small>8-bit 4:2:0 H.264 (progressive or MBAFF interlaced) or MJPEG, constant frame rate, any size: it is read in parts, never uploaded</small>
         </label>
         <p class="demo">
           <button type="button" id="demo">Try the demo</button>
-          <small>No MP4 at hand? The trailer of <a href="https://durian.blender.org/">Sintel</a>, 52 s at 854x480:
+          <small>No video at hand? The trailer of <a href="https://durian.blender.org/">Sintel</a>, 52 s at 854x480:
             © copyright Blender Foundation, <a href="https://creativecommons.org/licenses/by/3.0/">CC-BY 3.0</a>,
             scaled down and re-encoded.</small>
         </p>
@@ -108,6 +108,8 @@
   <main id="result" hidden>
     <div class="player">
       <video id="video" controls preload="metadata"></video>
+      <p class="unplayable" id="unplayable" hidden>This browser can't play the file (no browser plays MJPEG in AVI): the
+        shots and everything else here come from the file itself, as for any other.</p>
       <p class="now" id="now"></p>
     </div>
     <div id="run-cards"></div>
@@ -124,7 +126,7 @@
 
   <footer>
     <p>What runs where: <a href="https://github.com/bisforboman/ManagedCodecs">ManagedCodecs</a><span class="version"
-        data-package="ManagedCodecs.H264"></span> demuxes the MP4 and decodes the H.264 and the AAC,
+        data-package="ManagedCodecs.H264"></span> demuxes the MP4 or the AVI and decodes the H.264, the MJPEG and the AAC,
       ShotDetector.FastYuv<span class="version" data-package="ShotDetector.FastYuv"></span> converts the frames,
       <a href="https://github.com/bisforboman/shotdetector">ShotDetector</a><span class="version"
         data-package="ShotDetector"></span> finds the shots and FrameReader<span class="version"

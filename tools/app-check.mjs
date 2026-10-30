@@ -33,7 +33,7 @@
 // The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
 // <sample>.picture.json, FFmpeg's figures there), exactly; a split run's merge the whole run's; a stopped run's (one
 // worker or split) for the frames its result read.
-//   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
+//   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4|.avi>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
@@ -375,6 +375,13 @@ function checkAudio(sample, video) {
   if (JSON.stringify(Object.keys(audio)) !== JSON.stringify(keys))
     fail(`${name}: Audio() gives ${Object.keys(audio).join(', ')}, not ${keys.join(', ')}`);
   const { track, waveform: w } = audio;
+  if (track === null && video.audio !== null && extname(sample) === '.avi') {
+    // An AVI's audio is described by Open, not measured (decision 2026-10-30-mjpeg-avi.md): the core's reason.
+    if (audio.notMeasured !== `The audio is '${video.audio.codec}' in an AVI file: only AAC in MP4 is measured.` || w !== null)
+      fail(`${name}: an AVI's audio, but ${JSON.stringify(audio).slice(0, 200)}`);
+    console.error(`${name}: ${video.audio.codec} in AVI, not measured: ${audio.notMeasured}`);
+    return;
+  }
   if (track === null) {
     // The samples have AAC or no audio at all.
     if (audio.notMeasured !== NO_AUDIO || w !== null) fail(`${name}: no track, but ${JSON.stringify(audio).slice(0, 200)}`);
@@ -446,7 +453,7 @@ function checkTone(name, track, w, frame) {
 }
 
 // Packets()'s JSON for one opened sample against ffprobe -show_packets -select_streams v:0 (the native check's
-// PacketCheck.cs, which compares Mp4Input.Packets with the same lines): the same packets in the same order, each with
+// PacketCheck.cs, which compares VideoInput.Packets with the same lines): the same packets in the same order, each with
 // the same pts, pts_time (pts × num / den, as ffprobe prints it), size, and K and D flags; the keyframes and the
 // discarded packets as indexes, in order.
 function checkPackets(sample) {

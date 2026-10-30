@@ -4,7 +4,7 @@ using System.Globalization;
 namespace ShotDetectorWeb.Checks;
 
 /// <summary>
-/// The packet check (README, "Checks"): for each sample, <see cref="Mp4Input.Packets"/> against
+/// The packet check (README, "Checks"): for each sample, <see cref="VideoInput.Packets"/> against
 /// <c>ffprobe -show_packets -select_streams v:0</c> (the ffprobe beside SHOTDETECTOR_FFMPEG_LIBS, as BtbN's shared build
 /// has it, else the one on PATH): the same packets in the same order, each with the same pts, pts_time, size and K and D
 /// flags, exactly. ffprobe's lines go to <c>&lt;sample&gt;.packets.txt</c> in the output folder, which the wasm check
@@ -30,7 +30,7 @@ internal static class PacketCheck
             List<string[]> theirs;
             try
             {
-                ours = Mp4Input.Open(sample).Packets;
+                ours = VideoInput.Open(sample).Packets;
                 theirs = Probe(ffprobe, sample, Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".packets.txt"));
             }
             catch (Exception e)

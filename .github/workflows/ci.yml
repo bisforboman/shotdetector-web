@@ -136,13 +136,13 @@ jobs:
         run: tools/check.sh native
 
       # Interpreted, the runtime loads an assembly only when code needs it, so this is where "no FFmpeg assembly loaded
-      # at all" holds. On a pull request one short sample with audio (the audio pass is on the path), the files to
-      # refuse and those without AAC; every sample once a day and by hand. The AOT check below, what the page deploys,
+      # at all" holds. On a pull request one short MP4 with audio (the audio pass is on the path) and one AVI with audio
+      # (MJPEG and the AVI's headers, another assembly's path), the files to refuse and those without AAC; every sample once a day and by hand. The AOT check below, what the page deploys,
       # runs every sample on every pull request.
       - name: WebAssembly check, interpreted
         if: steps.scope.outputs.wasm == 'true'
         env:
-          SAMPLES: ${{ github.event_name == 'pull_request' && 'samples/with-audio-320x240-25.mp4' || '' }}
+          SAMPLES: ${{ github.event_name == 'pull_request' && 'samples/with-audio-320x240-25.mp4 samples/mjpeg-mp3-320x240-25.avi' || '' }}
         run: tools/check.sh wasm $SAMPLES
 
       # The page in Chromium (tools/page-check) on the bundle this step publishes, the one Pages deploys.

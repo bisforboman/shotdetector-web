@@ -43,7 +43,7 @@ public static partial class Api
     /// <summary>
     /// The last run's ranges from the start and its picture measures as bytes (<see cref="KeptRun.ToBytes"/>) in a
     /// <c>Blob</c>, for the page to keep in IndexedDB and give back to <see cref="Resume"/> or <see cref="Merge"/>. Its
-    /// first four bytes are the frame the rest would start at (a little-endian int: <see cref="Mp4Input.Continue"/>'s
+    /// first four bytes are the frame the rest would start at (a little-endian int: <see cref="VideoInput.Continue"/>'s
     /// range's first frame; -1 when none is left), which the page splits a long rest from.
     /// </summary>
     [JSExport]
@@ -58,7 +58,7 @@ public static partial class Api
 }
 
 /// <summary>
-/// A run's ranges' scores from the start (<see cref="Mp4Input.FromStart"/>) and its picture measures joined from frame 0
+/// A run's ranges' scores from the start (<see cref="VideoInput.FromStart"/>) and its picture measures joined from frame 0
 /// (null when it has none), as the page keeps them.
 /// </summary>
 sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Picture)
@@ -70,7 +70,7 @@ sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Pictur
     /// length, the picture's length (0: none), then each range's <see cref="RangeScores.ToBytes"/> and the picture's
     /// <see cref="PictureMeasures.ToBytes"/>, each checked by its own hash.
     /// </summary>
-    public byte[] ToBytes(Mp4Input input)
+    public byte[] ToBytes(VideoInput input)
     {
         var scores = Scores.Select(s => s.ToBytes()).ToList();
         var picture = Picture?.ToBytes() ?? [];

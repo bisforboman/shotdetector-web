@@ -15,9 +15,9 @@
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
 #
-# Usage: tools/check.sh [native] [wasm] [page] [replace] [aot] [<sample.mp4>...]
+# Usage: tools/check.sh [native] [wasm] [page] [replace] [aot] [<sample.mp4|.avi>...]
 #   (default: native wasm; aot: the wasm and replace bundles compiled ahead of time; samples named: only those, instead
-#   of every samples/*.mp4, the files to refuse and those without AAC still all: CI's interpreted check on a pull
+#   of every samples/*.mp4 and *.avi, the files to refuse and those without AAC still all: CI's interpreted check on a pull
 #   request, README "Checks". wasm compares the files of the samples it ran, so native may have run more.)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
 #   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm, page
@@ -35,7 +35,7 @@ for arg in "$@"; do
     page) page=true ;;
     replace) replace=true ;;
     aot) aot=true ;;
-    *.mp4) [[ -f $arg ]] || { echo "No such sample: $arg" >&2; exit 2; }; samples+=("$arg") ;;
+    *.mp4 | *.avi) [[ -f $arg ]] || { echo "No such sample: $arg" >&2; exit 2; }; samples+=("$arg") ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -59,7 +59,7 @@ publish_app() {
   cp -r "$threads/wwwroot/_framework" "$publish/wwwroot/threads/_framework"
   rm -rf "$threads"
 }
-if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4); fi
+if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4 samples/*.avi); fi
 rejects=(samples/reject/*)
 noAac=(samples/no-aac/*)
 if [[ ${#samples[@]} == 0 ]]; then echo "No samples: run tools/make-samples.sh first." >&2; exit 1; fi
@@ -104,7 +104,7 @@ if [[ $wasm == true ]]; then
   # by the run.
   files=0 differ=0 extra=0 missing=0
   for s in "${samples[@]}"; do
-    b=out/native/$(basename "$s" .mp4)
+    b=out/native/$(basename "${s%.*}")
     written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html)
     if [[ ${#written[@]} == 0 ]]; then echo "No native CSVs for $s: run tools/check.sh native on it first."; missing=$((missing + 1)); fi
     for n in "${written[@]}"; do

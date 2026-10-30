@@ -4,10 +4,10 @@ namespace ShotDetectorWeb.Checks;
 
 /// <summary>
 /// The threads check (README, "Checks"; decision 2026-10-30-threads.md): ManagedCodecs' decoder on
-/// <see cref="Threads"/> threads (<see cref="Mp4Input.DecoderThreads"/>, as the page's threaded runtime decodes) must
+/// <see cref="Threads"/> threads (<see cref="VideoInput.DecoderThreads"/>, as the page's threaded runtime decodes) must
 /// give every sample's run with every detector (<see cref="Runs.All"/>' last; all of them read the same frames) the
 /// one-thread run's CSVs, which the main check wrote, byte for byte; so must its ranges scored and merged
-/// (<see cref="Mp4Input.ScoreRangeAsync"/>, as RangeCheck), and the run stopped half-way the one-thread run stopped
+/// (<see cref="VideoInput.ScoreRangeAsync"/>, as RangeCheck), and the run stopped half-way the one-thread run stopped
 /// there (its frames ended early, the decoder's pictures still in flight drained).
 /// </summary>
 internal static class ThreadsCheck
@@ -27,14 +27,14 @@ internal static class ThreadsCheck
             string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
             try
             {
-                var input = Mp4Input.Open(sample);
+                var input = VideoInput.Open(sample);
                 input.DecoderThreads = Threads;
                 string whole = Same(input.Detect(options), baseName);
 
                 var scores = input.Ranges(4)
                     .Select(r => input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult())
                     .ToList();
-                string ranges = Same(input.Merge(Mp4Input.FromStart(scores), options), baseName);
+                string ranges = Same(input.Merge(VideoInput.FromStart(scores), options), baseName);
 
                 string stopped = Stopped(input, options);
                 bool ok = whole == "same" && ranges == "same" && stopped.StartsWith("same", StringComparison.Ordinal);
@@ -63,7 +63,7 @@ internal static class ThreadsCheck
     }
 
     // The run stopped at the first pause past half its frames, on the threads and on one: the same CSVs.
-    static string Stopped(Mp4Input input, DetectionOptions options)
+    static string Stopped(VideoInput input, DetectionOptions options)
     {
         int half = input.ShownFrames / 2;
         ValueTask<bool> Between(int read) => ValueTask.FromResult(read < half);

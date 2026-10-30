@@ -6,13 +6,13 @@ namespace ShotDetectorWeb.Checks;
 /// The resume check (README, "Checks"; backlog "Resume after Stop, across visits"): for each sample, the adaptive run
 /// (<see cref="Runs.All"/>' first, the page's default) and the run with every detector (its last), each scored as the
 /// page's one-worker run scores (one range from frame 0) and stopped at the first pause past a third of the frames, its
-/// scores carried as bytes (as the page keeps them in IndexedDB), resumed from there (<see cref="Mp4Input.Continue"/>,
-/// the earlier ranges given to <see cref="Mp4Input.ScoreRangeAsync(IReadOnlyList{RangeScores}, FrameRange, int, Func{int, ValueTask{bool}}, DetectionOptions?, CancellationToken, PictureMeter?)"/>),
+/// scores carried as bytes (as the page keeps them in IndexedDB), resumed from there (<see cref="VideoInput.Continue"/>,
+/// the earlier ranges given to <see cref="VideoInput.ScoreRangeAsync(IReadOnlyList{RangeScores}, FrameRange, int, Func{int, ValueTask{bool}}, DetectionOptions?, CancellationToken, PictureMeter?)"/>),
 /// stopped again past two thirds and resumed again to the end, then merged: the CSVs, shots' JSON and HTML must be the
 /// whole run's, which the main check wrote, byte for byte, and the picture measures joined as the page joins them the
 /// whole run's. The shots told while the parts run (<see cref="DetectionOptions.OnShot"/>), after the stopped parts'
 /// shots up to the first one told again, must be the whole run's. And the run split into 4 ranges, each stopped
-/// past 60% of its frames, resumed with the rest split into 4 again (<see cref="Mp4Input.Ranges"/> from the
+/// past 60% of its frames, resumed with the rest split into 4 again (<see cref="VideoInput.Ranges"/> from the
 /// continuation's first frame), must merge into the whole run's CSVs too.
 /// </summary>
 internal static class ResumeCheck
@@ -31,7 +31,7 @@ internal static class ResumeCheck
                 string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
                 try
                 {
-                    var input = Mp4Input.Open(sample);
+                    var input = VideoInput.Open(sample);
                     int frames = input.ShownFrames;
                     var told = new List<Shot>();
                     var telling = options with { OnShot = new Told(told) };
@@ -61,7 +61,7 @@ internal static class ResumeCheck
                         pictures = go.Earlier.Count == 0 ? [picture.Measures] : [Joined(pictures, rest.FirstFrame), picture.Measures];
                     }
 
-                    var merged = input.Merge(Mp4Input.FromStart(kept), options);
+                    var merged = input.Merge(VideoInput.FromStart(kept), options);
                     var problems = Same(merged, baseName);
                     if (merged.FrameCount != frames)
                         problems.Add($"{merged.FrameCount} frames merged");
@@ -95,7 +95,7 @@ internal static class ResumeCheck
 
     // Split into 4 ranges, each stopped past 60% of its own frames; the ranges from the start kept, the rest split into 4
     // again from the continuation's first frame (no OnShot: the page's split runs tell their shots from the merge).
-    static string Split(Mp4Input input, DetectionOptions options, string baseName)
+    static string Split(VideoInput input, DetectionOptions options, string baseName)
     {
         var stopped = input.Ranges(4).Select(r =>
         {
@@ -108,7 +108,7 @@ internal static class ResumeCheck
             return "nothing left to resume";
         var scored = input.Ranges(4, rest.FirstFrame)
             .Select(r => Carried(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult()));
-        var problems = Same(input.Merge(Mp4Input.FromStart([.. go.Earlier, .. scored]), options), baseName);
+        var problems = Same(input.Merge(VideoInput.FromStart([.. go.Earlier, .. scored]), options), baseName);
         return problems.Count == 0 ? "same" : string.Join("; ", problems);
     }
 

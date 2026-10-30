@@ -22,7 +22,7 @@ public static partial class Api
     const string NotMerged = "The ranges didn't merge: ";
 
     /// <summary>
-    /// The opened file split into at most <paramref name="count"/> ranges at keyframes (<see cref="Mp4Input.Ranges"/>),
+    /// The opened file split into at most <paramref name="count"/> ranges at keyframes (<see cref="VideoInput.Ranges"/>),
     /// as JSON: <c>{ frames, ranges: [{ firstFrame, endFrame }] }</c>, frames the video shows; fewer ranges when the
     /// keyframes are too few. From <paramref name="from"/> (0, or a stopped run's rest's first frame: <see cref="Kept"/>),
     /// the frames from there on.
@@ -91,7 +91,7 @@ public static partial class Api
     /// <summary>
     /// Merges the ranges' bytes (<see cref="RangeBytes"/> of every worker's, one after another in
     /// <paramref name="ranges"/>, each <paramref name="lengths"/> long) with the options they were scored with: the ones
-    /// that follow each other from the start (<see cref="Mp4Input.FromStart"/>), so a stopped run's result is the one
+    /// that follow each other from the start (<see cref="VideoInput.FromStart"/>), so a stopped run's result is the one
     /// for the frames from the start without a gap. Answers as <see cref="Detect"/> does, <c>stopped</c> when they don't
     /// reach the video's end, and tells the shots through <see cref="ShotFound"/>. Ranges that don't make up the video's
     /// frames (ShotDetector's <see cref="ShotDetectionException"/>: an overlap frame that differs, damaged bytes; or
@@ -99,7 +99,7 @@ public static partial class Api
     /// join from the start the same way (<see cref="PictureMeasures.Join"/>), for the frames the result read. A stopped
     /// run's <paramref name="kept"/> bytes (<see cref="Kept"/>'s; empty for none) go first: with no ranges, the stopped
     /// part's result again; with the ranges of its rest (<see cref="Ranges"/> from its first frame), the earlier ranges
-    /// <see cref="Mp4Input.Continue"/> keeps and theirs, the whole run's.
+    /// <see cref="VideoInput.Continue"/> keeps and theirs, the whole run's.
     /// </summary>
     [JSExport]
     public static string Merge(string optionsJson, [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] kept,
@@ -142,7 +142,7 @@ public static partial class Api
                 at += length;
             }
 
-            merged = Mp4Input.FromStart(scores);
+            merged = VideoInput.FromStart(scores);
             result = input.Merge(merged, request.ToOptions(new JsProgress(), new JsShots()));
         }
         catch (Exception e) when (e is ShotDetectionException or InvalidDataException)

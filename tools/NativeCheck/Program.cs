@@ -45,10 +45,10 @@ Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Sta
 Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 foreach (string sample in samples)
 {
-    Mp4Input input;
+    VideoInput input;
     try
     {
-        input = Mp4Input.Open(sample);
+        input = VideoInput.Open(sample);
     }
     catch (Exception e)
     {
@@ -121,7 +121,7 @@ foreach (string reject in rejects)
 {
     try
     {
-        Mp4Input.Open(reject);
+        VideoInput.Open(reject);
         Console.WriteLine($"Not refused: {reject}");
         failures++;
     }
