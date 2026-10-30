@@ -797,18 +797,3 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-30: PR #72; both samples byte for byte natively, on wasm (336 of 336 files) and on the
     page in Chromium on threads, one worker and two; rotation and a variable rate are rows of their own, waiting on
     shotdetector#608 and #609)
-
-### First release: the page on GitHub Pages
-
-The first release's rows are all done ([backlog-done.md](backlog-done.md)).
-
-### After the first release
-
-The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
-itself", which lists the first release's page, not every page there will be. Since the page's structure row
-(decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
-module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
-shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
-panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
-exactness check speaks for.
