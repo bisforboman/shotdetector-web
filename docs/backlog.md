@@ -30,7 +30,25 @@ itself", which lists the first release's page, not every page there will be. Sin
 module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
+derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
+exactness check speaks for.
+
+- Shots as JSON and HTML
+  - Why: ShotDetector writes the shots as JSON (`Shots.Json`) and as scenedetect's save-html page (`Shots.Html`); a
+    visitor who wants the shots in a program or a browser tab gets them without reading the scenes CSV. The owner chose
+    it out of Maybe on 2026-10-30.
+  - Where: `src/ShotDetectorWeb.App/Api.Shots.cs` (`ShotsJson()`, `ShotsHtml()`: the last run's, the HTML without
+    images and with the run's cuts), `wwwroot/panels/run.js` (two more downloads next to the CSVs,
+    `<file>.shots.json` and `<file>.shots.html`, a stopped run's too, for the part read: the owner's choices,
+    2026-10-30); `tools/Shared/Runs.cs`, `tools/NativeCheck` (the core's against the FFmpeg path's, and the ranges'
+    merge's), `tools/app-check.mjs` and `tools/check.sh` (the wasm run's against the native run's, file for file),
+    `tools/page-check/page-check.mjs` (the downloads).
+  - Done when: NativeCheck's table says "same, same" for every sample and run; `tools/check.sh wasm` compares the
+    `.shots.json` and `.shots.html` with the native ones as it does the CSVs, and app-check.mjs holds a paused and
+    resumed run's and a merge's to the whole run's, a stopped run's to its own shots; the page check downloads both
+    from each whole run, byte for byte the native run's, and the stopped run's carry its scenes CSV's shots.
+  - Not: images in the HTML (the page's stills are the browser's decode, not ShotDetector's frames); `app.js`.
+  - Status: In progress (2026-10-30)
 
 ## Waiting
 
@@ -195,10 +213,6 @@ file out of `samples/reject/`, and passes the native check.
 
 - Offline (a service worker caching the bundle)
   - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
-  - Status: Maybe
-
-- Shots as JSON and HTML
-  - Why: `Shots.Json` and `Shots.Html` exist; two more download buttons.
   - Status: Maybe
 
 - Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
