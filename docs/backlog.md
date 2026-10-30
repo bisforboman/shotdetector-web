@@ -122,6 +122,19 @@ are in Next again.
   - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
     2026-10-30)
 
+- Frame types (I, P, B) on the strip
+  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
+    chose it on 2026-10-30.
+  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
+    exists inside the decoder, `SliceType` internal; neither 0.2.4 nor main has it, 2026-10-30), filed as
+    ManagedCodecs#221: each frame's type as FFmpeg's `pict_type`, checked against `ffprobe -show_frames`. Then here: a
+    lane of the frame types from the run's frames after `bitrate.js`'s keyframes lane, marked `core` with a
+    NativeCheck comparison against `ffprobe -show_frames` field by field, as `PacketCheck.cs`.
+  - Done when: a ManagedCodecs release has it, and the lane shows each frame's type, checked natively against ffprobe.
+  - Not: no parsing of slice headers here (CLAUDE.md: report it there, don't work around it).
+  - Status: Waiting on upstream ([ManagedCodecs#221](https://github.com/bisforboman/ManagedCodecs/issues/221), filed
+    2026-10-30)
+
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`, 3.14.0) takes 8-bit 4:2:0 of an even
@@ -159,12 +172,6 @@ file out of `samples/reject/`, and passes the native check.
     none.
   - Where: each its own row when wanted; each needs a decision about what "the FFmpeg path's result" means for it.
   - Status: Maybe
-
-- Frame types (I, P, B) on the strip
-  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes.
-  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
-    exists inside the decoder); then here, after "Bitrate and keyframes".
-  - Status: Maybe (needs ManagedCodecs)
 
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
