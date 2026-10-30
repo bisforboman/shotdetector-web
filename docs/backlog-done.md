@@ -785,3 +785,30 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     rounds (12.0 s, 11.1 s), 3 threads 1.45. A first visit said 17 s for a 17.4 s run on the worker, 12 s for 13.1 s on
     2 threads, 11 s for 11.2 s on 4. GitHub's runner ran it at 204 fps on 4 threads; the owner chose this VM's rate
     and the new thread gains. README "Large files")
+
+- Fragmented MP4
+  - Why: screen recordings and streaming exports are fragmented; ManagedCodecs already demuxes them as FFmpeg does, the
+    core refuses them ([decisions/2026-10-30-scope-widening.md](decisions/2026-10-30-scope-widening.md)).
+  - Where: `Mp4Header`/`Mp4Input` (the sample count, the rate and the constant-rate check from the packets' walk,
+    `FrameCount` FFmpeg's `nb_frames`: null with an empty `moov`, the `moov`'s own count otherwise), two samples in
+    `tools/make-samples.sh` (`empty_moov` with B-frames and AAC; `frag_keyframe` alone), README and CLAUDE.md's scope.
+  - Done when: `tools/check.sh native` and the wasm checks pass on both samples, every field and run byte for byte.
+  - Not: variable rate within fragments (refused, as in `stts`); rotation.
+  - Status: Done (2026-10-30: PR #72; both samples byte for byte natively, on wasm (336 of 336 files) and on the
+    page in Chromium on threads, one worker and two; rotation and a variable rate are rows of their own, waiting on
+    shotdetector#608 and #609)
+
+### First release: the page on GitHub Pages
+
+The first release's rows are all done ([backlog-done.md](backlog-done.md)).
+
+### After the first release
+
+The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
+itself", which lists the first release's page, not every page there will be. Since the page's structure row
+(decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
+module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
+shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
+panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
+derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
+exactness check speaks for.
