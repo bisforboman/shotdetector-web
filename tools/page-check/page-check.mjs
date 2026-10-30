@@ -102,6 +102,8 @@ async function isolated(page) {
   for (let tries = 0; ; tries++) {
     try {
       await page.waitForFunction(() => globalThis.crossOriginIsolated === true, null, { timeout: 30000 });
+      // Isolated from the reloaded document's start, before its modules have run: the page once loaded.
+      await page.waitForLoadState('load');
       return;
     } catch (e) {
       // The reload replaced the page's context while it was waited on.
@@ -137,6 +139,9 @@ async function finished(page, what, expected = 'done') {
 // scenes CSV's shots.
 async function compare(page, what, name, run, stoppedAt = null) {
   let scenes = null; // the downloaded scenes CSV's shots, [start frame, end frame] each
+  // The run's card shows its downloads once it has the shots as JSON and HTML, a call or two after 'done' (on threads,
+  // to the threaded runner: a little later than to the worker).
+  await page.locator('#scenes-csv').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
   for (const [kind, ext, label] of [['scenes', 'csv', 'scenes CSV'], ['stats', 'csv', 'stats CSV'],
     ['shots', 'json', 'shots JSON'], ['shots', 'html', 'shots HTML']]) {
     const link = page.locator(`#${kind}-${ext}`);
