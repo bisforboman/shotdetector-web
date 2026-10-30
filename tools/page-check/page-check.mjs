@@ -1,15 +1,21 @@
 // The page's smoke test (README "Checks", page; decision 2026-10-24-the-page.md, "Testing the page"): the published
 // wwwroot served as Pages serves it, with the demo clip in demo/ (pages.yml's "Make the site"), and the page itself in
 // Chromium through Playwright, its own JavaScript (app.js, worker.js, the panels) as a visitor drives it:
-//   1. a sample set on the file input, detected with the options as the page prefills them, its scenes and stats CSVs
-//      and its shots as JSON and HTML downloaded from the run's card and compared with the native check's run of that
-//      detector byte for byte, the shots table one row per shot of the CSV;
-//   2. the same sample split across two workers (?workers=2): the ranges lane, and the same CSVs;
-//   3. "Try the demo": the clip fetched and run as picked, paused a quarter of the way in (the bar and the status held
-//      still, the button reading Resume), resumed, the same comparison, the sound measured;
+//   0. every page first becomes cross-origin isolated: its service worker (sw.js) takes over and the page reloads once,
+//      so one-worker runs go on the threaded runtime on the page's own thread (threads.js; decision
+//      2026-10-30-threads.md), as on Pages;
+//   1. a sample set on the file input, detected with the options as the page prefills them, on threads: its scenes and
+//      stats CSVs and its shots as JSON and HTML downloaded from the run's card and compared with the native check's
+//      run of that detector byte for byte, the shots table one row per shot of the CSV;
+//   2. the same sample on the page's worker (?threads=0, as where the page isn't isolated), and split across two
+//      workers (?workers=2): the ranges lane; the same downloads each time;
+//   3. "Try the demo": the clip fetched and run as picked, on threads, paused a quarter of the way in (the bar and the
+//      status held still, the button reading Resume), resumed, the same comparison, the sound measured;
 //   4. the demo detected again, paused and stopped while paused: it ends stopped at the pause it was held at, its
 //      stats CSV the native run's first rows up to there, the shots table, the JSON and the HTML a shot each of its
-//      scenes CSV's.
+//      scenes CSV's;
+//   5. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
+//      (cached when it was fetched) runs on threads to the same downloads.
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
@@ -87,8 +93,28 @@ async function open(query = '') {
   });
   page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()}: ${r.url()}`); });
   await page.goto(base + query);
+  await isolated(page);
   return { context, page, errors };
 }
+
+// The page cross-origin isolated: on a first visit, once sw.js has taken over and the page has reloaded (app.js, serve).
+async function isolated(page) {
+  for (let tries = 0; ; tries++) {
+    try {
+      await page.waitForFunction(() => globalThis.crossOriginIsolated === true, null, { timeout: 30000 });
+      // Isolated from the reloaded document's start, before its modules have run: the page once loaded.
+      await page.waitForLoadState('load');
+      return;
+    } catch (e) {
+      // The reload replaced the page's context while it was waited on.
+      if (tries > 2 || !/context was destroyed|navigation/i.test(e.message)) throw e;
+      await page.waitForLoadState();
+    }
+  }
+}
+
+// A one-worker run's status: on threads unless asked not to (?threads=0), as many as the machine's cores, at most 4.
+const THREADED = /on [2-4] threads/;
 
 // Waits for the run to end: done, or any other end state, which fails with what the page says.
 async function finished(page, what, expected = 'done') {
@@ -113,6 +139,9 @@ async function finished(page, what, expected = 'done') {
 // scenes CSV's shots.
 async function compare(page, what, name, run, stoppedAt = null) {
   let scenes = null; // the downloaded scenes CSV's shots, [start frame, end frame] each
+  // The run's card shows its downloads once it has the shots as JSON and HTML, a call or two after 'done' (on threads,
+  // to the threaded runner: a little later than to the worker).
+  await page.locator('#scenes-csv').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
   for (const [kind, ext, label] of [['scenes', 'csv', 'scenes CSV'], ['stats', 'csv', 'stats CSV'],
     ['shots', 'json', 'shots JSON'], ['shots', 'html', 'shots HTML']]) {
     const link = page.locator(`#${kind}-${ext}`);
@@ -239,8 +268,10 @@ async function picked(query, what) {
   const run = await page.inputValue('#detector');
   const status = await finished(page, what);
   if (status !== null) {
-    if (query && !/with 2 workers/.test(status)) fail(`${what}: not split across 2 workers: ${status}`);
-    if (query) {
+    const split = query.includes('workers=');
+    if (split && !/with 2 workers/.test(status)) fail(`${what}: not split across 2 workers: ${status}`);
+    if (!split && THREADED.test(status) !== (query === '')) fail(`${what}: ${query ? 'on' : 'not on'} threads: ${status}`);
+    if (split) {
       const bands = await page.locator('.range').count();
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
     }
@@ -253,6 +284,7 @@ async function picked(query, what) {
 
 try {
   await picked('', `${basename(sample)}, picked`);
+  await picked('?threads=0', `${basename(sample)}, the page's worker`);
   await picked('?workers=2', `${basename(sample)}, two workers`);
 
   const what = 'the demo';
@@ -263,7 +295,9 @@ try {
     await page.click('#pause');
     if (await page.evaluate(() => document.body.dataset.state) !== 'detecting') fail(`${what}: Resume didn't resume`);
   }
-  if (await finished(page, what) !== null) {
+  const status = await finished(page, what);
+  if (status !== null) {
+    if (!THREADED.test(status)) fail(`${what}: not on threads: ${status}`);
     await compare(page, what, 'sintel-trailer.mp4', run);
     await picture(page, what, demo);
     // The sound's worker, alongside the run: done when the status no longer says it is measuring.
@@ -287,6 +321,18 @@ try {
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
       }
     }
+
+    // Offline: the page and both bundles from the service worker's cache, the demo too (fetched above).
+    const offline = 'the demo offline';
+    await context.setOffline(true);
+    await page.reload();
+    await isolated(page);
+    await page.click('#demo');
+    const offlineStatus = await finished(page, offline);
+    if (offlineStatus !== null) {
+      if (!THREADED.test(offlineStatus)) fail(`${offline}: not on threads: ${offlineStatus}`);
+      await compare(page, offline, 'sintel-trailer.mp4', run);
+    }
   }
   report(what, errors);
   await context.close();
@@ -299,5 +345,6 @@ if (failures.length > 0) {
   console.log(`The page check failed: ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}.`);
   process.exit(1);
 }
-console.log('The page check passed: picked, split across two workers and the demo paused and resumed, the CSVs, JSON ' +
-  'and HTML identical to the native run\'s; the demo stopped while paused, the result for the frames read.');
+console.log('The page check passed: isolated, picked on threads, on the page\'s worker and split across two workers, ' +
+  'the demo on threads paused and resumed, and offline, the CSVs, JSON and HTML identical to the native run\'s; the ' +
+  'demo stopped while paused, the result for the frames read.');

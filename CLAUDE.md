@@ -21,7 +21,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Audio`, the audio track as ffprobe describes it; `Mp4Input.Ranges.cs`: `Ranges(count)`, the video split at keyframes
   from `Packets` into `FrameRange`s about equal in frames, `ScoreRangeAsync` (one range decoded from its keyframe, the
   packets before it not read, for ShotDetector's `ScoreRangeAsync`), `Merge` and `FromStart` (the ranges that follow
-  each other from the start), `ShownFrames`), `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
+  each other from the start), `ShownFrames`), `Mp4Input.DecoderThreads`
+  (ManagedCodecs' `H264Decoder.Threads`, frame threading: the same frames; a run that ends early drains the decoder),
+  `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
   expose, the audio codec's FFmpeg name among them), `SpsInfo` (the SPS's format and VUI colour
   fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by `Mp4Input`'s
   walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
@@ -69,14 +71,23 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   bytes, lengths)` (the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; a
   `ShotDetectionException` as "The ranges didn't merge: ...", on which the page detects again with one worker).
   `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
-  the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
+  the file in slices of a megabyte). The threaded bundle (`-p:WasmEnableThreads=true`, `THREADS`; decision
+  `2026-10-30-threads.md`), published into `wwwroot/threads/_framework/` by `tools/check.sh`'s `publish_app`, runs a
+  one-worker run on the page's own thread: `Host.cs` (in it the run goes to the thread pool and each host call back to
+  .NET's JavaScript thread; in the worker's bundle a pass-through), `Api.Threads.cs` (`OpenThreaded(file, threads)`,
+  `StopThreaded`, `CancelThreaded`, `ScenesCsvThreaded`, `StatsCsvThreaded`: tasks, as .NET on the main thread calls
+  nothing synchronously), `BlobStream` reading through `readAsync` and `copy` there. `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order, one at a time; `progress` and `shot` posted while `Detect` runs; `{ type: 'stop'
   }`, `{ type: 'cancel' }`, `{ type: 'pause' }` and `{ type: 'resume' }` handled at once, between `Detect`'s pauses, a
   cancelled call answered `cancelled`; a stop or cancel while paused releases the run to end there; `{ type: 'held',
   frames }` posted once a paused run waits, the frames read, where a stop ends it: the page's paused status),
   `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/blob-write.js` its `parts`, `append` and `blob`, `wwwroot/pause.js` its `pause` (a `MessageChannel`; `hold`
   and `release`: while held the promise stays unresolved, so the run waits there, README "Pausing a run");
-  `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel). The page (no build step, no dependency, native ES modules; README "Running the page";
+  `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel); `wwwroot/threads.js` the
+  threaded runtime on the page's thread, a `ThreadedRunner` that speaks `worker.js`'s messages (only `Open`, `Detect`,
+  `ScenesCsv`, `StatsCsv`, stop, cancel, pause, resume), abandoned rather than terminated; `wwwroot/sw.js` the service
+  worker: COOP/COEP on every response (cross-origin isolation, which the threads need) and the page offline, network
+  first. The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
   toolbar once a file is picked, the status line, the result's four rows: the video beside the run's cards, the timeline
   across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
@@ -85,7 +96,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   left out), stop (`terminate()` only for a worker that doesn't
   answer), the demo, the shot playing as the caption under the video (told as the `playing` event), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
-  range and merges) and the sound's worker; the events panels listen to, `call(name, ...args)` and `card(title, {
+  range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
+  page's worker; `serve()` registers `sw.js` and reloads a first visit once) and the sound's worker; the events panels listen to, `call(name, ...args)` and `card(title, {
   place, mark, markTitle })`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label,
   draw)`, `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `ranges.js` (a lane: a split run's range per worker,
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
@@ -113,12 +125,15 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     type="module">` line in `index.html` (the order of those lines is the order of the lanes, and of the cards in each
     place) and its rules
     in `style.css`. A new export is `Api.<Feature>.cs`, a partial file of its own with its own `JsonSerializerContext`
-    if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
+    if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. An export of the last run's
+    result (as `ShotsJson`, `Picture`) also needs its task twin in `Api.Threads.cs` and its name in `threads.js`'s
+    `THREADED` and `RESULTS`: after a run on threads, `call()` asks the threaded runner for it. `app.js` changes
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `Mp4Input.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
-  merged, vs the whole run's CSVs; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
+  merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
+  stopped half-way, vs one thread; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats`, `cropdetect` (per frame and whole) and
@@ -134,9 +149,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   expects, and `Picture()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
-  the demo clip, a sample picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
-  run's downloaded CSVs, JSON and HTML against the native run's, the picture card's crop and colour bars the native
-  run's, any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
+  (`?threads=0`) and on two workers, the demo on threads paused and resumed, then stopped while paused, then run again
+  offline from the cache, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
+  threaded bundle), the picture card's crop and colour bars the native run's, any page or worker error failing it;
+  `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
   frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane
@@ -157,6 +174,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   timeline and cards, a module per panel; `2026-10-26-workers.md`: long videos across several workers;
   `2026-10-26-new-ui.md`: the page's new UI, B chosen by the owner, built by the backlog row;
   `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream;
+  `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline;
   `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
@@ -231,6 +249,13 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   ends where the frames stop"), and `Mp4Input.FromStart` keeps the ranges while each reaches into the next one's first
   frame: the first range stopped short ends the merge, as a one-worker run stopped there. With ranges about equal,
   waiting for "finished" ranges only would keep nothing until the last minutes of a run.
+- .NET's threaded wasm runtime (10.0.14) doesn't start in a Web Worker (it takes the worker for one of its pthreads,
+  then asserts on thread ids), refuses to start without `SharedArrayBuffer`, and doesn't run under Node; on the main
+  thread it refuses synchronous exports (`jsThreadBlockingMode` `PreventSynchronousJSExport`), runs `[JSImport]`s on
+  the main thread (no `FileReaderSync` there), and refuses a synchronous one from inside a synchronous export (seen
+  2026-10-30). Hence `Host.cs`. A `[JSImport]`'s `ArraySegment` there (a `MemoryView` pinned behind a GC handle)
+  ended the runtime when the collector released it on another thread: a `Span` view, valid for the call only. ManagedCodecs' `H264Decoder` has no Dispose (its threads end after an idle timeout):
+  frames that end early flush it.
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames (its window
   after them) is `None`, a cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold
   detector ends a fade-out the stop falls in with a cut (`PostProcess`), as at a file's end.

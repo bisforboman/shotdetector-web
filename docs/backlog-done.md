@@ -753,3 +753,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     passing. Speed against 0.1.0 not settled: the cloud VM is too noisy; AOT under Node, Sintel's trailer took 18.2 s
     adaptive and 20.5 s all detectors, against 21.5 and 25.1 for 0.1.0 on 2026-10-29, a different hour of the same
     kind of machine; `REFERENCE_FPS`, measured on 0.1.0 the same day, measured again in CI would tell)
+
+- Threads in the browser
+  - Why: ManagedCodecs decodes a 720p P chain in about half the time on 4 threads (`H264Decoder.Threads`). Wasm
+    threads need `SharedArrayBuffer`, so COOP/COEP headers, which Pages can't set; a service worker that adds them to
+    its own responses (the `coi-serviceworker` trick) can. `DetectionMode.Parallel` doesn't apply to a frame source
+    (it reads once, in order), so only decoding would speed up.
+  - Status: Done (2026-10-30, decision `2026-10-30-threads.md`, the owner's choice: built for one-worker runs. .NET's
+    threaded runtime starts only on the page's own thread, so `threads.js` runs it there, beside the page's worker,
+    the run on .NET's thread pool (`Host.cs`); `sw.js` isolates the page. On the page with ManagedCodecs 0.2.3, Sintel's
+    trailer on 4 threads in 8.5 s instead of 13.7 s, 1.6 times as fast, 1.85 at 1280x720 (interleaved rounds, AOT,
+    4-core VM; 2.6 with 0.1.0's decoder); `ThreadsCheck.cs` and the page check: the same CSVs byte for byte)
+
+- Offline (a service worker caching the bundle)
+  - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
+  - Status: Done (2026-10-30, decision `2026-10-30-threads.md`: `sw.js`, network first, the cache as the fallback,
+    the demo cached once fetched; the page check reloads the page offline and runs the demo from the cache)

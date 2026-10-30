@@ -20,7 +20,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The daily run of everything publishes each bundle twice since the threaded one (decision 2026-10-30-threads.md).
+    timeout-minutes: 90
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       # Sintel's trailer, the original's SHA-256 (the step "Download Sintel's trailer"); quoted, so YAML never reads a

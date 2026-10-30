@@ -20,6 +20,9 @@
     <!-- No .br/.gz copies next to each file: GitHub Pages compresses every response itself and never serves them
          (README "Size"). -->
     <CompressionEnabled>false</CompressionEnabled>
+    <!-- The threaded bundle (-p:WasmEnableThreads=true, decision 2026-10-30-threads.md), published into the page's
+         threads/_framework/ (tools/check.sh), compiles Host.cs's threaded half and Api.Threads.cs. -->
+    <DefineConstants Condition="'$(WasmEnableThreads)' == 'true'">$(DefineConstants);THREADS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

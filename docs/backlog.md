@@ -154,19 +154,6 @@ file out of `samples/reject/`, and passes the native check.
   - Where: each its own row when wanted; each needs a decision about what "the FFmpeg path's result" means for it.
   - Status: Maybe
 
-- Threads in the browser
-  - Why: ManagedCodecs decodes a 720p P chain in about half the time on 4 threads (`H264Decoder.Threads`). Wasm
-    threads need `SharedArrayBuffer`, so COOP/COEP headers, which Pages can't set; a service worker that adds them to
-    its own responses (the `coi-serviceworker` trick) can. `DetectionMode.Parallel` doesn't apply to a frame source
-    (it reads once, in order), so only decoding would speed up.
-  - Where: the service worker, `WasmEnableThreads`, `Threads` set from `navigator.hardwareConcurrency`, the check that
-    results don't change (`tools/check.sh wasm aot`). Decision "Threads".
-  - Status: Maybe
-
-- Offline (a service worker caching the bundle)
-  - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
-  - Status: Maybe
-
 - Frame types (I, P, B) on the strip
   - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes.
   - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`

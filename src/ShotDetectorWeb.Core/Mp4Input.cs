@@ -109,6 +109,26 @@ public sealed partial class Mp4Input
     /// <summary>The first audio track as FFmpeg's demuxer describes it (ffprobe's codec_name, sample_rate, channels); null without one.</summary>
     public AudioStream? Audio { get; }
 
+    /// <summary>
+    /// How many pictures the decoder decodes at once, each on a thread of its own (ManagedCodecs'
+    /// <see cref="H264Decoder.Threads"/>, frame threading): the same frames, in the same order, decoded faster on more
+    /// cores. 1, the default, decodes on the thread that reads the frames, which is the only choice where there are no
+    /// threads (WebAssembly without them). It applies to the frames read from here on (<see cref="Frames()"/>,
+    /// <see cref="FramesAsync"/>, <see cref="DetectAsync"/>, <see cref="ScoreRangeAsync"/>); opening decodes the first
+    /// frame on one.
+    /// </summary>
+    public int DecoderThreads
+    {
+        get => _decoderThreads;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+            _decoderThreads = value;
+        }
+    }
+
+    int _decoderThreads = 1;
+
     /// <summary>The video track's packets as FFmpeg's demuxer gives them (pts, size, keyframe), from the walk opening made.</summary>
     public VideoPackets Packets { get; }
 
@@ -310,32 +330,59 @@ public sealed partial class Mp4Input
         using var stream = new TimingOnlyStream(_open());
         using var demuxer = new Mp4Demuxer(stream);
         stream.SkipReads = fromPacket > 0;
-        foreach (var frame in DecodedFrames(demuxer, fromPacket, stream))
+        foreach (var frame in DecodedFrames(demuxer, fromPacket, stream, _decoderThreads))
             yield return frame;
     }
 
-    static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer, int fromPacket = 0, TimingOnlyStream? skipping = null)
+    static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer, int fromPacket = 0, TimingOnlyStream? skipping = null,
+        int threads = 1)
     {
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The MP4 file has no video track.");
-        var decoder = new H264Decoder(info);
-        foreach (var packet in demuxer.ReadPackets())
+        var decoder = new H264Decoder(info) { Threads = threads };
+        bool flushed = false;
+        try
         {
-            if (packet.StreamIndex != info.StreamIndex)
-                continue;
-            if (packet.Sequence < fromPacket)
+            foreach (var packet in demuxer.ReadPackets())
             {
-                // The demuxer reads a packet's data as it hands out the packet: from the next one on, read them.
-                if (packet.Sequence == fromPacket - 1 && skipping is not null)
-                    skipping.SkipReads = false;
-                continue;
+                if (packet.StreamIndex != info.StreamIndex)
+                    continue;
+                if (packet.Sequence < fromPacket)
+                {
+                    // The demuxer reads a packet's data as it hands out the packet: from the next one on, read them.
+                    if (packet.Sequence == fromPacket - 1 && skipping is not null)
+                        skipping.SkipReads = false;
+                    continue;
+                }
+
+                foreach (var frame in decoder.Decode(packet))
+                    yield return frame;
             }
 
-            foreach (var frame in decoder.Decode(packet))
+            flushed = true;
+            foreach (var frame in decoder.Flush())
                 yield return frame;
         }
+        finally
+        {
+            // Frames that end early (a stop, a cancel, a range's end, an error) leave pictures being decoded on the
+            // decoder's threads. The decoder has no Dispose (ManagedCodecs 0.2.3): flushed, the pictures finish and
+            // the threads end now, not after their idle timeout.
+            if (!flushed && threads > 1)
+                Drain(decoder);
+        }
+    }
 
-        foreach (var frame in decoder.Flush())
-            yield return frame;
+    static void Drain(H264Decoder decoder)
+    {
+        try
+        {
+            foreach (var frame in decoder.Flush())
+                frame.Dispose();
+        }
+        catch (Exception e) when (e is InvalidDataException or NotSupportedException)
+        {
+            // The pictures still being decoded failed too: nothing is shown of them.
+        }
     }
 
     /// <summary>
