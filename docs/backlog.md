@@ -33,59 +33,6 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
-## Waiting
-
-The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
-[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
-[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
-asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
-in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
-3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
-ManagedCodecs#138's optional part, the row below.
-
-- Resume after Stop, across visits
-  - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
-    between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that
-    ended early. Scoring a second range from where it stopped and calling `Merge` on both gives exactly the result for
-    the whole video. `RangeScores.ToBytes` makes the stopped part's scores storable, so a later visit can resume too.
-  - Where: built with the workers row, on the same `ScoreRangeAsync` and `Merge`:
-    - **At Stop:** `Merge` of the ranges so far shows the result for the part read (find out from ShotDetector's source
-      that `Merge` takes ranges that end before the video does, as the workers decision's Stop already assumes).
-    - **Resume:** a range from the last frame read (decoding from the keyframe before it and dropping frames up to the
-      one before), then `Merge` over all ranges.
-    - **Kept in the browser:** the scores' bytes in IndexedDB, keyed by the file's name, size and modified time and by
-      the options, behind try/catch; "Resume" offered when the same file and options come back, and forgotten on a
-      finished run or a click.
-    - **Live shots:** `ScoreRange` tells no shots (`OnShot` isn't honoured there: shots are decided in `Merge`), so a
-      one-worker run built this way would lose its live table. Ask upstream for `OnShot` on a range starting at frame 0
-      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it. Until it ships,
-      a run on `DetectAsync` keeps no scores to merge, so resuming it would mean scoring its start again: run one-worker
-      runs through `ScoreRangeAsync` with progress but no live table, or leave them unresumable. Measure both and put
-      the choice to the owner in the PR.
-  - Done when: `tools/app-check.mjs` stops at a frame on every sample, resumes, and gets exactly the full run's CSVs;
-    the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
-  - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
-  - Depends on: "Long videos across several Web Workers".
-  - Status: Waiting on upstream ([shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598),
-    `OnShot` on a range from frame 0; the owner chose to wait for it, decision `2026-10-30-resume-across-visits.md`)
-
-- ManagedCodecs: a demuxer of the tracks asked for, packets without their data
-  - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
-    allocates every packet's data even where the stream skips the reads. On the two-hour control natively, 342 MB of
-    zeroed arrays come out of `Open`'s 405 MB allocated, and a run allocates and throws away the audio track's 115 MB.
-    It doesn't grow the wasm heap: both were tried in a patched local build, 84 MB opened and 121 MB after the run either
-    way (README "What the heap holds", 2026-10-29). So low priority: allocation and time, not memory.
-  - Where: upstream (bisforboman/ManagedCodecs), filed as #211 from the text in
-    [#59](https://github.com/bisforboman/shotdetector-web/pull/59), a follow-up to
-    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138). Then here: the run's demuxer
-    (`Mp4Input.DecodedFrames`, the ranges') of the video track only, and the opening pass through the timing-only
-    read, measured again as README does.
-  - Done when: a ManagedCodecs release has both, and the page uses them with the checks unchanged.
-  - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it); stays on 0.1.0
-    (ManagedCodecs#206).
-  - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
-    2026-10-30)
-
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships, and THIRD-PARTY-NOTICES.md has to list it. Measured
     2026-10-29 (ShotDetector 3.20.0, FrameReader 2.15.0): the App's publish already trims every assembly in full
@@ -113,7 +60,66 @@ ManagedCodecs#138's optional part, the row below.
   - Done when: `_framework/` has no `FFmpeg.AutoGen.wasm`, the checks are green, and the README's sizes are updated.
   - Not: no change to the core library; no ILLink substitutions here (a stub of ShotDetector's internals would break
     silently when they change, and CLAUDE.md: what belongs upstream is reported there).
-  - Status: Waiting on upstream ([shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597), filed
+  - Status: Open (2026-10-30: unblocked: ShotDetector 3.22.0's frame-source paths don't reach FFmpeg's code, and its
+    CI's `wasm-trim` job fails if benchmarks/wasm's bundle has FFmpeg.AutoGen; that bundle went from 14.40 to 10.39 MB
+    ([shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597)))
+
+- Resume after Stop, across visits
+  - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
+    between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that
+    ended early. Scoring a second range from where it stopped and calling `Merge` on both gives exactly the result for
+    the whole video. `RangeScores.ToBytes` makes the stopped part's scores storable, so a later visit can resume too.
+  - Where: built with the workers row, on the same `ScoreRangeAsync` and `Merge`:
+    - **At Stop:** `Merge` of the ranges so far shows the result for the part read (find out from ShotDetector's source
+      that `Merge` takes ranges that end before the video does, as the workers decision's Stop already assumes).
+    - **Resume:** a range from the last frame read (decoding from the keyframe before it and dropping frames up to the
+      one before), then `Merge` over all ranges.
+    - **Kept in the browser:** the scores' bytes in IndexedDB, keyed by the file's name, size and modified time and by
+      the options, behind try/catch; "Resume" offered when the same file and options come back, and forgotten on a
+      finished run or a click.
+    - **Live shots:** `ScoreRange` tells no shots (`OnShot` isn't honoured there: shots are decided in `Merge`), so a
+      one-worker run built this way would lose its live table. Ask upstream for `OnShot` on a range starting at frame 0
+      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it. Until it ships,
+      a run on `DetectAsync` keeps no scores to merge, so resuming it would mean scoring its start again: run one-worker
+      runs through `ScoreRangeAsync` with progress but no live table, or leave them unresumable. Measure both and put
+      the choice to the owner in the PR.
+  - Done when: `tools/app-check.mjs` stops at a frame on every sample, resumes, and gets exactly the full run's CSVs;
+    the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
+  - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
+  - Depends on: "Long videos across several Web Workers".
+  - Status: Open (2026-10-30: unblocked: ShotDetector 3.22.0 has `OnShot` on a range from frame 0 and
+    `ScoreRange`/`ScoreRangeAsync` overloads that continue a stopped run from the earlier `RangeScores`, telling only the
+    shots not yet confirmed ([shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598)), so "Live
+    shots"'s fallback isn't needed; with `OnShot` on the ranges, leave it out of `Merge` or the shots are told twice)
+
+## Waiting
+
+The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
+[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
+[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
+asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
+in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
+3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
+ManagedCodecs#138's optional part, the row below. Those filed on 2026-10-30,
+[shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597) and
+[#598](https://github.com/bisforboman/shotdetector/issues/598), shipped in ShotDetector 3.22.0 the same day: their rows
+are in Next again.
+
+- ManagedCodecs: a demuxer of the tracks asked for, packets without their data
+  - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
+    allocates every packet's data even where the stream skips the reads. On the two-hour control natively, 342 MB of
+    zeroed arrays come out of `Open`'s 405 MB allocated, and a run allocates and throws away the audio track's 115 MB.
+    It doesn't grow the wasm heap: both were tried in a patched local build, 84 MB opened and 121 MB after the run either
+    way (README "What the heap holds", 2026-10-29). So low priority: allocation and time, not memory.
+  - Where: upstream (bisforboman/ManagedCodecs), filed as #211 from the text in
+    [#59](https://github.com/bisforboman/shotdetector-web/pull/59), a follow-up to
+    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138). Then here: the run's demuxer
+    (`Mp4Input.DecodedFrames`, the ranges') of the video track only, and the opening pass through the timing-only
+    read, measured again as README does.
+  - Done when: a ManagedCodecs release has both, and the page uses them with the checks unchanged.
+  - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it); stays on 0.1.0
+    (ManagedCodecs#206).
+  - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
     2026-10-30)
 
 ## Maybe
