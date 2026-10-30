@@ -14,6 +14,13 @@ namespace ShotDetectorWeb;
 /// <param name="Keyframe">The video packet (decode order, an index of <see cref="Mp4Input.Packets"/>) it decodes from.</param>
 public sealed record FrameRange(int FirstFrame, int EndFrame, int Keyframe);
 
+/// <summary>
+/// A stopped run's way on (<see cref="Mp4Input.Continue"/>): the earlier ranges' scores to keep, in order, and the range
+/// that scores the rest of the video (null when they reach its end). Merged (<see cref="Mp4Input.Merge"/>), the earlier
+/// ranges and the rest's give the whole video's result.
+/// </summary>
+public sealed record Continuation(IReadOnlyList<RangeScores> Earlier, FrameRange? Rest);
+
 public sealed partial class Mp4Input
 {
     /// <summary>
@@ -39,11 +46,47 @@ public sealed partial class Mp4Input
     /// Splits the video into at most <paramref name="count"/> ranges about equal in frames, each after the first starting
     /// one past a keyframe (its frame before), the keyframe nearest to an equal split's start; fewer when the keyframes
     /// are too few (one range for a video with one keyframe). The same file gives the same ranges on every runtime, so a
-    /// worker told the count and its index decodes the range the page planned.
+    /// worker told the count and its index decodes the range the page planned. With <paramref name="from"/> (a run
+    /// resumed: <see cref="Continue"/>'s range's first frame), the frames from there on are split the same way, the first
+    /// range starting there.
     /// </summary>
-    public IReadOnlyList<FrameRange> Ranges(int count)
+    /// <exception cref="ArgumentException"><paramref name="from"/> is neither 0 nor where a range can start.</exception>
+    public IReadOnlyList<FrameRange> Ranges(int count, int from = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+        var (starts, frames) = RangeStarts();
+        (int FirstFrame, int Keyframe) last = (0, 0);
+        if (from != 0)
+        {
+            int at = starts.FindIndex(s => s.FirstFrame == from);
+            if (at < 0)
+                throw new ArgumentException($"A range can't start at frame {from}: it isn't one past a keyframe.", nameof(from));
+            last = starts[at];
+        }
+
+        var ranges = new List<FrameRange>();
+        int start = last.FirstFrame;
+        starts.RemoveAll(s => s.FirstFrame <= start);
+        for (int r = 1; r < count && starts.Count > 0; r++)
+        {
+            long target = start + (long)(frames - start) * r / count;
+            var nearest = starts.MinBy(s => Math.Abs(s.FirstFrame - target));
+            if (nearest.FirstFrame <= last.FirstFrame)
+                continue;
+            ranges.Add(new FrameRange(last.FirstFrame, nearest.FirstFrame, last.Keyframe));
+            last = nearest;
+        }
+
+        ranges.Add(new FrameRange(last.FirstFrame, frames, last.Keyframe));
+        return ranges;
+    }
+
+    /// <summary>
+    /// The places a range can start, in frame order: one past each keyframe but the first frame's, before the last
+    /// frame, each with its keyframe's packet (decode order); and the frames the video shows.
+    /// </summary>
+    (List<(int FirstFrame, int Keyframe)> Starts, int Frames) RangeStarts()
+    {
         var packets = Packets;
 
         // Each shown frame's pts in display order: a keyframe's index there is its frame's.
@@ -56,8 +99,6 @@ public sealed partial class Mp4Input
 
         shown.Sort();
         int frames = shown.Count;
-
-        // The places a range can start: one past each keyframe but the first frame's, before the last frame.
         var starts = new List<(int FirstFrame, int Keyframe)>();
         for (int i = 0; i < packets.Count; i++)
         {
@@ -69,20 +110,32 @@ public sealed partial class Mp4Input
         }
 
         starts.Sort();
-        var ranges = new List<FrameRange>();
-        (int FirstFrame, int Keyframe) last = (0, 0);
-        for (int r = 1; r < count && starts.Count > 0; r++)
-        {
-            long target = (long)frames * r / count;
-            var nearest = starts.MinBy(s => Math.Abs(s.FirstFrame - target));
-            if (nearest.FirstFrame <= last.FirstFrame)
-                continue;
-            ranges.Add(new FrameRange(last.FirstFrame, nearest.FirstFrame, last.Keyframe));
-            last = nearest;
-        }
+        return (starts, frames);
+    }
 
-        ranges.Add(new FrameRange(last.FirstFrame, frames, last.Keyframe));
-        return ranges;
+    /// <summary>
+    /// Where a stopped run goes on from (backlog "Resume after Stop, across visits"): <paramref name="scored"/>'s ranges
+    /// from the start (<see cref="FromStart"/>) reach some frame; the rest is scored from the last place a range can start
+    /// at or before their last frame (decoded from the keyframe before it, so at most a keyframe interval is scored
+    /// again: the frames both have, which ShotDetector compares), to the video's end. The earlier ranges it needs are
+    /// those starting before it (a range starting there or later is scored again whole). None reached, or none to
+    /// start from but frame 0: the run starts over (no earlier ranges, the range from frame 0). Every frame reached: no
+    /// range, the earlier ranges are the whole video's.
+    /// </summary>
+    public Continuation Continue(IEnumerable<RangeScores> scored)
+    {
+        var earlier = FromStart(scored).ToList();
+        var (starts, frames) = RangeStarts();
+        if (earlier.Count == 0)
+            return new Continuation([], new FrameRange(0, frames, 0));
+        long reached = earlier[^1].FirstFrame + earlier[^1].FrameCount;
+        if (reached >= frames)
+            return new Continuation(earlier, null);
+        var start = starts.LastOrDefault(s => s.FirstFrame <= reached - 1);
+        if (start.FirstFrame == 0)
+            return new Continuation([], new FrameRange(0, frames, 0));
+        earlier.RemoveAll(r => r.FirstFrame >= start.FirstFrame);
+        return new Continuation(earlier, new FrameRange(start.FirstFrame, frames, start.Keyframe));
     }
 
     /// <summary>
@@ -110,6 +163,20 @@ public sealed partial class Mp4Input
         DetectionOptions? options = null, CancellationToken cancellationToken = default, PictureMeter? picture = null) =>
         ShotDetection.ScoreRangeAsync(Video, RangeFramesAsync(range, every, between, cancellationToken, picture),
             range.FirstFrame, WithConverter(options), cancellationToken);
+
+    /// <summary>
+    /// Scores <paramref name="range"/> as <see cref="ScoreRangeAsync(FrameRange, int, Func{int, ValueTask{bool}}, DetectionOptions?, CancellationToken, PictureMeter?)"/>
+    /// does, continuing from <paramref name="earlier"/> (<see cref="Continue"/>'s: a stopped run resumed), so that the
+    /// options' <see cref="DetectionOptions.OnShot"/> is told the rest of the whole video's shots as they are known
+    /// (ShotDetector's <see cref="ShotDetection.ScoreRangeAsync(YuvVideo, IEnumerable{RangeScores}, IAsyncEnumerable{YuvFrame}, long, DetectionOptions?, CancellationToken)"/>).
+    /// </summary>
+    public Task<RangeScores> ScoreRangeAsync(IReadOnlyList<RangeScores> earlier, FrameRange range, int every,
+        Func<int, ValueTask<bool>> between, DetectionOptions? options = null, CancellationToken cancellationToken = default,
+        PictureMeter? picture = null) =>
+        earlier.Count == 0
+            ? ScoreRangeAsync(range, every, between, options, cancellationToken, picture)
+            : ShotDetection.ScoreRangeAsync(Video, earlier, RangeFramesAsync(range, every, between, cancellationToken, picture),
+                range.FirstFrame, WithConverter(options), cancellationToken);
 
     /// <summary>
     /// Merges ranges' scores (<see cref="ShotDetection.Merge"/>) with the options they were scored with: the whole
