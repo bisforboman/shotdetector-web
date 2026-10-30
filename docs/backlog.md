@@ -65,7 +65,7 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
     three), and the comment's date.
   - Done when: a first visit's estimate on the trailer and on the two-hour film within 20% of the run.
   - Not: no change to how a browser's own rate is kept.
-  - Status: Open
+  - Status: In progress (2026-10-30)
 
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
