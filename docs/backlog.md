@@ -145,14 +145,6 @@ height at a constant frame rate, upright, and refuses `Deinterlace` and `Yadif`:
 first, named in each. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
 
-- MJPEG in AVI
-  - Why: ManagedCodecs' MJPEG decoder is bit-exact with FFmpeg and its AVI demuxer gives FFmpeg's timestamps; 4:2:0
-    JPEG comes out yuv420p/yuvj420p, which the frame-source API takes today. Cameras and old footage.
-  - Where: an `AviInput` beside `Mp4Input` describing the file as FFmpeg does (frame rate from the AVI header, no
-    time base subtleties); `Demuxer.Open` to pick by content; the page's file filter. 4:2:2 JPEG waits for the 4:2:2
-    row.
-  - Status: In progress (2026-10-30; decision [2026-10-30-mjpeg-avi.md](decisions/2026-10-30-mjpeg-avi.md))
-
 
 - 10-bit 4:2:0 and 8-bit 4:2:2
   - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
