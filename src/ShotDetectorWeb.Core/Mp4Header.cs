@@ -12,7 +12,7 @@ internal sealed class Mp4Header
     /// <summary>The video track's media timescale (mdhd): the stream's time base is 1 over it.</summary>
     public uint Timescale { get; private init; }
 
-    /// <summary>The sum of the 'stts' sample counts: FFmpeg's nb_frames.</summary>
+    /// <summary>The sum of the 'stts' sample counts: FFmpeg's nb_frames (0 in a fragmented file with an empty 'moov').</summary>
     public long SampleCount { get; private init; }
 
     /// <summary>The sum of the 'stts' durations, in <see cref="Timescale"/>.</summary>
@@ -36,7 +36,7 @@ internal sealed class Mp4Header
     /// <summary>Whether the track header's matrix rotates or flips the picture.</summary>
     public bool Transformed { get; private init; }
 
-    /// <summary>Whether the file is fragmented ('mvex' in 'moov').</summary>
+    /// <summary>Whether the file is fragmented ('mvex' in 'moov'): its samples, or some of them, are in 'moof' boxes.</summary>
     public bool Fragmented { get; private init; }
 
     /// <summary>

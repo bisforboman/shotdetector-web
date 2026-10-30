@@ -65,7 +65,7 @@ internal static class ThreadsCheck
     // The run stopped at the first pause past half its frames, on the threads and on one: the same CSVs.
     static string Stopped(Mp4Input input, DetectionOptions options)
     {
-        int half = (int)(input.Video.FrameCount!.Value / 2);
+        int half = input.ShownFrames / 2;
         ValueTask<bool> Between(int read) => ValueTask.FromResult(read < half);
         var threaded = input.DetectAsync(8, Between, options).GetAwaiter().GetResult();
         input.DecoderThreads = 1;
