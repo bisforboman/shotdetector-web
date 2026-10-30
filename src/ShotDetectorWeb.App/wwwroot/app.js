@@ -64,8 +64,9 @@ const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
 
 // ShotDetector's default threshold for each detector, prefilled when one is picked: the one a run without a threshold
 // compares against (scenedetect 0.7.2's, DetectionOptions.Compatibility's default; histogram and hash were 0.05 and
-// 0.395 in 0.7.1, which ShotDetector's Threshold summary still says). A threshold left at its default is sent as none,
-// so the run is the library's own default run. tools/app-check.mjs reads these and checks each against that run.
+// 0.395 in 0.7.1, which ShotDetector's Threshold summary said until 3.21.0). A threshold left at its default is sent
+// as none, so the run is the library's own default run. tools/app-check.mjs reads these and checks each against that
+// run.
 const DEFAULT_THRESHOLDS = { adaptive: 3, content: 27, threshold: 12, histogram: 0.2, hash: 0.35 };
 const DEFAULT_MIN_LENGTH = '0.6s';
 // The adaptive detector's window (frames on each side averaged, scenedetect's window_width) and minimum content_val

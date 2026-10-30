@@ -2,9 +2,9 @@
 // (DEFAULT_THRESHOLDS, DEFAULT_WINDOW, DEFAULT_MIN_CONTENT), against ShotDetector's own. The page sends a value left at
 // its default as none, so each must be the one a run without it uses: for each sample and detector, the run with the
 // page's default typed in must give the run without it, cut for cut. Seen 2026-10-26: the form prefilled histogram 0.05
-// and hash 0.395 (scenedetect 0.7.1's, which ShotDetector's Threshold summary still says) where the runs compared
-// against 0.2 and 0.35, so a visitor who typed 0.05 got 0.2. The synthetic samples' hard cuts pass either way; Sintel's
-// trailer tells them apart. A Markdown table on standard output.
+// and hash 0.395 (scenedetect 0.7.1's, which ShotDetector's Threshold summary said until 3.21.0) where the runs
+// compared against 0.2 and 0.35, so a visitor who typed 0.05 got 0.2. The synthetic samples' hard cuts pass either
+// way; Sintel's trailer tells them apart. A Markdown table on standard output.
 using System.Globalization;
 using System.Text.RegularExpressions;
 using ShotDetector;

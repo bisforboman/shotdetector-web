@@ -3,11 +3,11 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="FrameReader" Version="2.15.0" />
-    <PackageVersion Include="ShotDetector" Version="3.20.0" />
-    <PackageVersion Include="ShotDetector.FastYuv" Version="3.20.0" />
-    <PackageVersion Include="ManagedCodecs.Aac" Version="0.1.0" />
-    <PackageVersion Include="ManagedCodecs.Containers" Version="0.1.0" />
-    <PackageVersion Include="ManagedCodecs.H264" Version="0.1.0" />
+    <PackageVersion Include="FrameReader" Version="2.16.0" />
+    <PackageVersion Include="ShotDetector" Version="3.21.0" />
+    <PackageVersion Include="ShotDetector.FastYuv" Version="3.21.0" />
+    <PackageVersion Include="ManagedCodecs.Aac" Version="0.2.3" />
+    <PackageVersion Include="ManagedCodecs.Containers" Version="0.2.3" />
+    <PackageVersion Include="ManagedCodecs.H264" Version="0.2.3" />
   </ItemGroup>
 </Project>
