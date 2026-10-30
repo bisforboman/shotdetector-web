@@ -52,7 +52,9 @@ public static partial class Api
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
-        var options = request.ToOptions(new RangeProgress(range.EndFrame - range.FirstFrame), new JsShots());
+        // No OnShot: the merge tells the shots. Since ShotDetector 3.22.0 a range from frame 0 tells its own too, which
+        // would tell the first range's twice.
+        var options = request.ToOptions(new RangeProgress(range.EndFrame - range.FirstFrame), onShot: null);
         var picture = new PictureMeter(input.Video, range);
         RangeScores? scores = null;
         try

@@ -201,7 +201,7 @@ sealed record DetectRequest
     public double? MinContentVal { get; init; }
     public IReadOnlyList<DetectorRequest>? Detectors { get; init; }
 
-    public DetectionOptions ToOptions(IProgress<DetectionProgress> progress, IProgress<Shot> onShot)
+    public DetectionOptions ToOptions(IProgress<DetectionProgress> progress, IProgress<Shot>? onShot)
     {
         var options = new DetectionOptions
         {
