@@ -24,9 +24,12 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 (progressive) in an MP4, fragmented or not, at a constant frame rate, not rotated.**
+Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive,
+or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
+ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
+pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`).
 Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
-codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, variable frame rate; rotation and a variable rate wait on ShotDetector,
+codec, 4:2:2/4:4:4 or 10-bit, rotated, variable frame rate; rotation and a variable rate wait on ShotDetector,
 decision `docs/decisions/2026-10-30-scope-widening.md`). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
