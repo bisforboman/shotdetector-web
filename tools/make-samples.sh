@@ -170,9 +170,9 @@ enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p10le "$out/reject/yuv420p10.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=2 -vf "setpts='if(lt(N,25),N,25+(N-25)*2)/25/TB'" -fps_mode vfr -c:v libx264 -pix_fmt yuv420p "$out/reject/vfr.mp4"
-# MJPEG that isn't 4:2:0: 4:4:4 and 4:2:2 (most cameras'), which ShotDetector's frame
-# source doesn't take yet; an AVI with an empty video chunk, a dropped frame (the muxer writes one after the first frame
-# when it shifts MP3's priming), which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
+# MJPEG that isn't 4:2:0: 4:4:4 and 4:2:2 (most cameras'), which ShotDetector's frame source doesn't take yet; an AVI
+# with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
+# which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj444p -c:v mjpeg "$out/reject/mjpeg-444.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj422p -c:v mjpeg "$out/reject/mjpeg-422.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=2,format=yuvj420p -f lavfi -i sine=d=3 -c:v mjpeg -c:a libmp3lame "$out/reject/mjpeg-dropped-frame.avi"
