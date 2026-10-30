@@ -15,7 +15,13 @@ public static partial class Api
     [JSExport]
     public static string ScenesCsv() => Shots.Csv(Result.Shots, cuts: Result.Cuts);
 
-    /// <summary>The last <see cref="Detect"/>'s stats CSV (scenedetect -s's), a string as it is (<see cref="ScenesCsv"/>).</summary>
+    /// <summary>
+    /// The last <see cref="Detect"/>'s stats CSV (scenedetect -s's) as a <c>Blob</c> (text/csv, UTF-8): written a row at
+    /// a time (<see cref="Stats.WriteCsv(TextWriter, Func{int, FrameTime})"/>) and copied out in parts as it is
+    /// written (<see cref="BlobWriter"/>), so the whole CSV, 20 million characters on a two-hour film, is never one
+    /// string in the heap, which never shrinks (README "What the heap holds").
+    /// </summary>
     [JSExport]
-    public static string StatsCsv() => Result.Stats!.Csv(Result.Video.Position);
+    public static JSObject StatsCsv() =>
+        BlobWriter.Write(writer => Result.Stats!.WriteCsv(writer, Result.Video.Position), "text/csv");
 }

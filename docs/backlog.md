@@ -75,26 +75,6 @@ shots strip", read a lane of the timeline. The waveform, audio measures and bitr
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
 derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
 
-### Unblocked by ShotDetector 3.20.0 and ManagedCodecs 0.1.0
-
-These waited on shotdetector#519 and ManagedCodecs#138 (filed 2026-10-26); the packages the page builds against
-since 2026-10-28 carry what they asked for, or part of it.
-
-- ShotDetector: the stats CSV written row by row
-  - Why: the half of this that stored the stats by column shipped in ShotDetector 3.16.1
-    (bisforboman/shotdetector#512): on a two-hour film the stats keep 11.3 MB instead of 64.0 (65 B a frame instead of
-    370), and `Stats.Csv` no longer grows the wasm heap there (208 MB, where the run leaves it, instead of 432; README
-    "What the heap holds", 2026-10-26). The CSV is still built as one string: 20 million characters, 175 MB allocated
-    (about 1 KB a frame), still the largest allocation at the end of a run, which fit in the room the heap already had
-    on that film.
-  - Where: upstream (bisforboman/shotdetector), an issue for the owner to file, its text in
-    [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
-    position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
-    `[JSImport]` the worker gives), so the whole CSV is never one string.
-  - Status: Open (2026-10-28: `Stats.WriteCsv(TextWriter, position)` shipped in ShotDetector 3.20.0, the version the
-    page builds against since 2026-10-28; [shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519)
-    was filed 2026-10-26, the columns shipped in 3.16.1 on 2026-10-25)
-
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
@@ -102,7 +82,8 @@ The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
 asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
 in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
-3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are under Next.
+3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
+ManagedCodecs#138's optional part, the row below.
 
 - ManagedCodecs: a demuxer of the tracks asked for, packets without their data
   - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
