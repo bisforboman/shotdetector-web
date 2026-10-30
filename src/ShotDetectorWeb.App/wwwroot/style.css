@@ -10,7 +10,7 @@
   --error-fg: #991b1b;
   --playhead: #dc2626;
   --tone: #059669;
-  --keyframe: #c2410c;
+  --keyframe: #7c3aed;
   --exact: #047857;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
@@ -28,7 +28,7 @@
     --error-fg: #fecaca;
     --playhead: #f87171;
     --tone: #34d399;
-    --keyframe: #fb923c;
+    --keyframe: #c4b5fd;
     --exact: #34d399;
   }
 }
@@ -146,8 +146,8 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
 }
 
 /* The result, four rows (decision 2026-10-26-new-ui.md, B): the video with the shot playing under it beside the run's
-   cards; the timeline across the width; the cards below it (the shots); the details as a grid of equal columns. At
-   phone width, one column in the same order. */
+   cards; the timeline across the width; the cards below it (the shots, their statistics beside them); the details in
+   two balanced columns. At phone width, one column in the same order. */
 #result {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
@@ -165,15 +165,13 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
 .player { grid-area: player; }
 #run-cards { grid-area: run; display: grid; gap: 1rem; }
 #timeline { grid-area: timeline; }
-#below { grid-area: below; display: grid; gap: 1rem; }
-#details {
-  grid-area: details; display: grid; gap: 1rem; align-items: start;
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-}
-/* The details in the order a visitor wants them: the shots' figures, the sound, the bitrate, the file (the bitrate's
-   module comes earlier in index.html for its lane). */
-#details > #bitrate { order: 1; }
-#details > #about { order: 2; }
+#below { grid-area: below; display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; }
+#below > .card { flex: 1 1 30rem; min-width: 0; }
+#below > #stats { flex: 0 1 18rem; }
+/* The details as two columns the browser balances, each card whole in one (a grid's rows left holes beside a short
+   card); one column at phone width. In index.html's order, down the first column, then the second. */
+#details { grid-area: details; columns: 2 22rem; column-gap: 1rem; }
+#details > .card { break-inside: avoid; margin: 0 0 1rem; }
 /* The video never so tall that the timeline leaves the first screen: what it gives up is letterboxed. */
 video {
   display: block; width: 100%; max-height: max(14rem, calc(100vh - 26rem)); object-fit: contain;
@@ -193,9 +191,11 @@ video {
 #run .figures div { display: flex; flex-direction: column-reverse; }
 #run .figures dt { font-size: 0.8rem; color: var(--muted); }
 #run .figures dd { margin: 0; font-size: 1.35rem; font-weight: 600; line-height: 1.3; }
+/* The detector the run used: a word, not a number, so not as large. */
+#run .figures .detector { flex-basis: 100%; }
+#run .figures .detector dd { font-size: 1rem; }
 #run .downloads { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; }
 #run .downloads a { font-weight: 600; }
-#run .downloads .note { flex-basis: 100%; }
 
 /* The timeline: lane labels on the left, the tracks on one time axis, the playhead across all of them. */
 #timeline { display: flex; font-size: 0.8rem; user-select: none; }
@@ -218,8 +218,15 @@ video {
   background: var(--playhead); pointer-events: none;
 }
 
-/* The cuts lane. */
+/* The cuts lane: the part read shaded, each shot a span (the one playing shaded, its number where it fits), a tick at
+   each cut. Red is the playhead's alone: nothing in a lane uses it. */
 .scanned { position: absolute; top: 0; bottom: 0; left: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.track .shot {
+  position: absolute; top: 0; bottom: 0; overflow: hidden; text-align: center; line-height: 1.7rem;
+  font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.track .shot:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.track .shot.current { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--fg); font-weight: 600; }
 .tick { position: absolute; top: 15%; bottom: 15%; width: 2px; margin-left: -1px; background: var(--fg); }
 
 /* The waveform lane: taller than the others, the sound's envelope across it (an SVG stretched over the points' span). */
@@ -271,7 +278,6 @@ video {
 }
 #sound h3 { margin: 0.75rem 0 0.25rem; font-size: 0.85rem; }
 #sound p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
-#sound .note { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
 .loudness { display: grid; grid-template-columns: auto 1fr; gap: 0 1rem; margin: 0; font-variant-numeric: tabular-nums; }
 .loudness dt { color: var(--muted); }
 .loudness dd { margin: 0; }
@@ -288,27 +294,27 @@ video {
 .track.bitrate .rate { fill: color-mix(in srgb, var(--muted) 45%, transparent); }
 .track.bitrate .keyframes { stroke: var(--keyframe); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
 #bitrate p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
-#bitrate .note { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
-#bitrate code { white-space: nowrap; }
 
-/* The picture: each frame's luma as a band (YMIN to YMAX) and a line (YAVG), the out-of-range ticks along the bottom
-   (an SVG stretched over the frames read), the black spans and colour bars as marks over it; the measures' card. */
+/* The picture: each frame's luma as a band (YMIN to YMAX) and a line (YAVG), the out-of-range ticks along the bottom as
+   tall as the share out of range (an SVG stretched over the frames read), the black spans hatched and the colour bars
+   (as their luma steps) as marks over it; the measures' card. */
 .track.picture, .lane-label.picture { height: 3.5rem; }
 .lane-label.picture { line-height: 3.5rem; }
-.track.picture { --brng: #b91c1c; }
-@media (prefers-color-scheme: dark) { .track.picture { --brng: #f87171; } }
 .track.picture svg { position: absolute; top: 0; height: 100%; }
 .track.picture .levels { fill: color-mix(in srgb, var(--muted) 30%, transparent); }
 .track.picture .mean { fill: none; stroke: var(--accent); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
-.track.picture .brng { stroke: var(--brng); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
-.mark.black { background: color-mix(in srgb, var(--fg) 30%, transparent); border-inline: 1px solid var(--fg); }
+.track.picture .brng { stroke: var(--muted); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.mark.black {
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--fg) 45%, transparent) 0 2px, transparent 2px 6px);
+  border-inline: 1px solid var(--fg);
+}
 .mark.bars {
   bottom: auto; height: 0.4rem;
-  background: linear-gradient(90deg, #c0c0c0, #c0c000, #00c0c0, #00c000, #c000c0, #c00000, #0000c0);
+  background: linear-gradient(90deg, #c0c0c0 0 14.3%, #adadad 0 28.6%, #8f8f8f 0 42.9%, #7c7c7c 0 57.1%, #5a5a5a 0 71.4%,
+    #474747 0 85.7%, #2a2a2a 0);
 }
 #picture h3 { margin: 0.75rem 0 0.25rem; font-size: 0.85rem; }
 #picture p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
-#picture .note { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
 #picture code { white-space: nowrap; }
 #picture .levels { display: grid; grid-template-columns: auto 1fr; gap: 0 1rem; margin: 0; font-variant-numeric: tabular-nums; }
 #picture .levels dt { color: var(--muted); }
@@ -323,7 +329,6 @@ video {
   padding: 0; border: none; background: none; color: var(--accent);
   font: inherit; text-decoration: underline; cursor: pointer;
 }
-#stats .note { font-size: 0.8rem; color: var(--muted); }
 #shots tbody tr.current { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 #shots tbody tr.current td:first-child { box-shadow: inset 3px 0 var(--accent); }
 
@@ -341,30 +346,33 @@ video {
 #warnings ul { margin: 0; padding-left: 1.25rem; }
 #warnings li + li { margin-top: 0.25rem; }
 
-/* The shots table, in a scroll box of its own: its columns from the right (Length, End, Start, Shot), so a column added
-   first (the still per shot, below) leaves these rules as they are. At phone width the End column goes: it is the next
-   row's start. */
-#shots-card { max-height: 70vh; overflow: auto; padding-top: 0; }
-#shots-card h2 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 0.75rem 0 0.5rem; background: var(--panel); }
+/* The shots table: its columns from the right (Length, End, Start, Shot), so a column added first (the still per shot,
+   below) leaves these rules as they are. Whole up to 15 shots; past that, in a scroll box of its own, its title and
+   headings kept at its top. At phone width the End column goes: it is the next row's start. */
+#shots-card:has(#shots tbody tr:nth-child(16)) { max-height: 85vh; overflow: auto; padding-top: 0; }
+#shots-card:has(#shots tbody tr:nth-child(16)) h2 {
+  position: sticky; top: 0; z-index: 1; margin: 0; padding: 0.75rem 0 0.5rem; background: var(--panel);
+}
+#shots-card:has(#shots tbody tr:nth-child(16)) th { position: sticky; top: 2.75rem; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
 th, td { padding: 0.3rem 0.5rem; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
-th { position: sticky; top: 2.75rem; background: var(--panel); }
+th { background: var(--panel); }
 tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr:focus { background: var(--bg); }
 tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 tbody tr.unfinished { color: var(--muted); font-style: italic; }
 tbody tr.unfinished td { border-bottom-style: dashed; }
 /* A still per shot, first: the browser's decode (panels/shots.js), a grey box of the video's shape until it comes. */
-#shots th.still, #shots td.still { text-align: left; width: 6rem; padding-top: 0.2rem; padding-bottom: 0.2rem; }
+#shots th.still, #shots td.still { text-align: left; width: 8rem; padding-top: 0.2rem; padding-bottom: 0.2rem; }
 #shots .thumb {
-  width: 6rem; aspect-ratio: var(--still-aspect, 16 / 9); border-radius: 0.2rem; overflow: hidden;
+  width: 8rem; aspect-ratio: var(--still-aspect, 16 / 9); border-radius: 0.2rem; overflow: hidden;
   background: color-mix(in srgb, var(--muted) 25%, transparent);
 }
 #shots .thumb canvas { display: block; width: 100%; height: 100%; }
 @media (max-width: 30rem) {
   #shots th:nth-last-child(2), #shots td:nth-last-child(2) { display: none; }
-  #shots th.still, #shots td.still { width: 4rem; }
-  #shots .thumb { width: 4rem; }
+  #shots th.still, #shots td.still { width: 6rem; }
+  #shots .thumb { width: 6rem; }
 }
 
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }

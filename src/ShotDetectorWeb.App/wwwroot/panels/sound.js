@@ -18,7 +18,8 @@ let audio = null; // the last audio event's measures (its audio), while they wer
 const section = card('Sound', {
   mark: 'measured',
   markTitle: 'The core\'s measures, ManagedCodecs\' AAC decoder in the worker: each checked against FFmpeg\'s ebur128 ' +
-    'and silencedetect or ShotDetector\'s FindReferenceTone within a tolerance; a silence\'s length is the page\'s',
+    'and silencedetect or ShotDetector\'s FindReferenceTone within a tolerance; a silence\'s length is the page\'s. ' +
+    'Times rounded to the second here, exact in each line\'s tooltip and on the timeline',
 });
 section.id = 'sound';
 section.hidden = true;
@@ -121,11 +122,6 @@ function fill({ track, referenceTone, silences, peaks, loudness }) {
     section.append(p);
   }
   if (silences.length > LISTED) section.append(paragraph(`and ${silences.length - LISTED} more, on the timeline.`));
-
-  const note = paragraph('Measured: the numbers and times above are the core\'s, checked against FFmpeg and ShotDetector ' +
-    'within a tolerance; times rounded to the second here, exact in each one\'s tooltip and on the timeline.');
-  note.className = 'note';
-  section.append(note);
 }
 
 // "1 kHz at -20.0 dBFS, 0:00 to 0:30": 1 kHz is what FindReferenceTone looks for, not a measure of the segment's.

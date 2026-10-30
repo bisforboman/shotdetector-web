@@ -23,10 +23,9 @@ section.insertAdjacentHTML('beforeend', `
     <a id="stats-csv" download>Stats CSV</a>
     <a id="shots-json" download>Shots JSON</a>
     <a id="shots-html" download>Shots HTML</a>
-    <span class="note"></span>
   </p>`);
 const figures = section.querySelector('.figures'), summary = section.querySelector('#summary');
-const downloads = section.querySelector('.downloads'), what = downloads.querySelector('.note');
+const downloads = section.querySelector('.downloads');
 const links = ['#scenes-csv', '#stats-csv', '#shots-json', '#shots-html'].map(id => section.querySelector(id));
 let shots = [];
 let options = null; // the run's, as Api's Detect takes them (null for a default)
@@ -34,10 +33,11 @@ let runs = 0; // counts the runs and files chosen, so a result asked for after o
 
 const count = n => `${n} ${n === 1 ? 'shot' : 'shots'}`;
 
-// The figures: each a value, what it is under it, and a tooltip.
+// The figures: each a value, what it is under it, a tooltip, and a class (the detector's: smaller than the numbers).
 function show(...figs) {
-  figures.replaceChildren(...figs.map(([value, term, title = '']) => {
+  figures.replaceChildren(...figs.map(([value, term, title = '', kind = '']) => {
     const group = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
+    if (kind) group.className = kind;
     dt.textContent = term;
     dd.textContent = value;
     group.title = title;
@@ -51,7 +51,7 @@ function ran() {
   const { detector, threshold, minSceneLength } = options;
   return [detector, `${threshold == null ? 'default threshold' : `threshold ${threshold}`} · ` +
     `${minSceneLength == null ? 'default minimum shot length' : `minimum shot length ${minSceneLength}`}`,
-    'The detector, threshold and minimum shot length the run used; a default is ShotDetector\'s own'];
+    'The detector, threshold and minimum shot length the run used; a default is ShotDetector\'s own', 'detector'];
 }
 
 function clear() {
@@ -106,13 +106,11 @@ on('done', async ({ video, result: r, name }) => {
   const at = runs, json = await call('ShotsJson'), html = await call('ShotsHtml');
   if (at !== runs) return;
   const [scenes, stats, shotsJson, shotsHtml] = links;
-  link(scenes, r.scenesCsv, `${name}.scenes.csv`);
-  link(stats, r.statsCsv, `${name}.stats.csv`);
-  link(shotsJson, json, `${name}.shots.json`, 'application/json');
-  link(shotsHtml, html, `${name}.shots.html`, 'text/html');
-  what.textContent = `${name}.scenes.csv and ${name}.stats.csv: the shots and each frame's scores, as scenedetect ` +
-    `writes them; ${name}.shots.json and ${name}.shots.html: the shots as JSON and as scenedetect's HTML page` +
-    `${r.stopped ? '; all for the part read' : ''}.`;
+  const part = r.stopped ? ', for the part read' : '';
+  link(scenes, r.scenesCsv, `${name}.scenes.csv`, 'text/csv', `The shots, as scenedetect writes them${part}`);
+  link(stats, r.statsCsv, `${name}.stats.csv`, 'text/csv', `Each frame's scores, as scenedetect writes them${part}`);
+  link(shotsJson, json, `${name}.shots.json`, 'application/json', `The shots as ShotDetector's JSON${part}`);
+  link(shotsHtml, html, `${name}.shots.html`, 'text/html', `The shots as scenedetect's HTML page${part}`);
   downloads.hidden = false;
 });
 on('cancelled', ({ video: { frameRate: { num, den } }, done, expected }) => {
@@ -125,7 +123,8 @@ on('cancelled', ({ video: { frameRate: { num, den } }, done, expected }) => {
     'The worker didn\'t answer the stop, so there are no downloads.';
 });
 
-function link(a, text, name, type = 'text/csv') {
+function link(a, text, name, type, title) {
   a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;
+  a.title = `${name}: ${title}`;
 }
