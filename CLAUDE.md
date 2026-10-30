@@ -143,7 +143,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   rebuilding; `2026-10-24-audio.md`: the audio decoded in the worker by ManagedCodecs; `2026-10-25-one-page.md`: one
   timeline and cards, a module per panel; `2026-10-26-workers.md`: long videos across several workers;
   `2026-10-26-new-ui.md`: the page's new UI, B chosen by the owner, built by the backlog row;
-  `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream); `docs/mockups/`: static HTML
+  `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream;
+  `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
