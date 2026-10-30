@@ -191,11 +191,12 @@ file out of `samples/reject/`, and passes the native check.
     (it reads once, in order), so only decoding would speed up.
   - Where: the service worker, `WasmEnableThreads`, `Threads` set from `navigator.hardwareConcurrency`, the check that
     results don't change (`tools/check.sh wasm aot`). Decision "Threads".
-  - Status: Maybe
+  - Status: In progress (2026-10-30; the owner chose it on 2026-10-30)
 
 - Offline (a service worker caching the bundle)
   - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
-  - Status: Maybe
+  - Where: decision "Threads" (`2026-10-30-threads.md`), which covers both rows.
+  - Status: In progress (2026-10-30; the owner chose it on 2026-10-30)
 
 - Shots as JSON and HTML
   - Why: `Shots.Json` and `Shots.Html` exist; two more download buttons.
