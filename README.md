@@ -259,6 +259,14 @@ the same trailer at 151 frames per second the same day (the page check's demo in
 so on a machine that fast a first estimate is about 2.4 times too long until that browser has its own rate. The owner
 chose this VM's rate (2026-10-30).
 
+Measured again the same day on ManagedCodecs 0.2.3 (its decoder faster on wasm): five interleaved rounds of the trailer
+on the same VM, each a first visit, on the page's worker (`?threads=0`), on 2 threads and on 4 (the page's own choice
+there). The medians: 16.7 s on the worker (72 to 77 frames per second, now `REFERENCE_FPS` 75), 12.0 s on 2 threads
+(1.39 times as fast) and 11.1 s on 4 (1.50), now `THREADS_SPEEDUP` (3 threads, not measured, 1.45). A first visit then
+said "about 17 s" for a 17.4 s run on the worker, 12 s for 13.1 s on 2 threads and 11 s for 11.2 s on 4. GitHub's
+runner ran the trailer at 204 frames per second on 4 threads the same day (the page check's offline demo in
+`pages.yml`), about 1.8 times this VM; the owner chose this VM's rate again. The two-hour control wasn't run again.
+
 ShotDetector 3.16.0's FastYuv converts 8-bit 4:2:0 with SIMD, WebAssembly's included (the bundle has it on:
 `WasmEnableSIMD` defaults to true), to the same bytes. Measured 2026-10-26 on the AOT bundle, 3.15.0 against 3.16.1
 on one 4-core cloud VM, the runs alternating: the Sintel trailer's adaptive run takes 20.8 s instead of 21.9 s in

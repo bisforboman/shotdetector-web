@@ -44,10 +44,12 @@ import { secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
-// (854x480, the AOT build Pages serves, headless Chromium on a 4-core cloud VM, the median of three, 2026-10-30):
-// REFERENCE_FPS frames per second at 854x480. A two-hour film at 640x360 goes a little faster per pixel (start-up
-// weighs less), so its first estimate is about 16% long on that VM (README "Large files").
-const REFERENCE_FPS = 64;
+// (854x480, the AOT build Pages serves, headless Chromium on a 4-core cloud VM, ManagedCodecs 0.2.3, the median of five
+// interleaved rounds, each a first visit, 2026-10-30: 16.7 s): REFERENCE_FPS frames per second at 854x480. GitHub's
+// runner goes about 1.8 times as fast (the owner chose the VM's rate). A two-hour film at 640x360 goes a little faster
+// per pixel (start-up weighs less): its first estimate was 16% long on that VM with ManagedCodecs 0.1.0's 64 (README
+// "Large files").
+const REFERENCE_FPS = 75;
 const REFERENCE_PIXELS_PER_SECOND = REFERENCE_FPS * 854 * 480;
 const RATE_KEY = 'pixelsPerSecond';
 
@@ -71,12 +73,12 @@ const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
 // machine has cores, at most MOST_THREADS (6 did no better than 4 on 4 cores). The page's address can say how many
 // (?threads=N; 0 or 1: the page's worker, as where the page isn't isolated). How many times as fast as the page's
 // worker, for the estimate: measured on the page with Sintel's trailer (854x480, AOT, headless Chromium, a 4-core cloud
-// VM, the median of five interleaved rounds, 2026-10-30: 13.7 s, 9.6 s on 2 threads, 8.5 s on 4; 3 in between, not
-// measured). At 1280x720 the gain is larger (19.1 s to 10.3 s on 4).
+// VM, in REFERENCE_FPS's five interleaved rounds, 2026-10-30: 16.7 s, 12.0 s on 2 threads, 11.1 s on 4; 3 in between,
+// not measured). At 1280x720 the gain is larger (19.1 s to 10.3 s on 4, decision 2026-10-30-threads.md).
 const MOST_THREADS = 4;
 const ASKED_THREADS = new URLSearchParams(location.search).has('threads')
   ? Number(new URLSearchParams(location.search).get('threads')) || 1 : null;
-const THREADS_SPEEDUP = { 2: 1.43, 3: 1.52, 4: 1.61 };
+const THREADS_SPEEDUP = { 2: 1.39, 3: 1.45, 4: 1.5 };
 
 // ShotDetector's default threshold for each detector, prefilled when one is picked: the one a run without a threshold
 // compares against (scenedetect 0.7.2's, DetectionOptions.Compatibility's default; histogram and hash were 0.05 and
