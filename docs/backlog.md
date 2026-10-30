@@ -56,7 +56,7 @@ exactness check speaks for.
     the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
   - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
   - Depends on: "Long videos across several Web Workers".
-  - Status: Open (2026-10-30: unblocked: ShotDetector 3.22.0 has `OnShot` on a range from frame 0 and
+  - Status: In progress (2026-10-30). Was Open (2026-10-30: unblocked: ShotDetector 3.22.0 has `OnShot` on a range from frame 0 and
     `ScoreRange`/`ScoreRangeAsync` overloads that continue a stopped run from the earlier `RangeScores`, telling only the
     shots not yet confirmed ([shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598)), so "Live
     shots"'s fallback isn't needed; with `OnShot` on the ranges, leave it out of `Merge` or the shots are told twice)
