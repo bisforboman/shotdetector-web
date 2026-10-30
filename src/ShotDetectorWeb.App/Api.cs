@@ -34,6 +34,7 @@ public static partial class Api
     {
         _input = null;
         _result = null;
+        _picture = null;
         _file?.Dispose();
         _file = file;
         var input = DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file)));
@@ -58,16 +59,18 @@ public static partial class Api
     public static async Task<string> Detect(string optionsJson)
     {
         _result = null;
+        _picture = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
+        var picture = new PictureMeter(input.Video);
         DetectionResult result;
         try
         {
-            result = await DamagedPrefixed(() =>
-                input.DetectAsync(PauseEvery, Between, request.ToOptions(new JsProgress(), new JsShots()), run.Token));
+            result = await DamagedPrefixed(() => input.DetectAsync(PauseEvery, Between,
+                request.ToOptions(new JsProgress(), new JsShots()), run.Token, picture));
         }
         catch (OperationCanceledException e) when (run.IsCancellationRequested)
         {
@@ -81,6 +84,7 @@ public static partial class Api
         }
 
         _result = result;
+        _picture = picture.Measures.Take(result.FrameCount);
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
             new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration, _stopped,
