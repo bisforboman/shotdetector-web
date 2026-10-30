@@ -7,8 +7,8 @@ namespace ShotDetectorWeb.Checks;
 /// into ranges at keyframes as the page splits a long video across workers (<see cref="Mp4Input.Ranges"/>, at most 4),
 /// each range scored on its own (<see cref="Mp4Input.ScoreRangeAsync"/>), carried as bytes and merged
 /// (<see cref="Mp4Input.Merge"/>): the scene and stats CSVs must be the whole run's, which the main check wrote to the
-/// output folder, byte for byte; and the frames the video shows (<see cref="Mp4Input.ShownFrames"/>, which the last
-/// range runs to) must be the whole run's frame count.
+/// output folder, byte for byte, and so must the shots as JSON and HTML; and the frames the video shows
+/// (<see cref="Mp4Input.ShownFrames"/>, which the last range runs to) must be the whole run's frame count.
 /// </summary>
 internal static class RangeCheck
 {
@@ -42,6 +42,9 @@ internal static class RangeCheck
                     problems.Add("the scenes CSV DIFFERS");
                 if (stats != File.ReadAllText(baseName + ".stats.csv"))
                     problems.Add("the stats CSV DIFFERS");
+                var (json, html) = Runs.ShotFiles(merged);
+                if (json != File.ReadAllText(baseName + ".shots.json") || html != File.ReadAllText(baseName + ".shots.html"))
+                    problems.Add("the shots' JSON or HTML DIFFERS");
                 if (input.ShownFrames != merged.FrameCount)
                     problems.Add($"{merged.FrameCount} frames merged");
                 failures += problems.Count > 0 ? 1 : 0;

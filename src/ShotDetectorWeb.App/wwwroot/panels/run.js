@@ -1,16 +1,18 @@
 // The run, a card beside the video: its figures large (how many shots so far while it goes, then the shots, the cuts,
-// the length read and the options it ran with), and the downloads, the scene and stats CSVs as scenedetect writes them,
-// named after the file. A stopped run's are the result for the part read, and its figures say where it stopped. A run
-// lost with its worker (one that didn't answer a stop) says where it had got to and has no downloads (.NET and the
-// result went with the worker).
-import { card, on } from '../app.js';
+// the length read and the options it ran with), and the downloads, the scene and stats CSVs as scenedetect writes them
+// and the shots as ShotDetector's JSON and scenedetect's HTML page (Api's ShotsJson and ShotsHtml, asked for here once
+// the run is done), named after the file. A stopped run's are the result for the part read, and its figures say where
+// it stopped. A run lost with its worker (one that didn't answer a stop) says where it had got to and has no downloads
+// (.NET and the result went with the worker).
+import { call, card, on } from '../app.js';
 import { secondsOf, timecode } from '../timeline.js';
 
 const section = card('This run', {
   place: 'run',
   mark: 'exact',
-  markTitle: 'The shots and the CSVs are ShotDetector\'s, written as scenedetect writes them: the checks compare them ' +
-    'byte for byte with ShotDetector\'s FFmpeg path on every sample, natively and on WebAssembly',
+  markTitle: 'The shots, the CSVs, the JSON and the HTML are ShotDetector\'s, the CSVs and the HTML written as ' +
+    'scenedetect writes them: the checks compare them byte for byte with ShotDetector\'s FFmpeg path on every sample, ' +
+    'natively and on WebAssembly',
 });
 section.id = 'run';
 section.insertAdjacentHTML('beforeend', `
@@ -19,13 +21,16 @@ section.insertAdjacentHTML('beforeend', `
   <p class="downloads" hidden>
     <a id="scenes-csv" download>Scenes CSV</a>
     <a id="stats-csv" download>Stats CSV</a>
+    <a id="shots-json" download>Shots JSON</a>
+    <a id="shots-html" download>Shots HTML</a>
     <span class="note"></span>
   </p>`);
 const figures = section.querySelector('.figures'), summary = section.querySelector('#summary');
 const downloads = section.querySelector('.downloads'), what = downloads.querySelector('.note');
-const links = [section.querySelector('#scenes-csv'), section.querySelector('#stats-csv')];
+const links = ['#scenes-csv', '#stats-csv', '#shots-json', '#shots-html'].map(id => section.querySelector(id));
 let shots = [];
 let options = null; // the run's, as Api's Detect takes them (null for a default)
+let runs = 0; // counts the runs and files chosen, so a result asked for after one is done isn't shown under the next
 
 const count = n => `${n} ${n === 1 ? 'shot' : 'shots'}`;
 
@@ -61,10 +66,12 @@ function clear() {
 }
 
 on('chose', () => {
+  runs++;
   clear();
   options = null;
 });
 on('run', ({ options: o, ranges }) => {
+  runs++;
   clear();
   options = o;
   show(['0', 'shots so far'], ran());
@@ -77,7 +84,7 @@ on('shot', ({ shot }) => {
   shots.push(shot);
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} so far`], ran());
 });
-on('done', ({ video, result: r, name }) => {
+on('done', async ({ video, result: r, name }) => {
   clear();
   const rate = r.frameRate.num / r.frameRate.den, n = r.shots.length, cuts = Math.max(n - 1, 0);
   const fps = `${Number(rate.toFixed(3))} fps`;
@@ -95,11 +102,17 @@ on('done', ({ video, result: r, name }) => {
         `${r.duration != null ? `, ${r.duration} s` : ''}`],
       ran());
   }
-  const [scenes, stats] = links;
+  // The shots as JSON and HTML, of the run just done (the worker keeps its result until the next run).
+  const at = runs, json = await call('ShotsJson'), html = await call('ShotsHtml');
+  if (at !== runs) return;
+  const [scenes, stats, shotsJson, shotsHtml] = links;
   link(scenes, r.scenesCsv, `${name}.scenes.csv`);
   link(stats, r.statsCsv, `${name}.stats.csv`);
+  link(shotsJson, json, `${name}.shots.json`, 'application/json');
+  link(shotsHtml, html, `${name}.shots.html`, 'text/html');
   what.textContent = `${name}.scenes.csv and ${name}.stats.csv: the shots and each frame's scores, as scenedetect ` +
-    `writes them${r.stopped ? ', for the part read' : ''}.`;
+    `writes them; ${name}.shots.json and ${name}.shots.html: the shots as JSON and as scenedetect's HTML page` +
+    `${r.stopped ? '; all for the part read' : ''}.`;
   downloads.hidden = false;
 });
 on('cancelled', ({ video: { frameRate: { num, den } }, done, expected }) => {
@@ -112,7 +125,7 @@ on('cancelled', ({ video: { frameRate: { num, den } }, done, expected }) => {
     'The worker didn\'t answer the stop, so there are no downloads.';
 });
 
-function link(a, text, name) {
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+function link(a, text, name, type = 'text/csv') {
+  a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;
 }

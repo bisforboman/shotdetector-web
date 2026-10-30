@@ -30,7 +30,8 @@ itself", which lists the first release's page, not every page there will be. Sin
 module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
+derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
+exactness check speaks for.
 
 ## Waiting
 
@@ -164,10 +165,6 @@ file out of `samples/reject/`, and passes the native check.
 
 - Offline (a service worker caching the bundle)
   - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
-  - Status: Maybe
-
-- Shots as JSON and HTML
-  - Why: `Shots.Json` and `Shots.Html` exist; two more download buttons.
   - Status: Maybe
 
 - Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars

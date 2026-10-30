@@ -1,8 +1,9 @@
 // The native exactness check (README, "Checks"): for each sample, ShotDetectorWeb.Core's description of the video
 // (YuvVideo) against FFmpeg's (FrameReader's probe and first decoded frame, as ShotDetector's FrameInputTests builds it),
 // then every detector run on (a) the core library (ManagedCodecs + FastYuv) and (b) ShotDetector's Detect(path) with
-// FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV and stats CSV must be equal byte
-// for byte. Writes (a)'s CSVs to --out (the wasm check compares its own with them), (b)'s next to them where they differ.
+// FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV and the shots as JSON
+// and HTML (Shots.Json, Shots.Html: the page's other downloads) must be equal byte for byte. Writes (a)'s files to --out
+// (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check,
 // and its audio track's description (AudioStreamCheck.cs). And every sample's run with every detector split into ranges at
 // keyframes, scored on their own and merged, against the whole run (RangeCheck.cs). And the page's defaults, read from
@@ -37,8 +38,8 @@ Directory.CreateDirectory(outDir);
 FrameReader.FFmpegLibraries.Load(libs);
 int failures = 0;
 
-Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Stats CSV | Core time | FFmpeg time |");
-Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Stats CSV | Shots JSON, HTML | Core time | FFmpeg time |");
+Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 foreach (string sample in samples)
 {
     Mp4Input input;
@@ -48,7 +49,7 @@ foreach (string sample in samples)
     }
     catch (Exception e)
     {
-        Console.WriteLine($"| {Path.GetFileName(sample)} | - | - | - | open failed: {e.GetType().Name}: {e.Message} | | | | |");
+        Console.WriteLine($"| {Path.GetFileName(sample)} | - | - | - | open failed: {e.GetType().Name}: {e.Message} | | | | | |");
         failures++;
         continue;
     }
@@ -72,6 +73,10 @@ foreach (string sample in samples)
         string name = Path.Combine(outDir, Runs.BaseName(sample, run));
         File.WriteAllText(name + ".scenes.csv", scenes);
         File.WriteAllText(name + ".stats.csv", stats);
+        var (json, html) = Runs.ShotFiles(ours);
+        var (fileJson, fileHtml) = Runs.ShotFiles(file);
+        File.WriteAllText(name + ".shots.json", json);
+        File.WriteAllText(name + ".shots.html", html);
 
         var problems = new List<string>();
         if (!file.Video.DecodedInProcess)
@@ -88,15 +93,18 @@ foreach (string sample in samples)
             problems.Add("cuts");
         string scenesResult = scenes == fileScenes ? "same" : "DIFFERS";
         string statsResult = stats == fileStats ? $"same ({stats.Length:N0} bytes)" : "DIFFERS";
-        if (scenes != fileScenes || stats != fileStats || problems.Count > 0)
+        string shotsResult = (json == fileJson ? "same" : "JSON DIFFERS") + ", " + (html == fileHtml ? "same" : "HTML DIFFERS");
+        if (scenes != fileScenes || stats != fileStats || json != fileJson || html != fileHtml || problems.Count > 0)
         {
             failures++;
             File.WriteAllText(name + ".ffmpeg.scenes.csv", fileScenes);
             File.WriteAllText(name + ".ffmpeg.stats.csv", fileStats);
+            File.WriteAllText(name + ".ffmpeg.shots.json", fileJson);
+            File.WriteAllText(name + ".ffmpeg.shots.html", fileHtml);
         }
 
         string frames = problems.Count == 0 ? $"{ours.FrameCount}" : $"{ours.FrameCount} ({string.Join(", ", problems)})";
-        Console.WriteLine($"| {Path.GetFileName(sample)} | {run} | {frames} | {ours.Shots.Count} | {described} | {scenesResult} | {statsResult} | {oursTime.TotalSeconds:F2} s | {fileTime.TotalSeconds:F2} s |");
+        Console.WriteLine($"| {Path.GetFileName(sample)} | {run} | {frames} | {ours.Shots.Count} | {described} | {scenesResult} | {statsResult} | {shotsResult} | {oursTime.TotalSeconds:F2} s | {fileTime.TotalSeconds:F2} s |");
         described = "";
     }
 }
