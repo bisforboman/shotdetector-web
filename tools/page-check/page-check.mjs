@@ -9,6 +9,8 @@
 //      still, the button reading Resume), resumed, the same comparison, the sound measured;
 //   4. the demo detected again, paused and stopped while paused: it ends stopped at the pause it was held at, its
 //      stats CSV the native run's first rows up to there, the shots table a row per shot of its scenes CSV.
+// After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
+// colour bars, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>
@@ -185,6 +187,27 @@ async function paused(page, what, from) {
   return frame;
 }
 
+// The picture's card after a whole run: its cropdetect line and its colour bars the native check's
+// (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown.
+async function picture(page, what, file) {
+  const native = join(nativeDir, `${basename(file, '.mp4')}.picture.json`);
+  if (!existsSync(native)) {
+    fail(`${what}: no native ${native} (tools/check.sh native first)`);
+    return;
+  }
+  const p = JSON.parse(readFileSync(native, 'utf8'));
+  await page.waitForFunction(() => document.getElementById('picture')?.hidden === false &&
+    document.querySelector('#picture .note') !== null, null, { timeout: 60 * 1000 }).catch(() => {});
+  const text = await page.textContent('#picture') ?? '';
+  const crop = p.crop ? `crop=${p.crop.w}:${p.crop.h}:${p.crop.x}:${p.crop.y}` : 'Too few frames for cropdetect.';
+  const bars = (text.match(/Colour bars: \d/g) ?? []).length;
+  const lane = await page.locator('.track.picture svg').count();
+  if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
+    fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);
+  else
+    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, as the native check's`);
+}
+
 function lines(csv) {
   return csv.split(/\r?\n/).filter(line => line !== '');
 }
@@ -206,6 +229,7 @@ async function picked(query, what) {
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
     }
     await compare(page, what, basename(sample), run);
+    await picture(page, what, sample);
   }
   report(what, errors);
   await context.close();
@@ -225,6 +249,7 @@ try {
   }
   if (await finished(page, what) !== null) {
     await compare(page, what, 'sintel-trailer.mp4', run);
+    await picture(page, what, demo);
     // The sound's worker, alongside the run: done when the status no longer says it is measuring.
     await page.waitForFunction(() => !document.getElementById('status-text').textContent.includes('measuring the sound'),
       null, { timeout: 5 * 60 * 1000 });
