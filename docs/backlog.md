@@ -33,16 +33,6 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
-## Waiting
-
-The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
-[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
-[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
-asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
-in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
-3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
-ManagedCodecs#138's optional part, the row below.
-
 - Resume after Stop, across visits
   - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
     between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that
@@ -66,9 +56,23 @@ ManagedCodecs#138's optional part, the row below.
     the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
   - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
   - Depends on: "Long videos across several Web Workers".
-  - Status: Open: [shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598) shipped in ShotDetector
-    3.22.0 (`OnShot` on a range from frame 0, and overloads that continue a stopped run from the earlier ranges'
-    `RangeScores`), on main since 2026-10-30; decision `2026-10-30-resume-across-visits.md`
+  - Status: Open (2026-10-30: unblocked: ShotDetector 3.22.0 has `OnShot` on a range from frame 0 and
+    `ScoreRange`/`ScoreRangeAsync` overloads that continue a stopped run from the earlier `RangeScores`, telling only the
+    shots not yet confirmed ([shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598)), so "Live
+    shots"'s fallback isn't needed; with `OnShot` on the ranges, leave it out of `Merge` or the shots are told twice)
+
+## Waiting
+
+The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
+[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
+[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
+asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
+in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
+3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
+ManagedCodecs#138's optional part, the row below. Those filed on 2026-10-30,
+[shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597) and
+[#598](https://github.com/bisforboman/shotdetector/issues/598), shipped in ShotDetector 3.22.0 the same day: their rows
+are in Next again.
 
 - ManagedCodecs: a demuxer of the tracks asked for, packets without their data
   - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
@@ -85,6 +89,19 @@ ManagedCodecs#138's optional part, the row below.
   - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it); stays on 0.1.0
     (ManagedCodecs#206).
   - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
+    2026-10-30)
+
+- Frame types (I, P, B) on the strip
+  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
+    chose it on 2026-10-30.
+  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
+    exists inside the decoder, `SliceType` internal; neither 0.2.4 nor main has it, 2026-10-30), filed as
+    ManagedCodecs#221: each frame's type as FFmpeg's `pict_type`, checked against `ffprobe -show_frames`. Then here: a
+    lane of the frame types from the run's frames after `bitrate.js`'s keyframes lane, marked `core` with a
+    NativeCheck comparison against `ffprobe -show_frames` field by field, as `PacketCheck.cs`.
+  - Done when: a ManagedCodecs release has it, and the lane shows each frame's type, checked natively against ffprobe.
+  - Not: no parsing of slice headers here (CLAUDE.md: report it there, don't work around it).
+  - Status: Waiting on upstream ([ManagedCodecs#221](https://github.com/bisforboman/ManagedCodecs/issues/221), filed
     2026-10-30)
 
 ## Maybe
@@ -124,12 +141,6 @@ file out of `samples/reject/`, and passes the native check.
     none.
   - Where: each its own row when wanted; each needs a decision about what "the FFmpeg path's result" means for it.
   - Status: Maybe
-
-- Frame types (I, P, B) on the strip
-  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes.
-  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
-    exists inside the decoder); then here, after "Bitrate and keyframes".
-  - Status: Maybe (needs ManagedCodecs)
 
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
