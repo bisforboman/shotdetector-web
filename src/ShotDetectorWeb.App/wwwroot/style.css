@@ -167,9 +167,9 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
   grid-area: details; display: grid; gap: 1rem; align-items: start;
   grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
 }
-/* The details in the order a visitor wants them: the shots' figures, the sound, the bitrate, the file (the bitrate's
-   module comes earlier in index.html for its lane). */
-#details > #bitrate { order: 1; }
+/* The details in the order a visitor wants them: the shots' figures, the sound, the bitrate and the frame types, the
+   file (their modules come earlier in index.html for their lanes). */
+#details > #bitrate, #details > #frametypes { order: 1; }
 #details > #about { order: 2; }
 /* The video never so tall that the timeline leaves the first screen: what it gives up is letterboxed. */
 video {
@@ -287,6 +287,15 @@ video {
 #bitrate p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
 #bitrate .note { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
 #bitrate code { white-space: nowrap; }
+
+/* Frame types: a bar a frame on a <canvas>, I tall in the keyframes' colour, P shorter, B shortest (frametypes.js). */
+.track.frametypes, .lane-label.frametypes { height: 2rem; }
+.lane-label.frametypes { line-height: 2rem; }
+.track.frametypes { --type-i: var(--keyframe); --type-p: var(--accent); --type-b: color-mix(in srgb, var(--muted) 70%, transparent); }
+.track.frametypes canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#frametypes p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
+#frametypes .note { margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted); }
+#frametypes code { white-space: nowrap; }
 
 /* The picture: each frame's luma as a band (YMIN to YMAX) and a line (YAVG), the out-of-range ticks along the bottom
    (an SVG stretched over the frames read), the black spans and colour bars as marks over it; the measures' card. */
