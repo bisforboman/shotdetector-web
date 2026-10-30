@@ -143,6 +143,7 @@ let starts = [];        // each one's start in seconds, and its end
 let ends = [];
 let kept = null;        // the stopped run kept for the chosen file, to resume (KEPT's record), or null
 let resumeFrom = 0;     // the frame the current run's rest starts at when it resumes a stopped run, else 0
+let resumeAt = 0;       // and the frame the stopped run had got to: the rest scores again from its keyframe (from)
 
 const listeners = {};
 export function on(event, f) {
@@ -422,6 +423,7 @@ async function detect(resumed = null) {
 // that don't resume (another version's, say) are forgotten and the run detected from the start, saying why (restarted).
 async function go(run, plan, fallback = null, resumed = null, restarted = null) {
   const from = resumeFrom = resumed?.from ?? 0;
+  resumeAt = resumed?.frames ?? 0;
   framesDone = from;
   framesExpected = 0;
   // A resume on one worker tells the shots of the rest from the stopped part's last, cut short at the stop: the ones
@@ -441,7 +443,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   estimate = estimateText(opened, workers, threads, frames);
   estimated = estimateSeconds(opened, workers, threads, frames);
   const doing = fallback ? `${fallback} ${resumed ? 'Resuming' : 'Detecting again'} with one worker`
-    : resumed ? `Resuming from frame ${count(from)}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
+    : resumed ? `Resuming ${resumedFrom()}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
   say(`${doing} · about ${duration(estimated)} for ${count(frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
@@ -535,7 +537,8 @@ function forget() {
 }
 
 // The kept run shown again (a later visit, its file picked): Api's Merge of its scores alone, the stopped run's result,
-// shown as a stopped run's with Resume beside Detect. Scores that don't merge any more are forgotten.
+// shown as a stopped run's with Resume beside Detect. Scores that don't merge any more are forgotten. The file's sound is
+// measured as it would be for a run (listen).
 async function restore(record) {
   const video = opened;
   setForm(record.options);
@@ -554,6 +557,8 @@ async function restore(record) {
     return;
   }
   if (opened !== video || kept !== record) return;
+  // The sound is the file's, not the run's: measured alongside, as for a run.
+  listen();
   emit('run', { video, options: record.options, ranges: null, fallback: null, from: 0 });
   clearShots();
   result.hidden = false;
@@ -562,7 +567,7 @@ async function restore(record) {
   r.scenesCsv = await call('ScenesCsv');
   r.statsCsv = await call('StatsCsv');
   if (opened !== video) return;
-  resumeFrom = 0;
+  resumeFrom = resumeAt = 0;
   show(r, 0, 1, 1, record);
 }
 
@@ -897,8 +902,9 @@ function fail(message) {
 // restored: the kept record of a stopped run shown again (restore), not a run of this visit.
 function show(r, seconds, workers, threads, restored = null) {
   setState(r.stopped ? 'stopped' : 'done');
-  // A resumed run read its rest's frames (and those it scored again from a keyframe), not the stopped part's.
-  const ran = r.frameCount - resumeFrom;
+  // A resumed run read its rest's frames (and those it scored again from a keyframe), not the stopped part's: its speed
+  // and its times real time are of those (as the shot statistics' Run).
+  const ran = r.frameCount - resumeFrom, ranSeconds = ran * r.frameRate.den / r.frameRate.num;
   const rate = `${(ran / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`;
   const read = r.frameCount * r.frameRate.den / r.frameRate.num, at = `${timecode(read)}, frame ${count(r.frameCount)} ` +
@@ -911,10 +917,11 @@ function show(r, seconds, workers, threads, restored = null) {
   } : {
     text: r.stopped
       ? `Stopped at ${at}, after ${seconds.toFixed(1)} s (${rate}): Resume goes on from there`
-      : `Done in ${seconds.toFixed(1)} s, ${rate} (${(read / seconds).toFixed(1)} times real time)` +
-        `${resumeFrom > 0 ? `, resumed from frame ${count(resumeFrom)}` : ''}`,
-    title: `${count(ran)} frames, ${(ran * r.frameRate.den / r.frameRate.num).toFixed(3)} s of video, in ` +
-      `${seconds.toFixed(3)} s; ${estimate}`,
+      : `Done in ${seconds.toFixed(1)} s, ${rate} (${(ranSeconds / seconds).toFixed(1)} times real time)` +
+        `${resumeFrom > 0 || resumeAt > 0 ? `, resumed ${resumedFrom()}` : ''}`,
+    title: `${count(ran)} frames, ${ranSeconds.toFixed(3)} s of video, in ${seconds.toFixed(3)} s` +
+      `${resumeAt > resumeFrom ? `: from frame ${count(resumeFrom)}, the keyframe before the stop, where the rest ` +
+        'scores again for the frames that need those before them' : ''}; ${estimate}`,
   };
   say(listening ? `${shown.text} · measuring the sound…` : shown.text, shown.title);
   // A run of a few seconds is mostly start-up: too short to measure this browser's speed by; a split run's speed is
@@ -925,6 +932,13 @@ function show(r, seconds, workers, threads, restored = null) {
   clearShots();
   for (const shot of r.shots) addShot(shot);
   result.hidden = false;
+}
+
+// Where a resumed run went on: the frame its stopped part had got to, and the keyframe before it its rest scored again
+// from (Api's Kept: the last range start at or before the last frame scored), when that is earlier.
+function resumedFrom() {
+  return `from frame ${count(resumeAt || resumeFrom)}` +
+    `${resumeAt > resumeFrom ? ` (rescored from its keyframe, frame ${count(resumeFrom)})` : ''}`;
 }
 
 // The shot playing, a caption under the video: the last shot starting at or before the playhead, if the playhead is

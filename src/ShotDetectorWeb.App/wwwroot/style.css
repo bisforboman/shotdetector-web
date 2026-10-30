@@ -58,6 +58,9 @@ button {
 }
 button:disabled { opacity: 0.5; cursor: default; }
 button.quiet { background: transparent; color: var(--accent); }
+/* What deletes something (Forget: the kept run): no fill, the error's colour, so it never reads as the button to press. */
+button.danger { background: transparent; border-color: transparent; color: var(--error-fg); font-weight: normal; text-decoration: underline; }
+button.danger:hover { border-color: var(--error-fg); text-decoration: none; }
 button.link {
   padding: 0; border: none; background: none; color: var(--accent);
   font-weight: normal; text-decoration: underline;

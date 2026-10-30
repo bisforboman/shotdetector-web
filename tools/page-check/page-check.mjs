@@ -158,15 +158,57 @@ async function resumedAfterReload(page, what, frames, run, settle, threads) {
     await page.inputValue('#detector') !== run)
     fail(`${what}: after the reload, not the stopped run at frame ${frames} kept with Resume: ${status}`);
   await compare(page, `${what}, shown again`, 'sintel-trailer.mp4', run, frames);
+  await keptCards(page, `${what}, shown again`, frames);
   await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.kept.png`), fullPage: true });
   await page.click('#resume');
   const done = await finished(page, `${what}, resumed`);
   if (done === null) return;
-  if (!done.includes('resumed from frame') || THREADED.test(done) !== threads)
-    fail(`${what}: resumed, the status says ${done}`);
+  if (!resumedAt(done, frames) || THREADED.test(done) !== threads) fail(`${what}: resumed, the status says ${done}`);
+  await realTime(page, `${what}, resumed`, done);
   await compare(page, `${what}, resumed`, 'sintel-trailer.mp4', run);
   await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.resumed.png`), fullPage: true });
   if (await page.isVisible('#resume')) fail(`${what}: finished, Resume is still offered`);
+}
+
+// A resumed run's status names the frame the stopped run had got to, and the keyframe before it its rest scored again
+// from only as that, in brackets (app.js, resumedFrom): "resumed from frame 216 (rescored from its keyframe, frame 124)".
+function resumedAt(status, frames) {
+  const m = /resumed from frame ([\d,]+)(?: \(rescored from its keyframe, frame ([\d,]+)\))?/.exec(status);
+  const n = s => Number(s.replace(/,/g, ''));
+  return m !== null && n(m[1]) === frames && (m[2] === undefined || n(m[2]) < frames);
+}
+
+// A finished run's times real time, the status line's and the shot statistics' Run, the same figure: of the video the
+// run read (a resumed run's rest from its keyframe), not the whole video.
+async function realTime(page, what, status) {
+  const ours = /\(([\d.]+) times real time\)/.exec(status)?.[1];
+  const card = /([\d.]+) times real time/.exec(await page.textContent('#stats dl') ?? '')?.[1];
+  if (ours === undefined || ours !== card) fail(`${what}: the status says ${ours} times real time, the statistics ${card}`);
+  else console.log(`${what}: ${ours} times real time, in the status and the statistics`);
+}
+
+// The stopped run shown again (frames read): the sound measured as for a run, its card and waveform there (the demo
+// has AAC); the bitrate's cuts on keyframes and the statistics of the part read, the cut-short last shot in no length;
+// Forget not styled as a button to press.
+async function keptCards(page, what, frames) {
+  await page.waitForFunction(() => document.getElementById('sound')?.hidden === false &&
+    !document.getElementById('status-text').textContent.includes('measuring the sound'), null, { timeout: 5 * 60 * 1000 })
+    .catch(() => {});
+  if (await page.locator('#sound').isHidden() || await page.locator('.track.waveform svg').count() !== 1)
+    fail(`${what}: no sound card or waveform for the kept run`);
+  const bitrate = await page.textContent('#bitrate') ?? '';
+  const all = Number(/([\d,]+) keyframes?,?/.exec(bitrate)?.[1].replace(/,/g, ''));
+  const elsewhere = Number(/([\d,]+) keyframes? (?:is|are) at no cut/.exec(bitrate)?.[1]);
+  if (!bitrate.includes(`In the ${frames.toLocaleString('en')} frames read:`) || !(elsewhere < all - 1))
+    fail(`${what}: the bitrate card doesn't count the frames read: ${bitrate}`);
+  const stats = await page.textContent('#stats dl') ?? '', shots = Number(/^Shots(\d+)/.exec(stats)?.[1]);
+  if (!(shots > 0) || stats.includes(`(shot ${shots})`))
+    fail(`${what}: the statistics count the last shot, cut short at the stop, as a length: ${stats}`);
+  const style = id => page.$eval(id, b => { const s = getComputedStyle(b); return [s.backgroundColor, s.color, s.borderColor]; });
+  const [forget, detect, resume] = [await style('#forget'), await style('#detect'), await style('#resume')];
+  if (forget[0] !== 'rgba(0, 0, 0, 0)' || forget[1] === detect[1] || forget[1] === resume[1])
+    fail(`${what}: Forget is styled as Detect or Resume: ${forget} against ${detect} and ${resume}`);
+  console.log(`${what}: the sound measured, the bitrate and the statistics of the ${frames} frames read, Forget quiet`);
 }
 
 // The page cross-origin isolated: on a first visit, once sw.js has taken over and the page has reloaded (app.js, serve).
@@ -319,6 +361,9 @@ async function picture(page, what, file) {
   const crop = p.crop ? `crop=${p.crop.w}:${p.crop.h}:${p.crop.x}:${p.crop.y}` : 'Too few frames for cropdetect.';
   const bars = (text.match(/Colour bars: \d/g) ?? []).length;
   const lane = await page.locator('.track.picture svg').count();
+  // Each line a sentence of its own: none goes on from the one before (as "and 3 shorter" after "none").
+  const dangling = await page.$$eval('#picture p', ps => ps.map(p => p.textContent).filter(t => /^(and|or|but) /.test(t)));
+  if (dangling.length > 0) fail(`${what}: the picture's card has lines that aren't sentences: ${dangling.join(' | ')}`);
   if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);
   else
@@ -416,12 +461,14 @@ try {
     const what = 'the demo on two workers, resumed';
     const { context, page, errors } = await open('?workers=2');
     await page.click('#demo');
-    if (await stopped(page, `${what}, stopped`, 0.4) !== null) {
+    const frames = await stopped(page, `${what}, stopped`, 0.4);
+    if (frames !== null) {
       await page.click('#resume');
       const status = await finished(page, what);
       if (status !== null) {
-        if (!/with 2 workers/.test(status) || !status.includes('resumed from frame'))
-          fail(`${what}: not resumed on 2 workers: ${status}`);
+        if (!/with 2 workers/.test(status) || !resumedAt(status, frames))
+          fail(`${what}: not resumed on 2 workers from frame ${frames}: ${status}`);
+        await realTime(page, what, status);
         await compare(page, what, 'sintel-trailer.mp4', await page.inputValue('#detector'));
       }
     }

@@ -101,17 +101,20 @@ function show(p) {
 }
 
 // How many cuts fall on a keyframe: a cut does when its shot's first frame is a keyframe (the frames in display order;
-// a shot's startFrame counts them from 1, as scenedetect's CSV does).
-function showCuts(shots) {
+// a shot's startFrame counts them from 1, as scenedetect's CSV does). A stopped run's are of the frames it read (frames:
+// its frame count), the keyframes after them left out.
+function showCuts(shots, frames, stopped) {
   if (!packets) return;
-  const keyFrames = new Set(packets.keys.map(k => k.frame));
+  const keys = packets.keys.filter(k => k.frame < frames), keyFrames = new Set(keys.map(k => k.frame));
   const starts = shots.filter(s => s.shot > 1).map(s => s.startFrame - 1);
   const at = new Set(starts), on = starts.filter(f => keyFrames.has(f)).length;
-  const elsewhere = packets.keys.filter(k => k.frame !== 0 && !at.has(k.frame)).length;
+  const elsewhere = keys.filter(k => k.frame !== 0 && !at.has(k.frame)).length;
+  const part = stopped ? `In the ${frames.toLocaleString('en')} frames read: ` : '';
   cuts.replaceChildren(own(
-    `${on} of ${starts.length} ${starts.length === 1 ? 'cut falls' : 'cuts fall'} on a keyframe; ` +
+    `${part}${on} of ${starts.length} ${starts.length === 1 ? 'cut falls' : 'cuts fall'} on a keyframe; ` +
     `${elsewhere} ${elsewhere === 1 ? 'keyframe is' : 'keyframes are'} at no cut (the first frame's aside).`,
-    'The page\'s reading: a cut falls on a keyframe when its shot\'s first frame is one'));
+    'The page\'s reading: a cut falls on a keyframe when its shot\'s first frame is one' +
+    `${stopped ? '; the run stopped, so only the keyframes in the part it read count' : ''}`));
 }
 
 function clear() {
@@ -143,7 +146,9 @@ on('opened', async ({ video }) => {
   bitrateLane.draw();
 });
 on('run', () => cuts.replaceChildren());
-on('done', ({ video, result }) => { if (video === opened) showCuts(result.shots); });
+on('done', ({ video, result }) => {
+  if (video === opened) showCuts(result.shots, result.frameCount, result.stopped);
+});
 
 function own(text, title) {
   const span = document.createElement('span');
