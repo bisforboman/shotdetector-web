@@ -69,7 +69,8 @@ dot where each cut sits on it, and the spans where `content_val` stays under 1 f
 pictures, the page's reading), the picture (each frame's luma, its lowest to highest as a band and its mean as a line,
 the black spans shaded, the colour bars marked, a tick where pixels leave broadcast range: `Api.Picture`, every run's;
 "The picture", below), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
-the MP4's packets (`Api.Packets`; Using the library, below), and, alongside the file's first run, the sound: its
+the MP4's packets (`Api.Packets`; Using the library, below), after a run each frame's type, I, P or B, as the decoder
+gives it (`Api.FrameTypes`, every run's: FFmpeg's `pict_type`, kept with the picture's measures), and, alongside the file's first run, the sound: its
 waveform, decoded in a worker of its own by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). The page
 is laid out as decision `2026-10-26-new-ui.md` chose: once a file is picked, the landing folds into a toolbar (the
@@ -529,7 +530,10 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
-  lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's run with all five detectors split
+  lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
+  (`PictureMeasures.Types`, ManagedCodecs' `VideoFrame.PictureType`) against `ffprobe -show_frames -show_entries
+  frame=pict_type`, frame by frame in display order, an MJPEG sample's all I, whole, on four decoder threads and in
+  ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each sample's run with all five detectors split
   into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
   the same run decoded on four threads (`VideoInput.DecoderThreads`, as the page's threaded runtime decodes), whole, in
@@ -586,7 +590,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   gap, each edge within a video frame, and that each waveform's values are within 1 of the
   native check's (`out/native/<sample>.waveform.json`: the same managed code, another runtime), that `Packets()` (the
   bitrate lane's) lists every sample's video packets as ffprobe does (`out/native/<sample>.packets.txt`): the same
-  packets in the same order, each with the same pts, pts_time, size and K and D flags, that `Picture()` after a whole
+  packets in the same order, each with the same pts, pts_time, size and K and D flags, that `FrameTypes()` after a
+  whole run is ffprobe's types as the native check wrote them (`out/native/<sample>.frametypes.txt`), after a split
+  run's merge the whole run's, after a stopped run the whole run's first frames, that `Picture()` after a whole
   run is the native check's `out/native/<sample>.picture.json` exactly, after a split run's merge the whole run's, and
   after a stopped run (one worker or split) the frames its result read, and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
@@ -711,9 +717,10 @@ its position and how far apart the values are: "identical" is a comparison that 
 ## Packages
 
 ShotDetector and ShotDetector.FastYuv (3.22.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
-ManagedCodecs (0.2.4: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
-pinning `ManagedCodecs.Core` at its own version; on nuget.org since 0.1.0, 2026-10-28, until then a git submodule
-referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3)
+ManagedCodecs (0.3.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
+nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
+under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
