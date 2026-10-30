@@ -118,8 +118,7 @@ are in Next again.
     NativeCheck comparison against `ffprobe -show_frames` field by field, as `PacketCheck.cs`.
   - Done when: a ManagedCodecs release has it, and the lane shows each frame's type, checked natively against ffprobe.
   - Not: no parsing of slice headers here (CLAUDE.md: report it there, don't work around it).
-  - Status: Waiting on upstream ([ManagedCodecs#221](https://github.com/bisforboman/ManagedCodecs/issues/221), filed
-    2026-10-30)
+  - Status: In progress (2026-10-30; ManagedCodecs 0.3.0 has it, ManagedCodecs#221)
 
 - Deinterlacing interlaced H.264
   - Why: broadcast material is interlaced; MBAFF video is detected on its woven frames since the "Interlaced H.264"
