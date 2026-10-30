@@ -70,12 +70,13 @@ const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
 // 2026-10-30-threads.md): the threaded runtime on the page's own thread (threads.js) with as many decoder threads as the
 // machine has cores, at most MOST_THREADS (6 did no better than 4 on 4 cores). The page's address can say how many
 // (?threads=N; 0 or 1: the page's worker, as where the page isn't isolated). How many times as fast as the page's
-// worker, for the estimate: measured on Sintel's trailer at 854x480 and 1280x720 on a 4-core machine (2 and 4; 3 in
-// between, not measured).
+// worker, for the estimate: measured on the page with Sintel's trailer (854x480, AOT, headless Chromium, a 4-core cloud
+// VM, the median of five interleaved rounds, 2026-10-30: 13.7 s, 9.6 s on 2 threads, 8.5 s on 4; 3 in between, not
+// measured). At 1280x720 the gain is larger (19.1 s to 10.3 s on 4).
 const MOST_THREADS = 4;
 const ASKED_THREADS = new URLSearchParams(location.search).has('threads')
   ? Number(new URLSearchParams(location.search).get('threads')) || 1 : null;
-const THREADS_SPEEDUP = { 2: 1.9, 3: 2.3, 4: 2.6 };
+const THREADS_SPEEDUP = { 2: 1.43, 3: 1.52, 4: 1.61 };
 
 // ShotDetector's default threshold for each detector, prefilled when one is picked: the one a run without a threshold
 // compares against (scenedetect 0.7.2's, DetectionOptions.Compatibility's default; histogram and hash were 0.05 and
@@ -457,6 +458,11 @@ async function threadedRunner(threads) {
   if (!threaded) {
     const r = threaded = new ThreadedRunner(threads);
     r.onmessage = ({ data }) => { if (!ended.has(r)) fromWorker[data.type]?.(data); };
+    // Its runtime ended: its calls fail with why (the run's, shown as the page's error), and threads are off.
+    r.onerror = ({ message }) => {
+      if (threaded === r) threaded = threadedOpen = null;
+      end(r, new Error(message));
+    };
   }
   if (threadedOpen !== opened) {
     try {

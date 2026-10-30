@@ -115,7 +115,9 @@ sealed partial class BlobStream : Stream
             int read = Host.Wait(async () =>
             {
                 using var bytes = await ReadAsync(blob, position, length);
-                return Copy(bytes, new ArraySegment<byte>(slice, 0, length));
+                // A Span's view lives for the call only; an ArraySegment's is pinned behind a handle that, released
+                // later by the collector on another thread, ends the threaded runtime (seen 2026-10-30).
+                return Copy(bytes, slice.AsSpan(0, length));
             });
             slice.AsSpan(0, read).CopyTo(destination);
             return read;
@@ -132,7 +134,7 @@ sealed partial class BlobStream : Stream
 
     /// <summary>Copies <paramref name="bytes"/> (a <c>Uint8Array</c>) into <paramref name="destination"/>: how many.</summary>
     [JSImport("copy", "host")]
-    private static partial int Copy(JSObject bytes, [JSMarshalAs<JSType.MemoryView>] ArraySegment<byte> destination);
+    private static partial int Copy(JSObject bytes, [JSMarshalAs<JSType.MemoryView>] Span<byte> destination);
 #else
     /// <summary>Reads <paramref name="destination"/>'s length of bytes of <paramref name="blob"/> at <paramref name="position"/> (fewer at its end): how many.</summary>
     [JSImport("read", "host")]

@@ -4,8 +4,9 @@
 // the exports on a thread of its own and the run on its thread pool (Host.cs), so the page stays responsive. A runner
 // looks like worker.js to app.js: postMessage the same messages, onmessage the same answers and progress, shots and
 // 'held'. Only Open, Detect, the last run's result (RESULTS), Stop and Cancel are called here (the threaded exports,
-// Api.Threads.cs); everything else stays with the page's worker. Unlike a worker it can't be terminated: a runner that is ended is
-// abandoned (its run cancelled) and, the runtime being one per page, no threaded run starts again before a reload.
+// Api.Threads.cs); everything else stays with the page's worker. Unlike a worker it can't be terminated: a runner that
+// is ended is abandoned (its run cancelled) and, the runtime being one per page, no threaded run starts again before a
+// reload; one whose runtime ends calls its onerror, as a worker that dies does.
 import { hold, pause, release, whenHeld } from './pause.js';
 import { append, blob, parts } from './blob-write.js';
 
@@ -28,7 +29,14 @@ export const threadsUsable = () => globalThis.crossOriginIsolated === true && !b
 function start() {
   api ??= (async () => {
     const { dotnet } = await import('./threads/_framework/dotnet.js');
-    const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet.create();
+    // A runtime that ends (an abort, an exit) takes its runs with it: the runner fails, as a worker that dies does.
+    const died = message => {
+      broken = true;
+      current?.onerror?.({ message: `The threaded runtime stopped: ${message}`, preventDefault() {} });
+    };
+    const { setModuleImports, getAssemblyExports, getConfig, runMain } = await dotnet
+      .withModuleConfig({ onAbort: reason => died(String(reason?.message ?? reason)), onExit: code => died(`exit ${code}`) })
+      .create();
     setModuleImports('host', {
       progress: (done, expected) => current?.tell({ type: 'progress', done, expected }),
       shot: json => current?.tell({ type: 'shot', shot: JSON.parse(json) }),
