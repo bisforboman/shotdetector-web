@@ -45,7 +45,7 @@ python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/ww
 Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does). The
 page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeline.js` and a module per panel in
 `panels/`, native ES modules with no build step and no dependencies; `worker.js` owns the .NET runtime and calls the
-exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
+exports the page names, `blob-read.js` reads the picked file for it and `blob-write.js` makes the stats CSV's `Blob`. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it), the minimum shot length and, for adaptive, its window
 and minimum content_val (scenedetect's `window_width` and `min_content_val`, prefilled 2 and 15; issue #50), and
 detect. Under the player
@@ -477,8 +477,8 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
   - **page** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
     `versions.js`, `worker.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
     `app.js` among it, then the page in Chromium on an interpreted publish (`tools/check.sh page`);
-  - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js` and
-    `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
+  - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js`,
+    `blob-write.js` and `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
     All of it is: native on every sample;
   wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
   shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly
