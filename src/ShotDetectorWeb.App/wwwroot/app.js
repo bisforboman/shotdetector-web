@@ -40,9 +40,10 @@ import { secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
-// (854x480, the AOT build Pages serves, headless Chromium on a 4-core cloud VM, 2026-10-25): REFERENCE_FPS frames per
-// second at 854x480.
-const REFERENCE_FPS = 46;
+// (854x480, the AOT build Pages serves, headless Chromium on a 4-core cloud VM, the median of three, 2026-10-30):
+// REFERENCE_FPS frames per second at 854x480. A two-hour film at 640x360 goes a little faster per pixel (start-up
+// weighs less), so its first estimate is about 16% long on that VM (README "Large files").
+const REFERENCE_FPS = 64;
 const REFERENCE_PIXELS_PER_SECOND = REFERENCE_FPS * 854 * 480;
 const RATE_KEY = 'pixelsPerSecond';
 
