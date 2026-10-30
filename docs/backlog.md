@@ -198,15 +198,6 @@ file out of `samples/reject/`, and passes the native check.
   - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
   - Status: Maybe
 
-- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
-  - Why: the picture side of a check before delivery, next to the audio measures: where it goes to black, how bright
-    each frame is, whether luma leaves 16 to 235, whether there are black bars, whether there are colour bars at the
-    head (with the reference tone, "bars and tone"). Each one has an FFmpeg filter to compare with (`blackdetect`,
-    `signalstats`, `cropdetect`).
-  - Where: a pass over each frame's Y plane as `Mp4Input.Frames` yields it, alongside detection, so it adds time to
-    every run (measure how much before deciding). The owner filed it as a Maybe (2026-10-24).
-  - Status: Maybe
-
 - Frame types (I, P, B) on the strip
   - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes.
   - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
