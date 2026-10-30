@@ -55,8 +55,9 @@ public sealed partial class Mp4Input
         if (!sps.FrameMbsOnly)
             throw new UnsupportedVideoException("The video is interlaced (field or MBAFF coding): not supported yet.");
 
-        // One demuxer for the first frame and the format's duration: building its sample index allocates about 275 bytes
-        // a sample, which the browser's heap keeps once it has grown (README, "Large files").
+        // One demuxer for the first frame and the format's duration: building its sample index allocates about 77 bytes
+        // a sample and keeps 29 (ManagedCodecs 0.1.0), which the browser's heap keeps once it has grown (README, "What the
+        // heap holds").
         using var demuxer = new Mp4Demuxer(stream, leaveOpen: true);
 
         // The first frame's size (after the SPS's cropping) and timestamp: in display order, the smallest pts, which is

@@ -167,7 +167,9 @@ Node, each range's runtime on its own, the same bundle): 174 MB once it has open
 sample index (What the heap holds, below), and 208 MB at the end of its range, as a one-worker run's; the merge, in the
 page's own worker, took 1.5 s for the four ranges' 16.8 MB and left its heap as it was. So each worker costs about
 190 to 300 MB of renderer on a two-hour film, most of it the index every runtime builds again (measured with the
-submodule's 2026-10-24 commit; backlog, Next: "ManagedCodecs: the MP4 index without its copies"). On Sintel's 52 s
+submodule's 2026-10-24 commit). With ManagedCodecs 0.1.0's sample table (2026-10-29, What the heap holds) a worker
+scoring the last of four ranges has 84 MB once it has opened the file and 121 MB at the end of its range, as a
+one-worker run's again; the renderer was not measured again. On Sintel's 52 s
 trailer splitting paid too: 19.0 s on one worker, 11.1 s on two, 10.0 s on three, 6.7 s on four (the median of two
 each; the three ranges at keyframes are less equal than the four), each worker about 100 MB more of renderer; below 2
 minutes the page keeps one worker anyway, for its live shots (the decision's "As measured").
@@ -230,10 +232,42 @@ frame, but in room the heap already has on this film: the demuxer's index alloca
 audio, and keeps a fifth of it). In headless Chromium as in the table above, the control's run ended with a wasm heap of
 432 MB on 2026-10-25 (734 MB before) and the renderer's peak at 788 MB (1,043 MB), the same 1,105 shots; with 3.16.1 the
 heap ends where the run leaves it, 208 MB under Node. The CSVs are unchanged (`tools/check.sh`). What was left shipped
-upstream on 2026-10-27 and 2026-10-28 (ShotDetector 3.20.0's `Stats.WriteCsv`, ManagedCodecs 0.1.0's sample table
-built once at its final size) and waits to be used and measured here (backlog, Next).
+upstream on 2026-10-27 and 2026-10-28: ShotDetector 3.20.0's `Stats.WriteCsv`, which waits to be used here (backlog,
+Next), and ManagedCodecs 0.1.0's sample table, below.
 
-An open file also holds its video packet list (`Mp4Input.Packets`, below; in the 2026-10-26 numbers): 13 bytes a frame,
+ManagedCodecs 0.1.0, the package since 2026-10-28, keeps each track's samples in columns, 29 bytes a sample, built once
+at their final size ([ManagedCodecs#123](https://github.com/bisforboman/ManagedCodecs/pull/123), from
+[#138](https://github.com/bisforboman/ManagedCodecs/issues/138)). Measured 2026-10-29 the same way, under Node on the
+AOT bundle, adaptive with stats, on the control made again by its recipe (172,800 frames, 337,362 audio packets, 1,804
+keyframes, 346,573,946 bytes, 1,197 shots: x264's output differs a little from one build to the next). The two bundles
+ran side by side on one 4-core cloud VM: `main` just before the package (the submodule's 2026-10-24 commit, ShotDetector
+3.16.1) and `main` with it (ShotDetector 3.20.0). Opening was measured three times each and the run twice, the heap the
+same to the megabyte every time. The VM is shared and the bundles ran at once, so their run times say nothing about
+speed. Natively, `GC.GetTotalAllocatedBytes` and `GC.GetTotalMemory` around `new Mp4Demuxer` showed the same numbers
+on each of three runs.
+
+| Step | Wasm heap, submodule | Wasm heap, 0.1.0 | What changed |
+| --- | --- | --- | --- |
+| The runtime started | 34 MB | 34 MB | |
+| The file opened | 174 MB | 84 MB | `Mp4Demuxer`'s index of the 510,162 samples, video and audio: 138.9 MB allocated and 28.6 MB kept before (273 and 56 B a sample), 39.4 MB and 14.8 MB now (77 and 29 B) |
+| The packets (`Packets()`, as the page calls it once opened) | 174 MB | 100 MB | the 2,263,545-character JSON: room the heap had before, 16 MB more now |
+| The run (`Detect`) | 208 MB | 121 MB | the run's own demuxer (both tracks indexed again) and decoder, ShotDetector's stats |
+| The scenes CSV (`ScenesCsv()`) | 208 MB | 121 MB | 115,095 characters |
+| The stats CSV (`StatsCsv()`) | 208 MB | 151 MB | the 20.0-million-character string and its `StringBuilder`: room the heap had before, 30 MB more now (`Stats.WriteCsv`, backlog) |
+
+So a two-hour film's peak went from 208 to 151 MB, and a split run's worker from 208 to 121 MB. #138 asked for three
+things: each track's samples filled once and a smaller sample, both shipped, and, optionally, only the tracks asked
+for, which did not ship: the demuxer indexes video and audio whatever its caller reads (the opening pass needs both
+tracks for the format's duration, but the run's demuxer needs only the video). Measuring turned up a fourth:
+`ReadPackets` allocates a new array for every packet's data, even when the caller wants only the timing. Opening's
+duration pass skips the reads, so 342 MB of zeroed arrays come out of `Open`'s 405 MB allocated natively, and a run
+allocates (and throws away) the audio track's 115 MB. Both were tried in a local build of 0.1.0, patched: the run's
+demuxer indexing the video track only, and the duration pass's packets in one reused buffer. Natively `Open` then
+allocates 51 MB instead of 405, but the wasm heap stays where it is: 84 MB opened, 121 MB after the run (146 MB after
+the stats CSV instead of 151). The arrays die young and are collected before the heap has to grow. For the heap #138
+is answered; the rest is allocation, an issue for upstream at low priority (backlog, Waiting).
+
+An open file also holds its video packet list (`Mp4Input.Packets`, below; in the numbers above): 13 bytes a frame,
 2.25 MB on a two-hour film.
 
 ## Size
