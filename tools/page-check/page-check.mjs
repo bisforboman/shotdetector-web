@@ -217,7 +217,8 @@ async function keptCards(page, what, frames) {
 // details with more than about 100 px of empty height under it (the other column's longer); every shot's row in view
 // of the shots card, no inner scroll, at 15 shots or fewer; no red in a lane (the timeline's tracks: their elements'
 // colours, the SVGs' strokes and fills, the canvases' pixels) but the playhead's; the run card's figures in the first
-// screen. Then the page as a visitor sees it, at 1280x800 and 390x844, light and dark: <out>/<name>.<width>.<scheme>.png.
+// screen. Then the page as a visitor sees it, at 1280x800 and 390x844, light and dark: <out>/<name>.<width>.<scheme>.png,
+// nothing in it wider than the window or than its card.
 const VIEWS = [[1280, 800], [390, 844]];
 async function looks(page, what, name) {
   const size = page.viewportSize();
@@ -279,6 +280,11 @@ async function looks(page, what, name) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.waitForTimeout(500);
       await page.screenshot({ path: join(outDir, `${name}.${width}.${scheme}.png`), fullPage: true });
+      // Nothing wider than the window, nor than its card (the shots table at phone width).
+      const wide = await page.evaluate(() => [document.documentElement, ...document.querySelectorAll('.card')]
+        .filter(e => e.offsetParent !== null || e === document.documentElement)
+        .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.id || e.tagName));
+      if (scheme === 'light' && wide.length > 0) fail(`${what}: wider than the window or its card at ${width} px: ${wide.join(', ')}`);
     }
   }
   await page.setViewportSize(size ?? { width: 1280, height: 720 });

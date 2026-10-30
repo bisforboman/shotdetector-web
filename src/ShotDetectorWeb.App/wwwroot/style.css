@@ -167,7 +167,8 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
 #timeline { grid-area: timeline; }
 #below { grid-area: below; display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; }
 #below > .card { flex: 1 1 30rem; min-width: 0; }
-#below > #stats { flex: 0 1 18rem; }
+#below > #stats { flex: 0 1 18rem; position: sticky; top: 1rem; }
+@media (max-width: 48rem) { #below > #stats { flex: 1 1 100%; position: static; } }
 /* The details as two columns the browser balances, each card whole in one (a grid's rows left holes beside a short
    card); one column at phone width. In index.html's order, down the first column, then the second. */
 #details { grid-area: details; columns: 2 22rem; column-gap: 1rem; }
@@ -336,6 +337,9 @@ video {
 #about dl { display: grid; grid-template-columns: auto 1fr; gap: 0 1rem; margin: 0; font-variant-numeric: tabular-nums; }
 #about dt { color: var(--muted); }
 #about dd { margin: 0; overflow-wrap: anywhere; }
+/* Its short rows two to a line where the card is wide (the details' two columns), so it is about as tall as its
+   neighbours and the columns balance. */
+@media (min-width: 60rem) { #about dl { grid-template-columns: auto 1fr auto 1fr; } }
 #about details { margin-top: 0.5rem; font-size: 0.85rem; }
 #about summary { color: var(--accent); cursor: pointer; }
 #about pre { max-height: 20rem; overflow: auto; margin: 0.25rem 0 0; padding: 0.5rem; background: var(--bg); border-radius: 0.25rem; }
@@ -371,8 +375,9 @@ tbody tr.unfinished td { border-bottom-style: dashed; }
 #shots .thumb canvas { display: block; width: 100%; height: 100%; }
 @media (max-width: 30rem) {
   #shots th:nth-last-child(2), #shots td:nth-last-child(2) { display: none; }
-  #shots th.still, #shots td.still { width: 6rem; }
-  #shots .thumb { width: 6rem; }
+  #shots th.still, #shots td.still { width: 4.5rem; }
+  #shots .thumb { width: 4.5rem; }
+  #shots th, #shots td { padding-inline: 0.3rem; }
 }
 
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
