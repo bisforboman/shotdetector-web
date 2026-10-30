@@ -689,3 +689,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     517 s for a 492.1 s run of the two-hour film on 3 workers (the page's choice there); against the medians of three,
     1% short and 16% long. GitHub's runner ran the trailer at 151 fps the same day; the owner chose this VM's rate.
     README "Large files")
+
+- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
+  - Why: the picture side of a check before delivery, next to the audio measures.
+  - Status: Done (2026-10-30: decision [2026-10-30-picture-measures.md](decisions/2026-10-30-picture-measures.md),
+    the owner's answers: all five, in every run in the same pass, checked exactly. `PictureMeter` measures each frame
+    as a run reads it, about 2% of a run (0.12 ms a frame natively, 0.27 ms AOT at 854x480); a split run's ranges carry
+    theirs in `RangeBytes`. `PictureCheck.cs`: signalstats and cropdetect per frame, cropdetect's whole crop and
+    blackdetect at d=0 and 2 s equal FFmpeg 8.1's on all 11 samples; the colour bars by their definition where
+    make-samples.sh puts them and nowhere else; the ranges joined the whole run's byte for byte. app-check.mjs:
+    `Picture()` the native JSON interpreted and AOT; page-check.mjs: the card's crop and bars. The page: a Picture lane
+    and card, marked measured)

@@ -32,21 +32,6 @@ shots strip", read a lane of the timeline. The waveform, audio measures and bitr
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
 derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
 
-- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
-  - Why: the picture side of a check before delivery, next to the audio measures: where it goes to black, how bright
-    each frame is, whether luma leaves 16 to 235, whether there are black bars, whether there are colour bars at the
-    head (with the reference tone, "bars and tone"). Each one but the bars has an FFmpeg filter to compare with
-    (`blackdetect`, `signalstats`, `cropdetect`).
-  - Where: a pass over each decoded frame as `Mp4Input.Frames` yields it, alongside detection; a lane and a card
-    (`mark: 'measured'`), and a NativeCheck comparison with FFmpeg's filters, as `AudioCheck.cs`. Measured and laid out
-    in decision [2026-10-30-picture-measures.md](decisions/2026-10-30-picture-measures.md) (about 2% of a run, natively
-    and AOT; the prototype's figures FFmpeg's on every frame); which measures, where they run and how strictly they are
-    checked are the owner's answers there.
-  - Done when: the measures chosen are on the page from a run, split runs and stopped runs included, and NativeCheck
-    and app-check.mjs compare them with FFmpeg's on every sample as the decision says.
-  - Not: the CSVs and the shots (the pass only reads the frames).
-  - Status: In progress (2026-10-30). The owner chose it from Maybe on 2026-10-30.
-
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
