@@ -633,3 +633,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     tier for the page's own files, and on the AOT bundle in the full run and `pages.yml`. A copy of the bundle whose
     `app.js` changes the scenes CSV fails all three whole runs, one whose Pause doesn't pause the worker fails the
     pause)
+
+- The frame a paused run is held at
+  - Why: paused, the status says "Paused at frame N" from the last `progress` (frames processed), but the run is held
+    at its next pause, by frames read, up to 8 frames on (Api's `PauseEvery`): stopped there, the result says another
+    frame (seen 2026-10-29 by `tools/page-check` on the AOT bundle: "Paused at frame 196", stopped at frame 200).
+  - Where: `app.js`'s paused status, and the `pause(framesRead)` import (`pause.js`, `worker.js`), which knows the frame
+    the run waits at; README "Pausing a run".
+  - Done when: the paused status names the frame a stop would end at; `tools/page-check` holds the stop to it exactly.
+  - Not: the stopped result, which is right.
+  - Status: Done (2026-10-30: `pause.js` tells the frames read at the pause a held run waits at (`whenHeld`), the
+    worker posts it as `held`, and the paused status of a one-worker run names it; a split run's says "about", its
+    ranges counting from their keyframes. `tools/page-check` now requires the stop to end at exactly that frame)

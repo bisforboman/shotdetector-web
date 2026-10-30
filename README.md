@@ -117,7 +117,9 @@ resume a run"). The worker's `pause` makes `pause.js` keep the promise `Detect` 
 (`hold`), and `resume` resolves it (`release`): .NET simply waits, nothing cancelled or ended, so the result is the one
 the run would have had. Every worker of a split run is paused; the sound's worker goes on (its one pass has no
 pauses). The bar and the status hold still, and the run's time, its frames per second and the rate the browser keeps
-for its estimate leave the pause out. Stop works while paused: the worker's `stop` tells .NET first, then releases the
+for its estimate leave the pause out. On one worker the status names the frame the run is held at, which the worker
+tells once it gets there (`held`: the frames read at that pause, up to 8 past the last progress), so a stop ends
+there; split, it says "about" the ranges' progress added up. Stop works while paused: the worker's `stop` tells .NET first, then releases the
 run, which ends at the pause it waits at. `tools/app-check.mjs` holds every sample's default run half-way for 150 ms,
 fails on any progress meanwhile, and compares the resumed run's CSVs and shots with the run never paused; on the first
 sample a run stopped while paused ends at the frame it was paused at. Seen 2026-10-29 in headless Chromium on Sintel's
