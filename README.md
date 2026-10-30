@@ -199,6 +199,20 @@ returns, which V8 frees late while .NET holds the thread). Before the duration p
 the same file took 43 s and peaked the renderer at 1.7 GB. The estimate before the big file's run said 35 min (the
 reference rate scaled by picture size); the next run in the same browser uses its own measured rate.
 
+The reference rate (`REFERENCE_FPS`, a first visit's estimate) was measured again on 2026-10-30, after ShotDetector
+3.20.0, ManagedCodecs 0.1.0, FrameReader 2.15.0, pause and resume and the stills per shot: the AOT bundle in headless
+Chromium on the 4-core cloud VM, each run a first visit (a fresh context), the trailer and the two-hour control above
+(made again by its recipe: 172,800 frames, 345,645,821 bytes) alternating. The trailer took 20.4, 18.6, 19.7 and
+19.4 s (61 to 67 frames per second, the median of the first three 64, now `REFERENCE_FPS`; it was 46); the control,
+split as the page chose (3 workers), 445.4, 467.2 and 442.2 s (370 to 391 frames per second), and on one worker
+1,258.7 s (137). Per pixel the film goes about 16% faster than the trailer, whose run is short enough for start-up to
+weigh. With 64, a first visit said "about 20 s" (19.6 s) for a trailer run of 20.5 s and "about 9 min" (517 s) for a
+film run of 492.1 s with 3 workers, 4% short and 5% long; against the medians, 1% short and 16% long. The VM is shared
+and noisy (the same runs differ by up to 10% here, and by tens of percent between days); GitHub's 4-core runner ran
+the same trailer at 151 frames per second the same day (the page check's demo in `pages.yml`, its pauses left out),
+so on a machine that fast a first estimate is about 2.4 times too long until that browser has its own rate. The owner
+chose this VM's rate (2026-10-30).
+
 ShotDetector 3.16.0's FastYuv converts 8-bit 4:2:0 with SIMD, WebAssembly's included (the bundle has it on:
 `WasmEnableSIMD` defaults to true), to the same bytes. Measured 2026-10-26 on the AOT bundle, 3.15.0 against 3.16.1
 on one 4-core cloud VM, the runs alternating: the Sintel trailer's adaptive run takes 20.8 s instead of 21.9 s in
