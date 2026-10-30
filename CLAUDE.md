@@ -7,7 +7,7 @@ owner's decisions are in shotdetector's docs/decisions/2026-10-24-managedcodecs-
 
 ## Core idea
 
-Exactness first: the scene and stats CSVs must equal ShotDetector's FFmpeg path's (`Detect(path)`, FFmpeg in-process,
+Exactness first: the scene and stats CSVs (and the shots as JSON and HTML) must equal ShotDetector's FFmpeg path's (`Detect(path)`, FFmpeg in-process,
 same FastYuv converter) byte for byte, natively and on browser-wasm, before anything else. That rests on `YuvVideo`
 saying what FFmpeg says about the file (average frame rate, nb_frames, time base, start pts, colour tags, duration):
 ManagedCodecs doesn't expose all of it, so `Mp4Header`/`SpsInfo` read it, and NativeCheck compares every field with
@@ -29,7 +29,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
   `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
   `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
-  decoder refuses).
+  decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
+  parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: what FFmpeg's `signalstats`, `blackdetect` and `cropdetect`
+  count, and colour bars by their definition, `BarColours`), `PictureMeasures` (by column; FFmpeg's figures from them,
+  `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
+  (`PictureJson`), which NativeCheck also writes.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `audio`: `{ codec, sampleRate,
@@ -43,7 +47,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs, not inside the JSON: the scenes CSV a string, the stats CSV a
   `Blob` written a row at a time by `Stats.WriteCsv` through `BlobWriter`, a write-only `Stream` whose parts go out
   through the `[JSImport]`s `parts`, `append` and `blob`, so it is never one string in the heap: README "What the heap
-  holds"),
+  holds"); `Api.Shots.cs` has `ShotsJson()` and `ShotsHtml()` (the last run's shots as `Shots.Json` and as
+  `Shots.Html` without images, the run card's other two downloads, which `run.js` asks for on `done`),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
@@ -57,7 +62,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
   null); `Api.Packets.cs` `Packets()`: `Mp4Input.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
   discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes);
-  `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count)` (`{ frames, ranges:
+  `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `points` { `framesPerPoint`,
+  `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
+  `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
+  (the scores' length, the scores, the range's picture measures); `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count)` (`{ frames, ranges:
   [{ firstFrame, endFrame }] }`), `ScoreRange(optionsJson, count, index)` (a promise of `{ frames, stopped }`; progress,
   pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()` (its `RangeScores` as bytes), `Merge(optionsJson,
   bytes, lengths)` (the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; a
@@ -95,14 +103,15 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
-  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads), `shots.js`
+  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads, the CSVs and the shots as JSON and HTML), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
   decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
-  the page's own reading), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
+  the page's own reading), `picture.js` (after a run: a lane of each frame's luma band and mean, the black spans, the
+  colour bars and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
   folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card: `card(title, { place })`, `place`
@@ -116,15 +125,20 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     type="module">` line in `index.html` (the order of those lines is the order of the lanes, and of the cards in each
     place) and its rules
     in `style.css`. A new export is `Api.<Feature>.cs`, a partial file of its own with its own `JsonSerializerContext`
-    if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
+    if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. An export of the last run's
+    result (as `ShotsJson`, `Picture`) also needs its task twin in `Api.Threads.cs` and its name in `threads.js`'s
+    `THREADED` and `RESULTS`: after a run on threads, `call()` asks the threaded runner for it. `app.js` changes
     only for a new event of the page's.
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `Mp4Input.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
   stopped half-way, vs one thread; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
+  `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats`, `cropdetect` (per frame and whole) and
+  `blackdetect` (d=0 and 2 s) exactly, the colour bars by their definition on the samples that have them, the ranges'
+  measures joined vs the whole run's (`out/native/<sample>.picture.json`, which app-check.mjs compares `Picture()` with);
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
@@ -132,12 +146,14 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Detect`'s pauses under 1% of the runs' time, every sample's default run paused half-way (no progress while held,
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
-  expects; `tools/replace-check.mjs`: a bundle
+  expects, and `Picture()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, the demo on threads paused and resumed, then stopped while paused, then run again
-  offline from the cache, each run's downloaded CSVs against the native run's (the only check of the threaded bundle), any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  offline from the cache, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
+  threaded bundle), the picture card's crop and colour bars the native run's, any page or worker error failing it;
+  `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
   frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane
@@ -158,7 +174,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   timeline and cards, a module per panel; `2026-10-26-workers.md`: long videos across several workers;
   `2026-10-26-new-ui.md`: the page's new UI, B chosen by the owner, built by the backlog row;
   `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream;
-  `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline); `docs/mockups/`: static HTML
+  `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline;
+  `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
@@ -180,7 +197,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.20.0, FrameReader 2.15.0 and ManagedCodecs 0.1.0 (Containers, H264, Aac, each
+- Packages: ShotDetector/FastYuv 3.21.0, FrameReader 2.16.0 and ManagedCodecs 0.2.3 (Containers, H264, Aac, each
   pinning Core) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
@@ -236,7 +253,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   then asserts on thread ids), refuses to start without `SharedArrayBuffer`, and doesn't run under Node; on the main
   thread it refuses synchronous exports (`jsThreadBlockingMode` `PreventSynchronousJSExport`), runs `[JSImport]`s on
   the main thread (no `FileReaderSync` there), and refuses a synchronous one from inside a synchronous export (seen
-  2026-10-30). Hence `Host.cs`. ManagedCodecs' `H264Decoder` isn't disposable: frames that end early flush it.
+  2026-10-30). Hence `Host.cs`. ManagedCodecs' `H264Decoder` has no Dispose (its threads end after an idle timeout):
+  frames that end early flush it.
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames (its window
   after them) is `None`, a cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold
   detector ends a fade-out the stop falls in with a cut (`PostProcess`), as at a file's end.

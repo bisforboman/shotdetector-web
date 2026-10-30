@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 # The exactness checks (README, "Checks"):
 #   native: ShotDetectorWeb.Core (ManagedCodecs + FastYuv) against ShotDetector's Detect(path) through FFmpeg in-process,
-#           every detector, scene and stats CSVs byte for byte (tools/NativeCheck);
+#           every detector, scene and stats CSVs and the shots as JSON and HTML byte for byte (tools/NativeCheck);
 #   wasm:   the same library on browser-wasm under Node, through the page's own exports (src/ShotDetectorWeb.App,
-#           driven by tools/app-check.mjs), its CSVs against the native run's;
+#           driven by tools/app-check.mjs), its CSVs, JSON and HTML against the native run's;
 #   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
 #           each page isolated by its service worker, PAGE_SAMPLE picked on threads, on the page's worker and on two
 #           workers, the demo on threads paused and resumed, then stopped while paused, then offline, each run's
-#           downloaded CSVs against the native run's (the samples named are not used: always those two); the only check
-#           of the threaded bundle. Reuses the bundles wasm published in the same call, else publishes them.
+#           downloaded CSVs, JSON and HTML against the native run's (the samples named are not used: always those two);
+#           the only check of the threaded bundle. Reuses the bundles wasm published in the same call, else publishes
+#           them.
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
 #
 # Usage: tools/check.sh [native] [wasm] [page] [replace] [aot] [<sample.mp4>...]
 #   (default: native wasm; aot: the wasm and replace bundles compiled ahead of time; samples named: only those, instead
 #   of every samples/*.mp4, the files to refuse and those without AAC still all: CI's interpreted check on a pull
-#   request, README "Checks". wasm compares the CSVs of the samples it ran, so native may have run more.)
+#   request, README "Checks". wasm compares the files of the samples it ran, so native may have run more.)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
 #   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm, page
 #   and replace, Playwright and its Chromium for page (npm ci in tools/page-check, then npx playwright install
@@ -94,22 +95,24 @@ if [[ $wasm == true ]]; then
   if [[ $aot == true ]]; then expect='^No FFmpeg assembly loaded'; else expect='^No FFmpeg assembly loaded at all\.$'; fi
   if ! grep -qE "$expect" out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
 
-  # The native CSVs of the samples run here (all of out/native/ unless samples were named), each written by the run.
+  # The native CSVs, JSON and HTML of the samples run here (all of out/native/ unless samples were named), each written
+  # by the run.
   files=0 differ=0 extra=0 missing=0
   for s in "${samples[@]}"; do
-    csvs=(out/native/"$(basename "$s" .mp4)".*.csv)
-    if [[ ${#csvs[@]} == 0 ]]; then echo "No native CSVs for $s: run tools/check.sh native on it first."; missing=$((missing + 1)); fi
-    for n in "${csvs[@]}"; do
+    b=out/native/$(basename "$s" .mp4)
+    written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html)
+    if [[ ${#written[@]} == 0 ]]; then echo "No native CSVs for $s: run tools/check.sh native on it first."; missing=$((missing + 1)); fi
+    for n in "${written[@]}"; do
       [[ $n == *.ffmpeg.* ]] && continue
       files=$((files + 1))
       w=out/wasm/${n#out/native/}
       if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
     done
   done
-  for w in out/wasm/*.csv; do
+  for w in out/wasm/*.csv out/wasm/*.shots.json out/wasm/*.shots.html; do
     if [[ ! -f out/native/${w#out/wasm/} ]]; then echo "Not written natively: $w"; extra=$((extra + 1)); fi
   done
-  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs identical (${#samples[@]} samples)."
+  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs, JSON and HTML identical (${#samples[@]} samples)."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $differ != 0 || $extra != 0 || $missing != 0 ]]; then exit 1; fi
@@ -125,7 +128,7 @@ if [[ $page == true ]]; then
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" --native out/native || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, then offline, the downloaded CSVs the native run's" || echo "FAILED")."
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, then offline, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi

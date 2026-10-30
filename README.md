@@ -59,7 +59,9 @@ over time, today the cuts (a tick at each, as soon as it is known, and the part 
 video's ranges (a band per worker, filled as far as it has got: Long videos across workers, below), the
 scores (each frame's score from the stats CSV, the column the detector cuts on, against the threshold the run used, a
 dot where each cut sits on it, and the spans where `content_val` stays under 1 for a second or more marked as still
-pictures, the page's reading), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
+pictures, the page's reading), the picture (each frame's luma, its lowest to highest as a band and its mean as a line,
+the black spans shaded, the colour bars marked, a tick where pixels leave broadcast range: `Api.Picture`, every run's;
+"The picture", below), as soon as the file is opened the bitrate per second and a tick at each keyframe, from
 the MP4's packets (`Api.Packets`; Using the library, below), and, alongside the file's first run, the sound: its
 waveform, decoded in a worker of its own by ManagedCodecs' AAC decoder (`Api.Audio`;
 "The sound", below; no lane for a file without audio, one line saying why for audio that isn't AAC). The page
@@ -72,7 +74,9 @@ shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`) and st
 frame (the browser's own decode, not ShotDetector's frame: a hidden second `<video>` on the same file, sought one still
 at a time as rows come into the table's view; on Sintel's trailer every still is there as the run ends); and last a grid of cards: the shots'
 statistics (the number of shots, average and median shot length, shortest and longest, cuts per minute, the run's speed
-against real time: the page's own figures, worked out from the shots), the sound's measures, the bitrate's numbers and
+against real time: the page's own figures, worked out from the shots), the picture's measures (the luma's lowest,
+highest and mean, broadcast range, the black spans of 2 s or more, the letterbox as cropdetect finds it, the colour
+bars), the sound's measures, the bitrate's numbers and
 how many cuts fall on a keyframe, and, as soon as the file is opened, "About this file": the core's description of it
 (`Api.Open`: the `YuvVideo` below and the audio track) in a viewer's words, "BT.709" for `bt709`, each field's own value
 in its tooltip and Open's JSON one click away. Each card's title has one chip saying whose numbers they are
@@ -80,7 +84,9 @@ in its tooltip and Open's JSON one click away. Each card's title has one chip sa
 names each library with the version its assembly in the bundle carries, `Api.Versions` filled in by `versions.js`,
 which app-check.mjs checks against Directory.Packages.props' pins). At phone width it is one column in the same
 order. The scenes and stats CSVs
-(`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
+(`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes; the
+shots as JSON and HTML beside them (`<file>.shots.json`, ShotDetector's `Shots.Json`; `<file>.shots.html`, scenedetect's
+save-html page, `Shots.Html`, without images) are ShotDetector's, and checked as the CSVs are. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -447,6 +453,28 @@ AOT bundle in headless Chromium (4-core cloud VM): 0.63 s on the Sintel trailer 
 two-hour MP4 (the trailer looped, 640x360 at 2.5 Mbit/s with 128 kbit/s AAC, 2.37 GB, 7,169 s of stereo 48 kHz audio),
 whose JSON is 13.5 KB. Under Node, the trailer's pass takes 0.46 s compiled ahead of time and 2.6 s interpreted.
 
+### The picture
+
+```csharp
+var meter = new PictureMeter(input.Video);         // or new PictureMeter(video, range) for one range of a split run
+var result = input.Detect(options, picture: meter);  // DetectAsync and ScoreRangeAsync take one too
+var m = meter.Measures;                              // per frame: YMin, YAvg, YMax, Brng, IsBlack, IsBars, FrameCrop
+// m.BlackSpans(2), m.BarsSpans(), m.Crop(); PictureSummary.Of(m): the page's JSON
+```
+
+Every run measures each frame as it reads it, before ShotDetector converts it (decision
+[2026-10-30-picture-measures.md](docs/decisions/2026-10-30-picture-measures.md)): one pass of `Vector128` code over
+the luma (its sum, lowest and highest, the pixels blackdetect counts black and those outside 16 to 235), a compare
+over the chroma (signalstats' BRNG), cropdetect's scan from each edge, and two rows for the colour bars. What it keeps
+per frame is what FFmpeg's filters count, so the figures are theirs exactly: `signalstats`' YMIN, YAVG, YMAX and BRNG,
+`blackdetect`'s spans (any `d`), `cropdetect`'s per frame (`reset=1`) and with its defaults after the last frame. The
+colour bars, which no FFmpeg filter finds, are found by their definition (SMPTE's and EBU's seven bars, 75% or 100%,
+BT.601 or BT.709). It costs about 2% of a run: 0.12 ms a frame natively and 0.27 ms on the AOT bundle under Node at
+854x480, where a run takes 4.7 and 12 ms a frame. A split run's ranges each measure their own frames and send them
+with their scores (`RangeBytes`); `Merge` joins them (`PictureMeasures.Join`), byte for byte the whole run's. A
+stopped run's are the frames it read. On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
+(CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
+
 ## Checks
 
 ```
@@ -462,7 +490,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   of the file (FrameReader's probe and first decoded frame, as ShotDetector's own FrameInputTests builds it), field by
   field; then each detector (adaptive, content, threshold, histogram, hash, and all five in one run, with stats) on
   (a) the core library and (b) ShotDetector's `Detect(path)` with FFmpeg in-process and the same FastYuv converter:
-  frame count, frame rate, length, duration, processed size, cuts, scene CSV and stats CSV must be equal. It also
+  frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV and the shots as JSON and HTML
+  (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) must be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
@@ -476,7 +505,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
   every sample the cuts of the run without it, as the page sends a default as none (`DefaultsCheck.cs`; Sintel's
   trailer is the sample that tells histogram's 0.05 from 0.2). Markdown tables go
-  to `out/native-report.md`, (a)'s CSVs to `out/native/`.
+  to `out/native-report.md`, (a)'s CSVs, JSON and HTML to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
   byte-exact**: the decoded samples are within 3e-7 of FFmpeg's, not equal, and the measures are computed by other code.
@@ -488,17 +517,29 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   linear amplitudes to three decimals, which alone is up to 0.04 dB at -20 dBFS). On the tone sample both tones must
   come out at -20 dBFS. Each file in `samples/no-aac/` (MP3 and Opus in MP4, and AAC Main, which the decoder refuses)
   must come back with the reason it isn't measured, not an exception.
+- **picture** (`tools/NativeCheck/PictureCheck.cs`, part of native): for each sample, the picture measures of the
+  default run (`PictureMeter`) against FFmpeg's filters on the same file in one ffmpeg pass, **exactly**: the frames
+  are FFmpeg's and the filters count integers over them. Per frame, `signalstats=stat=brng`'s YMIN and YMAX equal and
+  its YAVG and BRNG to the digits it prints, `cropdetect=reset=1:skip=0`'s x1, x2, y1, y2, w, h, x and y equal;
+  `cropdetect`'s crop with its defaults after the last frame; `blackdetect`'s spans at `d=0` and at its default 2 s,
+  their times to the digits it prints (`-copyts`, the stream's own pts as ours). The colour bars by their definition:
+  on the samples that end in `smptehdbars` (make-samples.sh's three shots), one span, the last shot's frames exactly;
+  on the fades sample, one span from within its `smptebars` fade-in to the end; none on the others. The run split
+  into ranges, each measured while it is scored, must join into the whole run's measures byte for byte. Each sample's
+  summary (the page's JSON) goes to `out/native/<sample>.picture.json` for the wasm check.
 - **wasm** (`tools/app-check.mjs`, under Node): the page's own .NET side, `src/ShotDetectorWeb.App` published for
   browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs,
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
   gives Node the `FileReaderSync` it lacks);
-  its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
+  its CSVs and its shots as JSON and HTML (`ShotsJson`, `ShotsHtml`) written to `out/wasm/` and compared with
+  `out/native/` file for file (none missing, none extra), the JSON's shots `Detect`'s. It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
   to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
-  the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), that a run cancelled
+  the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), its JSON and HTML its own
+  shots, that a run cancelled
   half-way keeps no result, that the pauses take under 1% of the runs' time, that the default run and the run with all five
   detectors, split into ranges as the page's workers score them (`Ranges`, `ScoreRange`, `RangeBytes`, one range after another on the one runtime) and
-  merged from their bytes (`Merge`) gives the whole run's CSVs, shots and warnings, the merge telling the shots as
+  merged from their bytes (`Merge`) gives the whole run's CSVs, shots (their JSON and HTML too) and warnings, the merge telling the shots as
   `Detect` does, and stopped half-way through its second range (and every range after it, as the page stops every
   worker) the result for its start, held to the whole run as a stopped run is, that ranges scored with other options
   or with damaged bytes fail the merge with "The ranges didn't merge: " in front (the page then detects with one
@@ -511,7 +552,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   gap, each edge within a video frame, and that each waveform's values are within 1 of the
   native check's (`out/native/<sample>.waveform.json`: the same managed code, another runtime), that `Packets()` (the
   bitrate lane's) lists every sample's video packets as ffprobe does (`out/native/<sample>.packets.txt`): the same
-  packets in the same order, each with the same pts, pts_time, size and K and D flags, and that the publish
+  packets in the same order, each with the same pts, pts_time, size and K and D flags, that `Picture()` after a whole
+  run is the native check's `out/native/<sample>.picture.json` exactly, after a split run's merge the whole run's, and
+  after a stopped run (one worker or split) the frames its result read, and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
   Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it, and FrameReader, whose
   waveform and tone code the audio pass runs) is loaded at all, the audio pass included (`LoadedAssemblies()`): the
@@ -530,12 +573,15 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   in the status); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused; and the page reloaded offline (Playwright's network off), from the service worker's
-  cache, still isolated, the demo run again from the cache on threads. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
-  clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the shots
-  table must have a row per shot of the CSV; the demo's sound must be measured. The stopped run must end `stopped` at
+  cache, still isolated, the demo run again from the cache on threads. Each whole run must end `done`, its scenes and
+  stats CSVs and its shots as JSON and HTML, downloaded from the run's card as a visitor clicks them (`out/page/`),
+  must equal the native check's run of the detector picked byte for byte, the shots table must have a row per shot of
+  the CSV, and the picture's card must show the native check's cropdetect crop and colour bars with its lane drawn; the
+  demo's sound must be measured. The stopped run must end `stopped` at
   the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held
   at"), its stats CSV the whole run's rows up to there (the adaptive ratio `None` in the last
-  frames of its window, as app-check.mjs holds it), its last shot ending there. Any exception, console error (the
+  frames of its window, as app-check.mjs holds it), its last shot ending there, its JSON and HTML the scenes CSV's
+  shots. Any exception, console error (the
   workers' too), failed request or HTTP error fails it. It reuses the bundle `wasm` published in the same call, else
   publishes one (interpreted unless `aot`): about 2 min 20 s interpreted, most of it the demo's run, and well under a
   minute compiled ahead of time (2026-10-29).
@@ -631,12 +677,11 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.20.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.15.0;
-ShotDetector 3.20.0 asks for 2.14.0 or later), ManagedCodecs (0.1.0, its first release on nuget.org, 2026-10-28: the
-`ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each pinning `ManagedCodecs.Core` at
-its own version; until then a git submodule referenced by project. Not 0.2.0, whose H.264 decoder gives other pixels
-under the wasm interpreter: backlog, Waiting, "ManagedCodecs 0.2.0 on wasm") and what they depend on come from
-nuget.org.
+ShotDetector and ShotDetector.FastYuv (3.21.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
+ManagedCodecs (0.2.3: the `ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each
+pinning `ManagedCodecs.Core` at its own version; on nuget.org since 0.1.0, 2026-10-28, until then a git submodule
+referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3)
+and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
 referenced it, 2026-10-29). The page's footer shows the versions its bundle carries (`Api.Versions`), and
@@ -655,12 +700,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.20.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.21.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.20.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.21.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.20.0 -p:FrameReaderVersion=2.15.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.21.0 -p:FrameReaderVersion=2.16.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \

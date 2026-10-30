@@ -148,10 +148,14 @@ public sealed partial class Mp4Input
     /// Detects shots: <see cref="ShotDetection.Detect(YuvVideo, IEnumerable{YuvFrame}, DetectionOptions?, CancellationToken)"/>
     /// on <see cref="Frames"/>, with ShotDetector.FastYuv's converter unless the options name another.
     /// </summary>
-    public DetectionResult Detect(DetectionOptions? options = null, CancellationToken cancellationToken = default)
+    /// <param name="options">ShotDetector's options.</param>
+    /// <param name="cancellationToken">Cancels the run.</param>
+    /// <param name="picture">Measures each frame as it is read (<see cref="PictureMeter"/>), if given.</param>
+    public DetectionResult Detect(DetectionOptions? options = null, CancellationToken cancellationToken = default,
+        PictureMeter? picture = null)
     {
         options = WithConverter(options);
-        return ShotDetection.Detect(Video, Frames(), options, cancellationToken);
+        return ShotDetection.Detect(Video, Measured(Frames(), picture), options, cancellationToken);
     }
 
     /// <summary>
@@ -163,20 +167,37 @@ public sealed partial class Mp4Input
     /// neither warns nor refuses when fewer frames come than <see cref="YuvVideo.FrameCount"/> says).
     /// </summary>
     public Task<DetectionResult> DetectAsync(int every, Func<int, ValueTask<bool>> between,
-        DetectionOptions? options = null, CancellationToken cancellationToken = default)
+        DetectionOptions? options = null, CancellationToken cancellationToken = default, PictureMeter? picture = null)
     {
         options = WithConverter(options);
-        return ShotDetection.DetectAsync(Video, FramesAsync(every, between), options, cancellationToken);
+        return ShotDetection.DetectAsync(Video, FramesAsync(every, between, picture: picture), options, cancellationToken);
     }
 
     /// <summary>
     /// <see cref="Frames"/> as an asynchronous source: after every <paramref name="every"/> frames, before the next one
     /// is decoded, it awaits <paramref name="between"/> with the number of frames given so far; when that returns false,
-    /// the frames end there, as if the file did.
+    /// the frames end there, as if the file did. Each frame given is measured by <paramref name="picture"/>, if any.
     /// </summary>
     public IAsyncEnumerable<YuvFrame> FramesAsync(int every, Func<int, ValueTask<bool>> between,
-        CancellationToken cancellationToken = default) =>
-        Paused(Frames(), int.MaxValue, every, between, cancellationToken);
+        CancellationToken cancellationToken = default, PictureMeter? picture = null) =>
+        Paused(Measured(Frames(), picture), int.MaxValue, every, between, cancellationToken);
+
+    /// <summary><paramref name="frames"/>, each measured by <paramref name="meter"/> as it is given (none without one).</summary>
+    static IEnumerable<YuvFrame> Measured(IEnumerable<YuvFrame> frames, PictureMeter? meter)
+    {
+        if (meter is null)
+            return frames;
+        return Each(frames, meter);
+
+        static IEnumerable<YuvFrame> Each(IEnumerable<YuvFrame> frames, PictureMeter meter)
+        {
+            foreach (var frame in frames)
+            {
+                meter.Add(frame);
+                yield return frame;
+            }
+        }
+    }
 
     /// <summary>
     /// <paramref name="source"/>'s first <paramref name="limit"/> frames as an asynchronous source, awaiting

@@ -690,6 +690,70 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     1% short and 16% long. GitHub's runner ran the trailer at 151 fps the same day; the owner chose this VM's rate.
     README "Large files")
 
+- Shots as JSON and HTML
+  - Why: ShotDetector writes the shots as JSON (`Shots.Json`) and as scenedetect's save-html page (`Shots.Html`); a
+    visitor who wants the shots in a program or a browser tab gets them without reading the scenes CSV. The owner chose
+    it out of Maybe on 2026-10-30.
+  - Where: `src/ShotDetectorWeb.App/Api.Shots.cs` (`ShotsJson()`, `ShotsHtml()`: the last run's, the HTML without
+    images and with the run's cuts), `wwwroot/panels/run.js` (two more downloads next to the CSVs,
+    `<file>.shots.json` and `<file>.shots.html`, a stopped run's too, for the part read: the owner's choices,
+    2026-10-30); `tools/Shared/Runs.cs`, `tools/NativeCheck` (the core's against the FFmpeg path's, and the ranges'
+    merge's), `tools/app-check.mjs` and `tools/check.sh` (the wasm run's against the native run's, file for file),
+    `tools/page-check/page-check.mjs` (the downloads).
+  - Done when: NativeCheck's table says "same, same" for every sample and run; `tools/check.sh wasm` compares the
+    `.shots.json` and `.shots.html` with the native ones as it does the CSVs, and app-check.mjs holds a paused and
+    resumed run's and a merge's to the whole run's, a stopped run's to its own shots; the page check downloads both
+    from each whole run, byte for byte the native run's, and the stopped run's carry its scenes CSV's shots.
+  - Not: images in the HTML (the page's stills are the browser's decode, not ShotDetector's frames); `app.js`.
+  - Status: Done (2026-10-30: NativeCheck "same, same" on every sample and run; the wasm check 308 of 308 CSVs, JSON
+    and HTML identical; the page check's downloads byte for byte the native run's, the stopped run's its shots)
+
+- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
+  - Why: the picture side of a check before delivery, next to the audio measures.
+  - Status: Done (2026-10-30: decision [2026-10-30-picture-measures.md](decisions/2026-10-30-picture-measures.md),
+    the owner's answers: all five, in every run in the same pass, checked exactly. `PictureMeter` measures each frame
+    as a run reads it, about 2% of a run (0.12 ms a frame natively, 0.27 ms AOT at 854x480); a split run's ranges carry
+    theirs in `RangeBytes`. `PictureCheck.cs`: signalstats and cropdetect per frame, cropdetect's whole crop and
+    blackdetect at d=0 and 2 s equal FFmpeg 8.1's on all 11 samples; the colour bars by their definition where
+    make-samples.sh puts them and nowhere else; the ranges joined the whole run's byte for byte. app-check.mjs:
+    `Picture()` the native JSON interpreted and AOT; page-check.mjs: the card's crop and bars. The page: a Picture lane
+    and card, marked measured)
+
+- ManagedCodecs 0.2.0 on wasm: other pixels under the interpreter
+  - Why: 0.2.0 (nuget.org, 2026-10-28 18:28 UTC, 97 commits past 0.1.0, nearly all H.264 decoder speed work in
+    `Vector128` paths: deblocking a macroblock at a time, edge strengths and the residual add in vectors) is what the
+    page should run, for its frames per second. Tried on 2026-10-29 with the pins otherwise as `main`'s (FrameReader
+    2.15.0): natively every check agrees as with 0.1.0. On browser-wasm it doesn't:
+    - Interpreted (`tools/check.sh wasm`): every sample's stats CSVs differ from the native ones, the scenes CSVs don't
+      (the first sample, baseline-480x270-23976-bt601.mp4, from row 6 on, e.g. row 6's delta_edges 5.340 for 5.337);
+      and app-check's stopped run, the same file decoded again in the same runtime, differs from its own whole run
+      from row 2 on, the first P frame, by far more (row 4's delta_edges 9.72 for 5.74): the decoder's output varies
+      from one decode to the next, which smells of samples read before they are written (`VideoFramePool`'s planes
+      are `GC.AllocateUninitializedArray`, the new paths' stackallocs are under `[SkipLocalsInit]`) rather than a
+      wrong but deterministic intrinsic. Published with `-p:WasmEnableSIMD=false` (so
+      `Vector128.IsHardwareAccelerated` false, the scalar paths), the same two samples' CSVs equal the native ones.
+    - Ahead of time (`tools/check.sh wasm aot`): 132 of 132 CSVs identical, so the pixels are right there. Its speed
+      against 0.1.0's is not settled: the runs took 227 s for 0.1.0's 207 s the same day on a shared cloud machine
+      whose 0.1.0 runs had taken 135 s the day before (Sintel's trailer, adaptive: 23.1 s for 21.5; all detectors:
+      30.8 s for 25.1), interpreted 1,029 s for 1,290; a quiet machine, or the page's own frames per second, would
+      say.
+    ManagedCodecs' own wasm check (its ci.yml's `wasm` job, `tools/wasm-check.sh`) runs ahead of time only, so it
+    can't see the interpreted fault.
+  - Where: upstream (bisforboman/ManagedCodecs), filed as #206 with the above: (1) the H.264
+    decoder's output under the Mono interpreter on browser-wasm with SIMD, wrong and varying between decodes, right
+    with SIMD off and compiled ahead of time. To reproduce here: ManagedCodecs 0.2.0 in Directory.Packages.props,
+    `tools/check.sh wasm` (the samples from `tools/make-samples.sh`). Then here: the bump, with the page's frames per
+    second measured again on a quiet machine (README "Long videos across workers"), 0.2.0 against 0.1.0.
+  - Done when: a ManagedCodecs release decodes every sample to the native CSVs interpreted as well as ahead of time
+    (`tools/check.sh`, `tools/check.sh wasm aot`), and its speed on wasm is measured against 0.1.0's.
+  - Not: no work-around here (CLAUDE.md: a bug in ManagedCodecs is reported there); `WasmEnableSIMD` stays on.
+  - Status: Done (2026-10-30: ManagedCodecs 0.2.3 fixed #206 (narrowing that saturated under the interpreter,
+    dotnet/runtime#136688); with ShotDetector 3.21.0 and FrameReader 2.16.0, natively every check agrees, and on
+    browser-wasm 154 of 154 CSVs are identical interpreted and ahead of time, the page check and the replace check
+    passing. Speed against 0.1.0 not settled: the cloud VM is too noisy; AOT under Node, Sintel's trailer took 18.2 s
+    adaptive and 20.5 s all detectors, against 21.5 and 25.1 for 0.1.0 on 2026-10-29, a different hour of the same
+    kind of machine; `REFERENCE_FPS`, measured on 0.1.0 the same day, measured again in CI would tell)
+
 - Threads in the browser
   - Why: ManagedCodecs decodes a 720p P chain in about half the time on 4 threads (`H264Decoder.Threads`). Wasm
     threads need `SharedArrayBuffer`, so COOP/COEP headers, which Pages can't set; a service worker that adds them to

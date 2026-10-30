@@ -30,7 +30,8 @@ itself", which lists the first release's page, not every page there will be. Sin
 module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
+derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
+exactness check speaks for.
 
 ## Waiting
 
@@ -84,37 +85,6 @@ ManagedCodecs#138's optional part, the row below.
     (ManagedCodecs#206).
   - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
     2026-10-30)
-
-- ManagedCodecs 0.2.0 on wasm: other pixels under the interpreter
-  - Why: 0.2.0 (nuget.org, 2026-10-28 18:28 UTC, 97 commits past 0.1.0, nearly all H.264 decoder speed work in
-    `Vector128` paths: deblocking a macroblock at a time, edge strengths and the residual add in vectors) is what the
-    page should run, for its frames per second. Tried on 2026-10-29 with the pins otherwise as `main`'s (FrameReader
-    2.15.0): natively every check agrees as with 0.1.0. On browser-wasm it doesn't:
-    - Interpreted (`tools/check.sh wasm`): every sample's stats CSVs differ from the native ones, the scenes CSVs don't
-      (the first sample, baseline-480x270-23976-bt601.mp4, from row 6 on, e.g. row 6's delta_edges 5.340 for 5.337);
-      and app-check's stopped run, the same file decoded again in the same runtime, differs from its own whole run
-      from row 2 on, the first P frame, by far more (row 4's delta_edges 9.72 for 5.74): the decoder's output varies
-      from one decode to the next, which smells of samples read before they are written (`VideoFramePool`'s planes
-      are `GC.AllocateUninitializedArray`, the new paths' stackallocs are under `[SkipLocalsInit]`) rather than a
-      wrong but deterministic intrinsic. Published with `-p:WasmEnableSIMD=false` (so
-      `Vector128.IsHardwareAccelerated` false, the scalar paths), the same two samples' CSVs equal the native ones.
-    - Ahead of time (`tools/check.sh wasm aot`): 132 of 132 CSVs identical, so the pixels are right there. Its speed
-      against 0.1.0's is not settled: the runs took 227 s for 0.1.0's 207 s the same day on a shared cloud machine
-      whose 0.1.0 runs had taken 135 s the day before (Sintel's trailer, adaptive: 23.1 s for 21.5; all detectors:
-      30.8 s for 25.1), interpreted 1,029 s for 1,290; a quiet machine, or the page's own frames per second, would
-      say.
-    ManagedCodecs' own wasm check (its ci.yml's `wasm` job, `tools/wasm-check.sh`) runs ahead of time only, so it
-    can't see the interpreted fault.
-  - Where: upstream (bisforboman/ManagedCodecs), filed as #206 with the above: (1) the H.264
-    decoder's output under the Mono interpreter on browser-wasm with SIMD, wrong and varying between decodes, right
-    with SIMD off and compiled ahead of time. To reproduce here: ManagedCodecs 0.2.0 in Directory.Packages.props,
-    `tools/check.sh wasm` (the samples from `tools/make-samples.sh`). Then here: the bump, with the page's frames per
-    second measured again on a quiet machine (README "Long videos across workers"), 0.2.0 against 0.1.0.
-  - Done when: a ManagedCodecs release decodes every sample to the native CSVs interpreted as well as ahead of time
-    (`tools/check.sh`, `tools/check.sh wasm aot`), and its speed on wasm is measured against 0.1.0's.
-  - Not: no work-around here (CLAUDE.md: a bug in ManagedCodecs is reported there); `WasmEnableSIMD` stays on.
-  - Status: Waiting on upstream ([ManagedCodecs#206](https://github.com/bisforboman/ManagedCodecs/issues/206), filed
-    2026-10-29)
 
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships, and THIRD-PARTY-NOTICES.md has to list it. Measured
@@ -182,19 +152,6 @@ file out of `samples/reject/`, and passes the native check.
     scenedetect's model. Rotation: FFmpeg's path reports it and leaves frames upright; the frame-source API applies
     none.
   - Where: each its own row when wanted; each needs a decision about what "the FFmpeg path's result" means for it.
-  - Status: Maybe
-
-- Shots as JSON and HTML
-  - Why: `Shots.Json` and `Shots.Html` exist; two more download buttons.
-  - Status: Maybe
-
-- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
-  - Why: the picture side of a check before delivery, next to the audio measures: where it goes to black, how bright
-    each frame is, whether luma leaves 16 to 235, whether there are black bars, whether there are colour bars at the
-    head (with the reference tone, "bars and tone"). Each one has an FFmpeg filter to compare with (`blackdetect`,
-    `signalstats`, `cropdetect`).
-  - Where: a pass over each frame's Y plane as `Mp4Input.Frames` yields it, alongside detection, so it adds time to
-    every run (measure how much before deciding). The owner filed it as a Maybe (2026-10-24).
   - Status: Maybe
 
 - Frame types (I, P, B) on the strip
