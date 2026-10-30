@@ -56,16 +56,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### After the first release
 
-- Real-browser smoke test
-  - Why: the page is JavaScript around checked exports; once visitors use it, a change to `app.js` or `worker.js`
-    needs a check of its own. Decision "Testing the page".
-  - Where: a CI job (Linux, Playwright, Chromium only) that serves the published `wwwroot`, loads the page, sets the
-    file input to one sample, runs with the defaults, downloads the scenes CSV and compares it with `out/native/`'s;
-    `tools/page-check.mjs` or similar, run by `tools/check.sh page`. Pin Playwright's version.
-  - Done when: the job fails when `app.js` breaks the download and passes on `main`.
-  - Not: no cross-browser matrix, no visual tests.
-  - Status: Open
-
 - The estimate's reference rate measured again
   - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
     3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on
@@ -77,15 +67,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
   - Not: no change to how a browser's own rate is kept.
   - Status: Open
 
-- Thumbnails per shot
-  - Why: a table of times is hard to read; a still per shot shows what was found. Decision "Pictures of shots".
-  - Where: `app.js`: for each shot, seek the `<video>` to the shot's first frame, `drawImage` to a small canvas,
-    lazily as rows scroll into view (one seek at a time; `seeked` events).
-  - Done when: a trailer's shots each show a still within a few seconds of the run finishing, and the detection
-    result is unchanged (the stills are the browser's decode, not the library's).
-  - Not: no second decode in .NET, no image export.
-  - Status: Open
-
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
 (decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
@@ -93,18 +74,6 @@ module of its own, so they run side by side once that row has landed. Where a ro
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
 derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
-
-- Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
-  - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships (the trimmer keeps whole assemblies that don't opt in:
-    ShotDetector's package isn't marked `IsTrimmable`), and THIRD-PARTY-NOTICES.md has to list it.
-  - Where: measure what it costs (the bundle size row's numbers); try `TrimMode=full` on the App and see what breaks
-    (`Shots.Json` uses `JsonSerializer`: reflection-based serialization needs a source-generated context or
-    `JsonSerializerIsReflectionEnabledByDefault`); otherwise an upstream change in shotdetector (`IsTrimmable`, the
-    trim warnings fixed) and then this row. `tools/check.sh wasm aot` is the proof either way; the
-    "FFmpeg not loaded" check turns into "FFmpeg not bundled". Update THIRD-PARTY-NOTICES.md.
-  - Done when: `_framework/` has no `FFmpeg.AutoGen.wasm`, the checks are green, and the README's sizes are updated.
-  - Not: no change to the core library.
-  - Status: Open
 
 ### Unblocked by ShotDetector 3.20.0 and ManagedCodecs 0.1.0
 
@@ -137,6 +106,16 @@ since 2026-10-28 carry what they asked for, or part of it.
     sample table once at its final size (ManagedCodecs#123); whether that is all of
     [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed 2026-10-26, the steps measured
     again will say)
+
+- The frame a paused run is held at
+  - Why: paused, the status says "Paused at frame N" from the last `progress` (frames processed), but the run is held
+    at its next pause, by frames read, up to 8 frames on (Api's `PauseEvery`): stopped there, the result says another
+    frame (seen 2026-10-29 by `tools/page-check` on the AOT bundle: "Paused at frame 196", stopped at frame 200).
+  - Where: `app.js`'s paused status, and the `pause(framesRead)` import (`pause.js`, `worker.js`), which knows the frame
+    the run waits at; README "Pausing a run".
+  - Done when: the paused status names the frame a stop would end at; `tools/page-check` holds the stop to it exactly.
+  - Not: the stopped result, which is right.
+  - Status: Open
 
 ## Waiting
 
@@ -177,6 +156,35 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
   - Not: no work-around here (CLAUDE.md: a bug in ManagedCodecs is reported there); `WasmEnableSIMD` stays on.
   - Status: Waiting on upstream ([ManagedCodecs#206](https://github.com/bisforboman/ManagedCodecs/issues/206), filed
     2026-10-29)
+
+- Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
+  - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships, and THIRD-PARTY-NOTICES.md has to list it. Measured
+    2026-10-29 (ShotDetector 3.20.0, FrameReader 2.15.0): the App's publish already trims every assembly in full
+    (`TrimMode` is `full` for browser-wasm; ShotDetector and FrameReader are `IsAotCompatible`, so trimmable, and the
+    publish has no trim warnings). FFmpeg.AutoGen comes out at 447 KB of its 648 because ShotDetector's code *reaches*
+    it: the frame-source and merge paths the page runs share method bodies with the file path. `ShotDetection.Steps`
+    (the iterator behind `RunAsync`, `DetectAsync` and `Merge`) constructs `VideoReader` from a path or a stream and
+    calls `FindReferenceTone(path)`, and `VideoReader`'s members branch between in-process decoding and the caller's
+    frames (`Frames` → `FramesInProcess`, `TakeTimestampPass` → `InProcessProbe.FrameTimestamps`, `DecodesWithLibraries`,
+    `HasFrameThreads`). From the trimmer's dependency dump (`-p:_TrimmerDumpDependencies=true`), those six members are
+    every bridge: stubbed with ILLink substitutions (a local measurement, not committed), `FFmpeg.AutoGen.wasm` is gone,
+    `tools/check.sh wasm aot` passes (154 of 154 CSVs identical, "No FFmpeg assembly loaded at all." under AOT too),
+    and the AOT publish's `_framework/` through `gzip -6` goes from 19.19 MB to 16.31 MB raw (−2.88 MB, 15%) and from
+    5.76 to 5.14 MB compressed (−620 KB, 10.8%): `dotnet.native.wasm` −2.31 MB raw (−478 KB; the AOT code of the
+    FFmpeg paths), `FFmpeg.AutoGen.wasm` −447 KB (−103 KB), FrameReader 91 to 20 KB, ShotDetector 256 to 222 KB.
+  - Where: upstream (bisforboman/shotdetector), an issue for the owner to file with the above: the frame-source entry
+    points (`Detect`/`DetectAsync`/`RunAsync` over `YuvFrame`s, `ScoreRangeAsync`, `Merge`) should not reach
+    FFmpeg-only code statically, so a trimmed app that never decodes with FFmpeg doesn't ship FFmpeg.AutoGen; e.g.
+    `Steps` takes its `VideoReader` from the `frames` factory always (the path and stream entries passing theirs) and
+    the reference-tone trim is decided by that entry, and `VideoReader`'s in-process members move behind the file
+    path's own type. A check upstream could hold it: benchmarks/wasm's publish with no `FFmpeg.AutoGen` in its bundle.
+    Then here: the package bump; app-check.mjs's and check.sh's "No FFmpeg assembly loaded" becomes "not bundled"
+    (the listing check fails if `_framework/FFmpeg.AutoGen.wasm` exists), interpreted and AOT alike; THIRD-PARTY-NOTICES.md
+    drops FFmpeg.AutoGen if no FFmpeg.AutoGen code is left in `dotnet.native.wasm` either; README "Size" measured again.
+  - Done when: `_framework/` has no `FFmpeg.AutoGen.wasm`, the checks are green, and the README's sizes are updated.
+  - Not: no change to the core library; no ILLink substitutions here (a stub of ShotDetector's internals would break
+    silently when they change, and CLAUDE.md: what belongs upstream is reported there).
+  - Status: Waiting on upstream (2026-10-29: measured here; the issue is the owner's to file)
 
 ## Maybe
 

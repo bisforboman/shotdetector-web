@@ -43,6 +43,13 @@ jobs:
       - name: Install the wasm-tools workload
         run: dotnet workload install wasm-tools
 
+      # As ci.yml: Playwright for the page's smoke test, pinned by tools/page-check's lockfile, and its Chromium.
+      - name: Install Playwright and Chromium
+        working-directory: tools/page-check
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
       # As ci.yml: FFmpeg 8.1's shared build makes the samples (and the demo clip, the Sintel sample) and is the native
       # check's reference. These three steps are ci.yml's.
       - name: Install FFmpeg 8.1
@@ -88,10 +95,10 @@ jobs:
           SHOTDETECTOR_FFMPEG_LIBS: ${{ steps.ffmpeg.outputs.bin }}
         run: tools/check.sh native
 
-      # The App published ahead of time and checked on every sample against the native results: this publish is the
-      # bundle deployed below, not a second one.
+      # The App published ahead of time and checked on every sample against the native results, then the page itself in
+      # Chromium on it with the demo clip (tools/page-check): this publish is the bundle deployed below, not a second one.
       - name: Publish the App ahead of time and check it
-        run: tools/check.sh wasm aot
+        run: tools/check.sh wasm page aot
 
       # The bundle is the publish's wwwroot/, copied out as it is (the next step rebuilds the App in the publish folder).
       # FastYuv's license (LGPL-2.1) is copied by the core csproj to the publish root, outside it, so it goes in here;

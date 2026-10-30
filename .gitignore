@@ -5,3 +5,4 @@ samples/
 out/
 .claude/worktrees/
 *.swp
+node_modules/

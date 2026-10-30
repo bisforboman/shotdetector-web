@@ -80,7 +80,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads), `shots.js`
-  (the table below the timeline; marks the shot playing's row), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
+  decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
@@ -115,16 +116,19 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects; `tools/replace-check.mjs`: a bundle
-  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/Shared/Runs.cs`: the runs NativeCheck makes,
-  which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: both checks (sample files named after the options: only those);
+  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
+  Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
+  the demo clip, a sample picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
+  run's downloaded CSVs against the native run's, any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
   frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane
   compared, timed against `tools/WebCodecsWasm`, ManagedCodecs' decoder on wasm): the WebCodecs measurement (README
   "WebCodecs"), not in the checks or CI.
 - `.github/actions/btbn-ffmpeg`: copied from shotdetector (BtbN's FFmpeg pinned by SHA-256); `.github/workflows/ci.yml`:
-  pull requests (the checks their files need, `tools/ci-scope.sh`: none, native, or all, which is interpreted on one
-  sample and AOT on all) and the whole of it daily on `main` (README "Checks");
-  `.github/workflows/pages.yml`: on a push to `main`, the native, AOT and replace checks, then the AOT check's own
+  pull requests (the checks their files need, `tools/ci-scope.sh`: none, native, page (native and the page in
+  Chromium, interpreted) or all, which is interpreted on one sample and AOT with the page on all) and the whole of it daily on `main` (README "Checks");
+  `.github/workflows/pages.yml`: on a push to `main`, the native, AOT (with the page) and replace checks, then the AOT check's own
   publish's `wwwroot/` plus FastYuv's license,
   `.nojekyll` and the demo clip (`demo/sintel-trailer.mp4`: Sintel's trailer, downloaded pinned by the same SHA-256 as
   `ci.yml` and made by `tools/make-samples.sh`, the file the checks run), checked for the two LGPL files and the clip,
@@ -152,7 +156,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - Before pushing: run what the change could break, not everything: CI picks the checks from the pull request's files
   (`tools/ci-scope.sh`), and `pages.yml` and the daily run check all of it on `main`. Locally `tools/make-samples.sh`
-  (once), then `tools/check.sh native` for the core, the page's defaults or NativeCheck, `tools/check.sh wasm` when the
+  (once), then `tools/check.sh native` for the core, the page's defaults or NativeCheck, `tools/check.sh native page`
+  for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
 - Packages: ShotDetector/FastYuv 3.20.0, FrameReader 2.15.0 and ManagedCodecs 0.1.0 (Containers, H264, Aac, each
