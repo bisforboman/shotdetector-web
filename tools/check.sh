@@ -133,7 +133,7 @@ if [[ $page == true ]]; then
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" --native out/native || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, then offline, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi

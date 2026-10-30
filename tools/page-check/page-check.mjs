@@ -435,4 +435,5 @@ if (failures.length > 0) {
 }
 console.log('The page check passed: isolated, picked on threads, on the page\'s worker and split across two workers, ' +
   'the demo on threads paused and resumed, and offline, the CSVs, JSON and HTML identical to the native run\'s; the ' +
-  'demo stopped while paused, the result for the frames read, and resumed across a reload (in Firefox too) and split.');
+  'demo stopped while paused, the result for the frames read, and resumed across a reload' +
+  `${process.env.PAGE_CHECK_FIREFOX === 'skip' ? '' : ' (in Firefox too)'} and split.`);
