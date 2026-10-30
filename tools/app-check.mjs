@@ -26,6 +26,9 @@
 // The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
 // <sample>.picture.json, FFmpeg's figures there), exactly; a split run's merge the whole run's; a stopped run's (one
 // worker or split) for the frames its result read.
+// The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
+// check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
+// whole run's; a stopped run's the whole run's first frames, as many as its result read.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4|.avi>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -63,6 +66,7 @@ const { samples, '--reject': rejects, '--no-aac': noAac, '--native': [nativeDir]
 
 let progress = [], told = [], toldAt = [];
 let wholePicture = null; // the sample's first run's Picture(), which every other whole run's must be
+let wholeTypes = null;   // and its FrameTypes()
 // Detect's pauses (the 'pause' import, pause.js as in the worker): how many, and how long they took in all, and the
 // frame to stop the run at, at the first pause from there (as the worker does on a 'stop' message: Api's Stop, between
 // two pauses), or to cancel it (Api's Cancel).
@@ -95,7 +99,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, Picture, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -175,7 +179,10 @@ for (const [i, sample] of samples.entries()) {
     if (!Array.isArray(result.warnings) || result.warnings.some(w => typeof w !== 'string'))
       fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
-    if (run === Object.keys(RUNS)[0]) wholePicture = checkPicture(sample, result);
+    if (run === Object.keys(RUNS)[0]) {
+      wholePicture = checkPicture(sample, result);
+      wholeTypes = checkFrameTypes(sample, result);
+    }
     await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
@@ -537,6 +544,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
       `(stopped ${result.stopped}), the whole run's ${whole.shots.length} of ${whole.frameCount}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots the merge told aren't its result's`);
   if (Picture() !== wholePicture) fail(`${name}: the merged picture measures aren't the whole run's`);
+  if (FrameTypes() !== wholeTypes) fail(`${name}: the merged frame types aren't the whole run's`);
   console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
     `${bytes.map(b => b.length).join(' + ')} bytes, ${seconds.toFixed(2)} s: ${same ? 'the whole run\'s CSVs' : 'DIFFERENT CSVs'}`);
 
@@ -568,10 +576,25 @@ function checkPicture(sample, result) {
   return json;
 }
 
-// A stopped run's picture measures: the frames its result read.
+// A stopped run's picture measures and frame types: the frames its result read, the types the whole run's first.
 function checkPictureStopped(name, result) {
   const picture = JSON.parse(Picture());
   if (picture.frames !== result.frameCount) fail(`${name}: picture measures of ${picture.frames} frames, the result read ${result.frameCount}`);
+  const types = FrameTypes();
+  if (types !== wholeTypes?.slice(0, result.frameCount))
+    fail(`${name}: frame types of ${types.length} frames, not the whole run's first ${result.frameCount}`);
+}
+
+// The whole run's frame types (Api's FrameTypes): ffprobe's pict_type of every frame, as the native check wrote them
+// once the core's were the same. Returns them, for the other runs of the sample.
+function checkFrameTypes(sample, result) {
+  const types = FrameTypes(), name = `${basename(sample)} frame types`;
+  if (types.length !== result.frameCount) fail(`${name}: ${types.length} frames, the run read ${result.frameCount}`);
+  const native = join(nativeDir ?? '', `${basename(sample, extname(sample))}.frametypes.txt`);
+  if (!nativeDir || !existsSync(native)) fail(`${name}: no native ${native} to compare with`);
+  else if (readFileSync(native, 'utf8') !== types) fail(`${name}: differ from ffprobe's in ${native}`);
+  else console.error(`${name}: ffprobe's (${[...'IPB'].map(t => `${types.split(t).length - 1} ${t}`).join(', ')})`);
+  return types;
 }
 
 // Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other
