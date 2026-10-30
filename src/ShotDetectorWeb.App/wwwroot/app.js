@@ -157,7 +157,8 @@ function callOn(w, name, ...args) {
 // of its own to failed (the page's own worker's: the page's error).
 function newWorker({ progress = fromWorker.progress, shot = fromWorker.shot, failed } = {}) {
   const w = new Worker('worker.js', { type: 'module' });
-  const handlers = { ...fromWorker, progress, shot };
+  // A split run's other workers tell no frame they are held at (held): their frames count from their range's keyframe.
+  const handlers = { ...fromWorker, progress, shot, ...(progress === fromWorker.progress ? {} : { held: undefined }) };
   // Only a live worker's: one ended may still have messages on their way.
   w.onmessage = ({ data }) => { if (!ended.has(w)) handlers[data.type]?.(data); };
   // Not an exception from .NET (those answer a call as 'error'): the worker itself failed, e.g. out of memory.
@@ -218,6 +219,13 @@ const fromWorker = {
       `${estimate} The time left: at this run's rate so far, after its first ${LEFT_AFTER} seconds.`);
     emit('progress', { video: opened, done, expected });
   },
+  // Paused, one worker: the frames read where the run is held, which a stop ends it at (the last progress, frames
+  // processed, can be up to a pause's 8 frames behind it).
+  held({ frames }) {
+    if (state !== 'paused' || split) return;
+    framesDone = frames;
+    sayPaused();
+  },
   // A shot as soon as ShotDetector knows it: a few frames after the cut that ends it with one detector (what the page
   // sends), the same object as in the result's shots (tools/app-check.mjs checks they are the same).
   shot({ shot }) {
@@ -253,8 +261,11 @@ function pauseOrResume() {
 }
 
 function sayPaused() {
-  say(`Paused at frame ${count(framesDone)}${framesExpected > 0 ? ` of ${count(framesExpected)}` : ''}: Resume goes ` +
-    'on where it is, Stop shows the result for the frames read.');
+  // One worker: the frame a stop ends it at (held); split, the ranges' progress added up, which a stop's merge
+  // needn't reach.
+  const of = framesExpected > 0 ? ` of ${count(framesExpected)}` : '';
+  say(`Paused at ${split ? 'about ' : ''}frame ${count(framesDone)}${of}: Resume goes on where it is, Stop shows the ` +
+    'result for the frames read.');
 }
 
 // The states: idle (a file picked or not), opening, detecting, paused (a run held where it is until resumed), stopping

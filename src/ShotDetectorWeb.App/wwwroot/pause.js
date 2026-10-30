@@ -5,22 +5,28 @@
 // hold() pauses the run (backlog "Pause and resume a run"): the pauses that come while it is held don't resolve, so
 // .NET's run simply waits at its next one, nothing cancelled or ended, until release() resolves them. A stop or a
 // cancel while held is told to .NET first, then released, so the run ends at the pause it waits at (worker.js).
-let channel, waiting = [], held = false, parked = [];
+let channel, waiting = [], held = false, parked = [], onHeld = () => {};
 
-export function pause() {
+export function pause(framesRead) {
   if (!channel) {
     channel = new MessageChannel();
     // Under Node the open port keeps the process alive: the checks end with process.exit.
     channel.port1.onmessage = () => {
-      const resolve = waiting.shift();
-      if (held) parked.push(resolve);
-      else resolve();
+      const [resolve, frames] = waiting.shift();
+      if (!held) return resolve();
+      parked.push(resolve);
+      onHeld(frames);
     };
   }
   return new Promise(resolve => {
-    waiting.push(resolve);
+    waiting.push([resolve, framesRead]);
     channel.port2.postMessage(null);
   });
+}
+
+// f(framesRead) when the run comes to be held at a pause: the frames read by then, the frame a stop ends it at.
+export function whenHeld(f) {
+  onHeld = f;
 }
 
 // The run waits at its next pause until release().

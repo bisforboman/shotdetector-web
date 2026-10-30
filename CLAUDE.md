@@ -61,7 +61,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   the file in slices of a megabyte). `wwwroot/worker.js` owns the runtime and calls any export by name (`{ type: 'call',
   id, name, args }`, answered in order, one at a time; `progress` and `shot` posted while `Detect` runs; `{ type: 'stop'
   }`, `{ type: 'cancel' }`, `{ type: 'pause' }` and `{ type: 'resume' }` handled at once, between `Detect`'s pauses, a
-  cancelled call answered `cancelled`; a stop or cancel while paused releases the run to end there),
+  cancelled call answered `cancelled`; a stop or cancel while paused releases the run to end there; `{ type: 'held',
+  frames }` posted once a paused run waits, the frames read, where a stop ends it: the page's paused status),
   `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`; `hold`
   and `release`: while held the promise stays unresolved, so the run waits there, README "Pausing a run");
   `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel). The page (no build step, no dependency, native ES modules; README "Running the page";

@@ -239,11 +239,10 @@ try {
       const status = await finished(page, again, 'stopped');
       if (status !== null) {
         const frames = Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
-        // The status says the frames processed (progress), the result counts the frames read, which can be ahead by
-        // up to a pause's 8 frames (Api's PauseEvery): the run is held at the pause after the last progress told.
-        if (!(frames >= at && frames <= at + 8)) {
-          fail(`${again}: stopped at frame ${frames}, not at the pause from ${at} where it was held: ${status}`);
-        }
+        // The paused status names the frame the run is held at (the worker's 'held': the frames read at that
+        // pause), which is where a stop ends it.
+        if (frames !== at)
+          fail(`${again}: stopped at frame ${frames}, not at ${at}, where it said it was held: ${status}`);
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
       }
     }
