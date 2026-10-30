@@ -3,7 +3,7 @@
 Backlog "Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars": the picture side of
 a check before delivery, next to the sound's measures ([2026-10-24-audio.md](2026-10-24-audio.md)). The row said the
 pass adds time to every run and to measure that before deciding. This is that measurement, then the questions it
-leaves.
+leaves; the owner answered them on 2026-10-30 (below), and the row built them.
 
 ## What it costs
 
@@ -75,7 +75,18 @@ Which of the row's five go in?
 
 ### Answer
 
-Open: the owner's.
+**All five**, the owner's answer (2026-10-30): the four FFmpeg-backed ones, and the colour bars in this row too. How:
+
+- **Black**, **brightness** (YMIN, YAVG, YMAX; not YLOW and YHIGH, which would make the pass a histogram),
+  **broadcast range** (BRNG) and **letterbox** (cropdetect) as in the choices.
+- **Colour bars by their definition** (`BarColours` in `PictureMeasures.cs`): in the rows a quarter and half way down
+  the picture, seven bars side by side, left to right white, yellow, cyan, green, magenta, red and blue, each within 24
+  code values on Y, U and V of its colour at 75% or 100% in BT.601's or BT.709's matrix (one set for all seven, full
+  range converted), each at least a twelfth of the width, none more than 1.5 times another, at most three chroma
+  samples between them (a coded edge). That is what FFmpeg's `smptebars`, `smptehdbars`, `pal75bars` and `pal100bars`
+  draw (their colours are `vsrc_testsrc.c`'s tables), so it needs no new sample: make-samples.sh's three-shot samples
+  end in `smptehdbars`, the fades sample in `smptebars` fading in. Two luma rows and their chroma rows a frame: nothing
+  to see in the timings.
 
 ## Where they run
 
@@ -94,7 +105,10 @@ Every run, or only when asked?
 
 ### Answer
 
-Open: the owner's.
+**1**, the owner's answer: in every run, in the same pass. A split run's ranges each measure their own frames (not the
+frame before the first, nor the overlap frame after the last) and carry them with their scores (`RangeBytes`), so the
+page's workers and `app.js` stay as they are; `Merge` joins them from the start as `FromStart` does the scores, cut to
+the frames the result read.
 
 ## How they are checked
 
@@ -114,7 +128,12 @@ These are integer counts on frames that are FFmpeg's. How strict?
 
 ### Answer
 
-Open: the owner's.
+**1**, the owner's answer: exact. `PictureCheck.cs` as in the choice, one ffmpeg pass per sample with every filter;
+the colour bars, which no FFmpeg filter finds, by their definition on the samples that have them (the three-shot
+samples' last shot exactly, from the default run's last cut; the fades sample's from within its 0.3 s fade-in to the
+end) and none on the others. The ranges' measures joined must be the whole run's byte for byte; app-check.mjs holds
+the App's `Picture()` to the native JSON, a split run's to the whole run's, and a stopped run's to the frames it read;
+page-check.mjs looks for the card's cropdetect line and colour bars.
 
 ## Not here
 

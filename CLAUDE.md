@@ -27,7 +27,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
   `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
   `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
-  decoder refuses).
+  decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
+  parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: what FFmpeg's `signalstats`, `blackdetect` and `cropdetect`
+  count, and colour bars by their definition, `BarColours`), `PictureMeasures` (by column; FFmpeg's figures from them,
+  `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
+  (`PictureJson`), which NativeCheck also writes.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `audio`: `{ codec, sampleRate,
@@ -55,7 +59,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
   null); `Api.Packets.cs` `Packets()`: `Mp4Input.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
   discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes);
-  `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count)` (`{ frames, ranges:
+  `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `points` { `framesPerPoint`,
+  `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
+  `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
+  (the scores' length, the scores, the range's picture measures); `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count)` (`{ frames, ranges:
   [{ firstFrame, endFrame }] }`), `ScoreRange(optionsJson, count, index)` (a promise of `{ frames, stopped }`; progress,
   pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()` (its `RangeScores` as bytes), `Merge(optionsJson,
   bytes, lengths)` (the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; a
@@ -90,7 +97,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
-  the page's own reading), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
+  the page's own reading), `picture.js` (after a run: a lane of each frame's luma band and mean, the black spans, the
+  colour bars and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
   folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
   - **Adding to the page:** something over time is a lane, anything else a card: `card(title, { place })`, `place`
@@ -112,6 +120,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   merged, vs the whole run's CSVs; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
+  `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats`, `cropdetect` (per frame and whole) and
+  `blackdetect` (d=0 and 2 s) exactly, the colour bars by their definition on the samples that have them, the ranges'
+  measures joined vs the whole run's (`out/native/<sample>.picture.json`, which app-check.mjs compares `Picture()` with);
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
@@ -119,11 +130,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Detect`'s pauses under 1% of the runs' time, every sample's default run paused half-way (no progress while held,
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
-  expects; `tools/replace-check.mjs`: a bundle
+  expects, and `Picture()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, a sample picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
-  run's downloaded CSVs against the native run's, any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  run's downloaded CSVs against the native run's, the picture card's crop and colour bars the native run's, any page or
+  worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
   frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane
