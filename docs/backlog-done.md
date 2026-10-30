@@ -875,3 +875,25 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     its shots told, or split for a rest over 2 minutes; the decision's later answers and "As built"; NativeCheck's
     ResumeCheck, app-check.mjs's checkResume on every sample, and the page check across a reload in Chromium (on
     threads) and Firefox, split in the same visit)
+
+- The page's numbers and words after a stop, a resume and a reload
+  - Why: after a resumed run the status line's "times real time" divided the whole video by the rest's time (5.2
+    against the statistics' 4.7); "resumed from frame 124" after a stop at 216 named the keyframe the rest scores
+    again from, not where the run had got to; the kept run shown again after a reload had no sound, and its bitrate
+    and statistics cards counted the whole file's keyframes and the cut-short last shot as a length; the picture card
+    said "and 3 shorter, on the timeline." after "Black: none of 2 s or more."; Forget, which deletes the kept run,
+    looked like Detect.
+  - Where: `app.js` (`show`, `resumedFrom`, `restore` measuring the sound as a run does), `panels/stats.js`,
+    `panels/bitrate.js`, `panels/picture.js`, `index.html` and `style.css` (Forget's `danger` style),
+    `tools/page-check/page-check.mjs`.
+  - Done when: the page check asserts each: the two times real time equal after a resume, the resumed status naming
+    the stopped frame (the keyframe in brackets), the kept run's sound card and waveform, its bitrate and statistics of
+    the frames read, no picture line that isn't a sentence, Forget unfilled and not Detect's colour; the CSVs, JSON and
+    HTML byte for byte as before (`tools/check.sh native page`).
+  - Not: no change to the layout (the next row) or to any export.
+  - Status: Done (2026-10-30: the status line's times real time and the statistics' Run both of the frames read, 1.3
+    and 1.3 after a resume across a reload; "resumed from frame 192 (rescored from its keyframe, frame 124)"; the kept
+    run's sound measured as for a run, its bitrate "In the 192 frames read: ..." and its statistics without the
+    cut-short last shot; "Shorter than 2 s: 7, on the timeline." on a line of its own; Forget underlined in the
+    error's colour, unfilled. The page check asserts each (Chromium here; Firefox in CI), the downloads identical to
+    the native run's)

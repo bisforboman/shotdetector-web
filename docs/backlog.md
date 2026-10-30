@@ -39,23 +39,6 @@ A review of the page check's screenshots (`out/page/*.png`) on 2026-10-30 found 
 a layout that leaves holes and says too much. The owner's choice the same day: two pull requests, the fixes first, then
 the polish; decision [2026-10-26-new-ui.md](decisions/2026-10-26-new-ui.md)'s layout (B) stays.
 
-- The page's numbers and words after a stop, a resume and a reload
-  - Why: after a resumed run the status line's "times real time" divided the whole video by the rest's time (5.2
-    against the statistics' 4.7); "resumed from frame 124" after a stop at 216 named the keyframe the rest scores
-    again from, not where the run had got to; the kept run shown again after a reload had no sound, and its bitrate
-    and statistics cards counted the whole file's keyframes and the cut-short last shot as a length; the picture card
-    said "and 3 shorter, on the timeline." after "Black: none of 2 s or more."; Forget, which deletes the kept run,
-    looked like Detect.
-  - Where: `app.js` (`show`, `resumedFrom`, `restore` measuring the sound as a run does), `panels/stats.js`,
-    `panels/bitrate.js`, `panels/picture.js`, `index.html` and `style.css` (Forget's `danger` style),
-    `tools/page-check/page-check.mjs`.
-  - Done when: the page check asserts each: the two times real time equal after a resume, the resumed status naming
-    the stopped frame (the keyframe in brackets), the kept run's sound card and waveform, its bitrate and statistics of
-    the frames read, no picture line that isn't a sentence, Forget unfilled and not Detect's colour; the CSVs, JSON and
-    HTML byte for byte as before (`tools/check.sh native page`).
-  - Not: no change to the layout (the next row) or to any export.
-  - Status: In progress (2026-10-30)
-
 - The page's layout and styling
   - Why: the details grid (auto-fill, 17rem) leaves a card alone on a row with holes beside it; the shots table spreads
     five columns over the width with small stills, in a 70vh scroll box that clips its last row even with 8 shots; the
