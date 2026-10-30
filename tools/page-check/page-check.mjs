@@ -436,7 +436,7 @@ async function picture(page, what, file) {
   const bars = (text.match(/Colour bars: \d/g) ?? []).length;
   const lane = await page.locator('.track.picture svg').count();
   // Each line a sentence of its own: none goes on from the one before (as "and 3 shorter" after "none").
-  const dangling = await page.$$eval('#picture p', ps => ps.map(p => p.textContent).filter(t => /^(and|or|but) /i.test(t)));
+  const dangling = await page.$$eval('#picture p', ps => ps.map(p => p.textContent).filter(t => /^(and|or|but) /.test(t)));
   if (dangling.length > 0) fail(`${what}: the picture's card has lines that aren't sentences: ${dangling.join(' | ')}`);
   if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);

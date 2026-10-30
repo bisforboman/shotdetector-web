@@ -158,7 +158,7 @@ function fill({ summary: p, video }) {
   for (const s of long) {
     section.append(paragraph(`Black: ${at(s.firstFrame)} to ${at(s.endFrame)}`, `blackdetect: ${s.start} s to ${s.end} s`));
   }
-  if (long.length > 0 && short > 0) section.append(paragraph(`And ${shorter}.`));
+  if (long.length > 0 && short > 0) section.append(paragraph(`Shorter than 2 s: ${short}, on the timeline.`));
 
   section.append(heading('Letterbox', 'cropdetect with its defaults (limit 24, round 16, the first two frames skipped), ' +
     'checked against it exactly'));
