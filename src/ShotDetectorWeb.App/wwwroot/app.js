@@ -18,7 +18,8 @@
 //                        'range'    { video, index, done, of }   a split run's range: its frames done, of how many
 //                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it
 //                        'done'     { video, result, seconds, name }   the run's result (Api's Detect, its CSVs as
-//                                                                scenesCsv and statsCsv); name: the file's, without its
+//                                                                scenesCsv, a string, and statsCsv, a Blob of text/csv);
+//                                                                name: the file's, without its
 //                                                                extension, for downloads. A stopped run's too, with
 //                                                                result.stopped: the result for its frameCount frames
 //                        'cancelled' { video, done, expected }   the run was lost at frame done: the worker didn't
@@ -392,7 +393,8 @@ async function go(run, plan, fallback = null) {
   const seconds = runMs() / 1000;
   if (running !== detecting) return; // abandoned: a new file was chosen
   running = null;
-  // The CSVs come as strings of their own, not inside Detect's JSON (README "Large files").
+  // The CSVs come of their own, not inside Detect's JSON (README "Large files"): the scenes CSV a string, the stats CSV
+  // a Blob .NET wrote in parts (README "What the heap holds").
   r.scenesCsv = await call('ScenesCsv');
   r.statsCsv = await call('StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile

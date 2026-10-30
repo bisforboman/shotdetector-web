@@ -18,12 +18,29 @@ Status: **Open**, **In progress**, **Maybe**; finished rows (in backlog-done.md)
 
 ## Next
 
-### Decisions to make first
+### First release: the page on GitHub Pages
 
-The owner chose (2026-10-26) to take these two up, each with its design question answered before anything is built.
-The WebCodecs one is measured and done ([backlog-done.md](backlog-done.md)): the decision stands. The row below
-builds on the workers row (done 2026-10-27): a merge of ranges that stop before the video's end, with the ranges
-from the start (`Mp4Input.FromStart`), gives the result for the frames they cover (app-check, stopped split runs).
+The first release's rows are all done ([backlog-done.md](backlog-done.md)).
+
+### After the first release
+
+The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
+itself", which lists the first release's page, not every page there will be. Since the page's structure row
+(decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
+module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
+shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
+panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
+derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
+
+## Waiting
+
+The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
+[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
+[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
+asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
+in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
+3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
+ManagedCodecs#138's optional part, the row below.
 
 - Resume after Stop, across visits
   - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
@@ -48,50 +65,8 @@ from the start (`Mp4Input.FromStart`), gives the result for the frames they cove
     the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
   - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
   - Depends on: "Long videos across several Web Workers".
-  - Status: Open
-
-### First release: the page on GitHub Pages
-
-The first release's rows are all done ([backlog-done.md](backlog-done.md)).
-
-### After the first release
-
-The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
-itself", which lists the first release's page, not every page there will be. Since the page's structure row
-(decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
-module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
-shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
-panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs stay the only output the exactness check speaks for.
-
-### Unblocked by ShotDetector 3.20.0 and ManagedCodecs 0.1.0
-
-These waited on shotdetector#519 and ManagedCodecs#138 (filed 2026-10-26); the packages the page builds against
-since 2026-10-28 carry what they asked for, or part of it.
-
-- ShotDetector: the stats CSV written row by row
-  - Why: the half of this that stored the stats by column shipped in ShotDetector 3.16.1
-    (bisforboman/shotdetector#512): on a two-hour film the stats keep 11.3 MB instead of 64.0 (65 B a frame instead of
-    370), and `Stats.Csv` no longer grows the wasm heap there (208 MB, where the run leaves it, instead of 432; README
-    "What the heap holds", 2026-10-26). The CSV is still built as one string: 20 million characters, 175 MB allocated
-    (about 1 KB a frame), still the largest allocation at the end of a run, which fit in the room the heap already had
-    on that film.
-  - Where: upstream (bisforboman/shotdetector), an issue for the owner to file, its text in
-    [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
-    position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
-    `[JSImport]` the worker gives), so the whole CSV is never one string.
-  - Status: Open (2026-10-28: `Stats.WriteCsv(TextWriter, position)` shipped in ShotDetector 3.20.0, the version the
-    page builds against since 2026-10-28; [shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519)
-    was filed 2026-10-26, the columns shipped in 3.16.1 on 2026-10-25)
-
-## Waiting
-
-The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
-[shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
-[#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
-asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
-in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
-3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are under Next.
+  - Status: Waiting on upstream ([shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598),
+    `OnShot` on a range from frame 0; the owner chose to wait for it, decision `2026-10-30-resume-across-visits.md`)
 
 - ManagedCodecs: a demuxer of the tracks asked for, packets without their data
   - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
@@ -99,7 +74,7 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
     zeroed arrays come out of `Open`'s 405 MB allocated, and a run allocates and throws away the audio track's 115 MB.
     It doesn't grow the wasm heap: both were tried in a patched local build, 84 MB opened and 121 MB after the run either
     way (README "What the heap holds", 2026-10-29). So low priority: allocation and time, not memory.
-  - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
+  - Where: upstream (bisforboman/ManagedCodecs), filed as #211 from the text in
     [#59](https://github.com/bisforboman/shotdetector-web/pull/59), a follow-up to
     [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138). Then here: the run's demuxer
     (`Mp4Input.DecodedFrames`, the ranges') of the video track only, and the opening pass through the timing-only
@@ -107,7 +82,8 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
   - Done when: a ManagedCodecs release has both, and the page uses them with the checks unchanged.
   - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it); stays on 0.1.0
     (ManagedCodecs#206).
-  - Status: Waiting on upstream (the issue's text in #59, 2026-10-29; not filed yet)
+  - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
+    2026-10-30)
 
 - ManagedCodecs 0.2.0 on wasm: other pixels under the interpreter
   - Why: 0.2.0 (nuget.org, 2026-10-28 18:28 UTC, 97 commits past 0.1.0, nearly all H.264 decoder speed work in
@@ -155,7 +131,7 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
     and the AOT publish's `_framework/` through `gzip -6` goes from 19.19 MB to 16.31 MB raw (−2.88 MB, 15%) and from
     5.76 to 5.14 MB compressed (−620 KB, 10.8%): `dotnet.native.wasm` −2.31 MB raw (−478 KB; the AOT code of the
     FFmpeg paths), `FFmpeg.AutoGen.wasm` −447 KB (−103 KB), FrameReader 91 to 20 KB, ShotDetector 256 to 222 KB.
-  - Where: upstream (bisforboman/shotdetector), an issue for the owner to file with the above: the frame-source entry
+  - Where: upstream (bisforboman/shotdetector), filed as #597 with the above: the frame-source entry
     points (`Detect`/`DetectAsync`/`RunAsync` over `YuvFrame`s, `ScoreRangeAsync`, `Merge`) should not reach
     FFmpeg-only code statically, so a trimmed app that never decodes with FFmpeg doesn't ship FFmpeg.AutoGen; e.g.
     `Steps` takes its `VideoReader` from the `frames` factory always (the path and stream entries passing theirs) and
@@ -167,7 +143,8 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
   - Done when: `_framework/` has no `FFmpeg.AutoGen.wasm`, the checks are green, and the README's sizes are updated.
   - Not: no change to the core library; no ILLink substitutions here (a stub of ShotDetector's internals would break
     silently when they change, and CLAUDE.md: what belongs upstream is reported there).
-  - Status: Waiting on upstream (2026-10-29: measured here; the issue is the owner's to file)
+  - Status: Waiting on upstream ([shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597), filed
+    2026-10-30)
 
 ## Maybe
 

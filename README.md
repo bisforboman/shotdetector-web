@@ -45,7 +45,7 @@ python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/ww
 Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does). The
 page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeline.js` and a module per panel in
 `panels/`, native ES modules with no build step and no dependencies; `worker.js` owns the .NET runtime and calls the
-exports the page names, and `blob-read.js` reads the picked file for it. Pick an MP4 (or drop one), choose the detector,
+exports the page names, `blob-read.js` reads the picked file for it and `blob-write.js` makes the stats CSV's `Blob`. Pick an MP4 (or drop one), choose the detector,
 its threshold (prefilled with ShotDetector's default for it), the minimum shot length and, for adaptive, its window
 and minimum content_val (scenedetect's `window_width` and `min_content_val`, prefilled 2 and 15; issue #50), and
 detect. Under the player
@@ -235,7 +235,8 @@ heap after each step, and what grew it (the same steps run natively, `GC.GetTota
 | The scenes CSV (`ScenesCsv()`) | 208 MB | 208 MB | 113,808 characters |
 | The stats CSV (`StatsCsv()`) | 432 MB | 208 MB | a 20.0-million-character string; building it allocates 325 MB with 3.15.0 (a dictionary per frame, the sort, the `StringBuilder`) and 175 MB with 3.16.1 (the `StringBuilder` and the string), which fits in what the heap already has |
 
-The CSVs reach JavaScript as strings of their own, without growing the heap. Until 2026-10-25 they were inside
+The CSVs reach JavaScript as strings of their own (the stats CSV a `Blob` since 2026-10-30, below), without growing the
+heap. Until 2026-10-25 they were inside
 `Detect`'s JSON, and the heap reached 769 MB: System.Text.Json escapes a string (the CSV's line breaks) through a char
 buffer of six times its length rounded up to a power of two, 134 million chars (268 MB) for the stats CSV, and writes
 into a 67 MB UTF-8 buffer; `ArrayPool` keeps both, then the 40.6 MB JSON string. Opening took the heap to 208 MB before
@@ -248,8 +249,8 @@ frame, but in room the heap already has on this film: the demuxer's index alloca
 audio, and keeps a fifth of it). In headless Chromium as in the table above, the control's run ended with a wasm heap of
 432 MB on 2026-10-25 (734 MB before) and the renderer's peak at 788 MB (1,043 MB), the same 1,105 shots; with 3.16.1 the
 heap ends where the run leaves it, 208 MB under Node. The CSVs are unchanged (`tools/check.sh`). What was left shipped
-upstream on 2026-10-27 and 2026-10-28: ShotDetector 3.20.0's `Stats.WriteCsv`, which waits to be used here (backlog,
-Next), and ManagedCodecs 0.1.0's sample table, below.
+upstream on 2026-10-27 and 2026-10-28: ShotDetector 3.20.0's `Stats.WriteCsv`, used here since 2026-10-30 (below), and
+ManagedCodecs 0.1.0's sample table, below.
 
 ManagedCodecs 0.1.0, the package since 2026-10-28, keeps each track's samples in columns, 29 bytes a sample, built once
 at their final size ([ManagedCodecs#123](https://github.com/bisforboman/ManagedCodecs/pull/123), from
@@ -269,7 +270,7 @@ on each of three runs.
 | The packets (`Packets()`, as the page calls it once opened) | 174 MB | 100 MB | the 2,263,545-character JSON: room the heap had before, 16 MB more now |
 | The run (`Detect`) | 208 MB | 121 MB | the run's own demuxer (both tracks indexed again) and decoder, ShotDetector's stats |
 | The scenes CSV (`ScenesCsv()`) | 208 MB | 121 MB | 115,095 characters |
-| The stats CSV (`StatsCsv()`) | 208 MB | 151 MB | the 20.0-million-character string and its `StringBuilder`: room the heap had before, 30 MB more now (`Stats.WriteCsv`, backlog) |
+| The stats CSV (`StatsCsv()`) | 208 MB | 151 MB | the 20.0-million-character string and its `StringBuilder`: room the heap had before, 30 MB more now (written a row at a time since 2026-10-30, below) |
 
 So a two-hour film's peak went from 208 to 151 MB, and a split run's worker from 208 to 121 MB. #138 asked for three
 things: each track's samples filled once and a smaller sample, both shipped, and, optionally, only the tracks asked
@@ -282,6 +283,25 @@ demuxer indexing the video track only, and the duration pass's packets in one re
 allocates 51 MB instead of 405, but the wasm heap stays where it is: 84 MB opened, 121 MB after the run (146 MB after
 the stats CSV instead of 151). The arrays die young and are collected before the heap has to grow. For the heap #138
 is answered; the rest is allocation, an issue for upstream at low priority (backlog, Waiting).
+
+Since 2026-10-30 `StatsCsv()` writes the CSV a row at a time through ShotDetector 3.20.0's `Stats.WriteCsv`, into a
+`Blob` (`BlobWriter`: each part of 256 K characters copied out to `wwwroot/blob-write.js` as it is written), so the
+whole CSV is never one string in the heap; the page downloads the `Blob` as it is and the scores lane reads its text.
+Measured 2026-10-30 the same way, under Node on the AOT bundle, adaptive with stats, on the control made again by its
+recipe (172,800 frames, 335,938 audio packets, 345,716,086 bytes, 1,182 shots): `main` just before (the string) and
+this change, side by side on one 4-core cloud VM, each once.
+
+| Step | Wasm heap, the string | Wasm heap, the `Blob` |
+| --- | --- | --- |
+| The runtime started | 32 MB | 32 MB |
+| The file opened | 80 MB | 80 MB |
+| The packets (`Packets()`) | 96 MB | 96 MB |
+| The run (`Detect`) | 115 MB | 115 MB |
+| The scenes CSV (`ScenesCsv()`) | 115 MB | 115 MB |
+| The stats CSV (`StatsCsv()`) | 143 MB | 115 MB |
+
+The CSV is the same 19,958,285 characters (the same SHA-256), and the heap now ends where the run leaves it: a
+two-hour film's peak is the run's, 115 MB on this file.
 
 An open file also holds its video packet list (`Mp4Input.Packets`, below; in the numbers above): 13 bytes a frame,
 2.25 MB on a two-hour film.
@@ -491,8 +511,8 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
   - **page** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
     `versions.js`, `worker.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
     `app.js` among it, then the page in Chromium on an interpreted publish (`tools/check.sh page`);
-  - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js` and
-    `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
+  - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js`,
+    `blob-write.js` and `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
     All of it is: native on every sample;
   wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
   shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly

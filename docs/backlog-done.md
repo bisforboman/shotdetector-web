@@ -659,6 +659,22 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     worker posts it as `held`, and the paused status of a one-worker run names it; a split run's says "about", its
     ranges counting from their keyframes. `tools/page-check` now requires the stop to end at exactly that frame)
 
+- ShotDetector: the stats CSV written row by row
+  - Why: the half of this that stored the stats by column shipped in ShotDetector 3.16.1
+    (bisforboman/shotdetector#512): on a two-hour film the stats keep 11.3 MB instead of 64.0 (65 B a frame instead of
+    370), and `Stats.Csv` no longer grows the wasm heap there (208 MB, where the run leaves it, instead of 432; README
+    "What the heap holds", 2026-10-26). The CSV is still built as one string: 20 million characters, 175 MB allocated
+    (about 1 KB a frame), still the largest allocation at the end of a run, which fit in the room the heap already had
+    on that film.
+  - Where: upstream (bisforboman/shotdetector), an issue for the owner to file, its text in
+    [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
+    position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
+    `[JSImport]` the worker gives), so the whole CSV is never one string.
+  - Status: Done (2026-10-30: `Api.StatsCsv` writes through `Stats.WriteCsv` into a `Blob` in parts of 256 K
+    characters (`BlobWriter`, `wwwroot/blob-write.js`); the same CSV, byte for byte, in every wasm check and the page's
+    downloads; on the two-hour control the wasm heap after the stats CSV is 115 MB, where the run leaves it, instead
+    of 143 MB with the string, AOT under Node (README "What the heap holds"))
+
 - The estimate's reference rate measured again
   - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
     3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on

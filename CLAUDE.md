@@ -38,7 +38,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
   the worker's next task, `wwwroot/pause.js`); `Api.Csv.cs` has
-  `ScenesCsv()` and `StatsCsv()` (the last run's CSVs as strings, not inside the JSON: README "What the heap holds"),
+  `ScenesCsv()` and `StatsCsv()` (the last run's CSVs, not inside the JSON: the scenes CSV a string, the stats CSV a
+  `Blob` written a row at a time by `Stats.WriteCsv` through `BlobWriter`, a write-only `Stream` whose parts go out
+  through the `[JSImport]`s `parts`, `append` and `blob`, so it is never one string in the heap: README "What the heap
+  holds"),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
@@ -63,7 +66,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   }`, `{ type: 'cancel' }`, `{ type: 'pause' }` and `{ type: 'resume' }` handled at once, between `Detect`'s pauses, a
   cancelled call answered `cancelled`; a stop or cancel while paused releases the run to end there; `{ type: 'held',
   frames }` posted once a paused run waits, the frames read, where a stop ends it: the page's paused status),
-  `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/pause.js` its `pause` (a `MessageChannel`; `hold`
+  `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/blob-write.js` its `parts`, `append` and `blob`, `wwwroot/pause.js` its `pause` (a `MessageChannel`; `hold`
   and `release`: while held the promise stays unresolved, so the run waits there, README "Pausing a run");
   `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel). The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
@@ -139,7 +142,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   (`2026-10-24-the-page.md`: how the page is built; `2026-10-24-fastyuv-replaceable.md`: FastYuv replaced by
   rebuilding; `2026-10-24-audio.md`: the audio decoded in the worker by ManagedCodecs; `2026-10-25-one-page.md`: one
   timeline and cards, a module per panel; `2026-10-26-workers.md`: long videos across several workers;
-  `2026-10-26-new-ui.md`: the page's new UI, B chosen by the owner, built by the backlog row); `docs/mockups/`: static HTML
+  `2026-10-26-new-ui.md`: the page's new UI, B chosen by the owner, built by the backlog row;
+  `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository

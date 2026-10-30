@@ -99,6 +99,14 @@ const ffmpeg = () => LoadedAssemblies().filter(name => name.startsWith('FFmpeg')
 const atStart = ffmpeg();
 let failed = false;
 const fail = message => { console.error(message); failed = true; };
+// The stats CSV's text: StatsCsv gives a Blob of it, written in parts (BlobWriter, README "What the heap holds"), which
+// the page downloads as it is and the scores lane reads.
+const statsText = () => {
+  const blob = StatsCsv();
+  if (!(blob instanceof Blob) || blob.type !== 'text/csv')
+    throw new Error(`StatsCsv gave ${Object.prototype.toString.call(blob)} of type ${blob?.type}, not a text/csv Blob`);
+  return blob.text();
+};
 let runSeconds = 0, pauseSeconds = 0;
 
 mkdirSync(outDir, { recursive: true });
@@ -133,7 +141,7 @@ for (const [i, sample] of samples.entries()) {
     runSeconds += seconds;
     pauseSeconds += pausing / 1000;
     const name = join(outDir, `${basename(sample, extname(sample))}.${run}`);
-    const scenesCsv = ScenesCsv(), statsCsv = StatsCsv();
+    const scenesCsv = ScenesCsv(), statsCsv = await statsText();
     writeFileSync(`${name}.scenes.csv`, scenesCsv);
     writeFileSync(`${name}.stats.csv`, statsCsv);
     // How many shots were told before the last frame's progress: with one detector, all but the last, give or take
@@ -228,7 +236,7 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
   }
   if (progress.at(-1)?.[0] !== n) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}, not at ${n}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots told aren't the result's`);
-  checkStopped(name, video, result, StatsCsv(), whole, wholeStats);
+  checkStopped(name, video, result, await statsText(), whole, wholeStats);
 }
 
 // A run paused half-way (the worker's 'pause') stays where it is while held, no frame read and no progress told, and
@@ -245,7 +253,7 @@ async function checkPause(sample, video, options, whole, wholeScenes, wholeStats
   const result = JSON.parse(await Detect(JSON.stringify(options)));
   if (still === null) fail(`${name}: never held (at ${half} of ${video.frameCount} frames)`);
   else if (still.moved > 0) fail(`${name}: ${still.moved} progress reports while held at frame ${still.framesRead}`);
-  if (result.stopped !== false || ScenesCsv() !== wholeScenes || StatsCsv() !== wholeStats ||
+  if (result.stopped !== false || ScenesCsv() !== wholeScenes || await statsText() !== wholeStats ||
     JSON.stringify(result.shots) !== JSON.stringify(whole.shots))
     fail(`${name}: resumed, the result isn't the run never paused's (stopped ${result.stopped})`);
   else console.error(`${name} at ${still?.framesRead} of ${video.frameCount} frames, held ${HELD_MS} ms with no ` +
@@ -490,7 +498,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
   const bytes = await scoreRanges(options, plan);
   const result = merge(options, bytes);
   const seconds = (performance.now() - started) / 1000;
-  const same = ScenesCsv() === wholeScenes && StatsCsv() === wholeStats;
+  const same = ScenesCsv() === wholeScenes && await statsText() === wholeStats;
   if (!same || JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || result.frameCount !== whole.frameCount ||
     result.stopped !== false || JSON.stringify(result.warnings) !== JSON.stringify(whole.warnings))
     fail(`${name}: ${same ? 'the same CSVs' : 'other CSVs'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
@@ -508,7 +516,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
       `${n} frames, stopped ${partial.stopped}`);
     return;
   }
-  checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, StatsCsv(), whole, wholeStats);
+  checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, await statsText(), whole, wholeStats);
 }
 
 // Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other
