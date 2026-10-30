@@ -199,7 +199,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.21.0, FrameReader 2.16.0 and ManagedCodecs 0.2.3 (Containers, H264, Aac, each
+- Packages: ShotDetector/FastYuv 3.22.0, FrameReader 2.16.0 and ManagedCodecs 0.2.4 (Containers, H264, Aac, each
   pinning Core) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
@@ -241,9 +241,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   tone sample's gap is 3 s, and the check also runs at 1 s.
 - The published bundle is trimmed with `UseSystemResourceKeys`: the framework's exception messages come out as resource
   keys (`DeserializeUnableToConvertValue, ...`), the libraries' own (ManagedCodecs, `UnsupportedVideoException`) whole.
-- Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches, FFmpeg.AutoGen
-  among them (ShotDetector references it, the trimmer keeps it); interpreted, assemblies load on first use. The wasm check's "nothing of
-  FFmpeg" (app-check.mjs, `LoadedAssemblies()`) is strict interpreted, "nothing loaded by the runs" under AOT.
+- Under wasm AOT the runtime loads some assemblies before `Main` that the interpreter never touches; interpreted,
+  assemblies load on first use. FFmpeg.AutoGen was one until ShotDetector 3.22.0, whose frame-source path stopped
+  reaching FFmpeg's code (shotdetector#597): the trimmer now drops it, `tools/check.sh` fails if a bundle has
+  `FFmpeg.AutoGen.wasm`, and the wasm check's "no FFmpeg assembly loaded at all" holds under AOT too.
 - A `[JSExport]`'s task that ends cancelled (an `OperationCanceledException` out of an `async` method) never settles
   the promise JavaScript holds (.NET 10, seen 2026-10-26): `Api.Detect` turns its token's cancellation into a
   `RunCancelledException`, which rejects it.

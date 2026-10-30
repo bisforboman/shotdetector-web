@@ -375,17 +375,17 @@ load, empty cache:
 
 The second row's transfer is the publish's files through `gzip -6`, which comes within 0.2% of what Pages sends for
 the files that didn't change. `dotnet.native.wasm` is most of it: 4.0 MB transferred, 13.3 MB raw (the runtime and
-every assembly's AOT code). FFmpeg.AutoGen, which nothing on the page's path runs, costs 103 KB transferred (447 KB
-raw); FrameReader 26 KB (80 KB). The publish already trims every assembly; they stay because ShotDetector's frame-source
-path shares code with its FFmpeg path. Measured 2026-10-29 with that code cut off (backlog, the trimming row, waiting on
-ShotDetector), the AOT bundle would be 620 KB smaller compressed (5.76 to 5.14 MB, 2.88 MB raw), most of it AOT code in
-`dotnet.native.wasm`. Pages answers with `cache-control: max-age=600` and an
+every assembly's AOT code). Since ShotDetector 3.22.0 its frame-source path no longer reaches its FFmpeg path's code
+(shotdetector#597), so the trimmer drops FFmpeg.AutoGen and that code: the AOT publish's `_framework/` is 16.23 MB raw
+and 5.12 MB through `gzip -6` (2026-10-30, ManagedCodecs 0.2.4), from 19.86 and 5.97 with 3.21.0 (−18% raw, −14%
+compressed), `dotnet.native.wasm` 12.6 MB raw, FrameReader 20 KB and ShotDetector 193 KB. Pages answers with `cache-control: max-age=600` and an
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
 The threaded bundle (`threads/_framework/`, 2026-10-30: Threads, above) is a second copy of the runtime and every
-assembly, built with `WasmEnableThreads`: AOT, 20.56 MB raw and 6.16 MB through `gzip -6`, against the page's own
-bundle's 19.86 and 5.97 (ManagedCodecs 0.2.3, ShotDetector 3.21.0). A visit loads it only for a run on threads, after
-the page's own bundle, so a first visit that runs a short video downloads about 12.1 MB compressed where it was 6.0;
+assembly, built with `WasmEnableThreads`: AOT, 16.90 MB raw and 5.31 MB through `gzip -6`, against the page's own
+bundle's 16.23 and 5.12 (ManagedCodecs 0.2.4, ShotDetector 3.22.0; 20.56 and 6.16 with 3.21.0). A visit loads it only
+for a run on threads, after the page's own bundle, so a first visit that runs a short video downloads about 10.4 MB
+compressed where it was 5.1;
 the site holds both.
 
 The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's
@@ -569,11 +569,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   run is the native check's `out/native/<sample>.picture.json` exactly, after a split run's merge the whole run's, and
   after a stopped run (one worker or split) the frames its result read, and that the publish
   output has `_framework/ShotDetector.FastYuv.wasm` as its own file and `licenses/ShotDetector.FastYuv/COPYING.LGPL`.
-  Interpreted, it fails if FFmpeg.AutoGen (in the bundle because ShotDetector references it, and FrameReader, whose
-  waveform and tone code the audio pass runs) is loaded at all, the audio pass included (`LoadedAssemblies()`): the
-  runtime loads an assembly only when code needs it, so nothing on the path touches
-  FFmpeg. Compiled ahead of time (`aot`, a few minutes more to build), the runtime loads some assemblies at start that
-  the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only if the runs load one. No FFmpeg
+  It fails if either bundle has `FFmpeg.AutoGen.wasm` (the trimmer drops it since ShotDetector 3.22.0, nothing on the
+  page's path reaching FFmpeg's code), and if any FFmpeg assembly is loaded at all, the audio pass included
+  (`LoadedAssemblies()`), interpreted and compiled ahead of time (`aot`, a few minutes more to build) alike. No FFmpeg
   library exists in the browser either way.
 - **page** (`tools/page-check/page-check.mjs`, Playwright 1.63.0 pinned by its lockfile, Chromium only): the page's own
   JavaScript (`app.js`, `worker.js`, `threads.js`, `sw.js`, the panels) in a browser, as a visitor drives it, and the
@@ -690,8 +688,8 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.21.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
-ManagedCodecs (0.2.3: the `ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each
+ShotDetector and ShotDetector.FastYuv (3.22.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
+ManagedCodecs (0.2.4: the `ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version; on nuget.org since 0.1.0, 2026-10-28, until then a git submodule
 referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3)
 and what they depend on come from nuget.org.
@@ -713,12 +711,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.21.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.22.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.21.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.22.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.21.0 -p:FrameReaderVersion=2.16.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.22.0 -p:FrameReaderVersion=2.16.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \

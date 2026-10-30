@@ -216,9 +216,8 @@ const byRuns = ffmpeg().filter(name => !atStart.includes(name));
 if (byRuns.length > 0) {
   fail(`FFmpeg assemblies loaded by the runs: ${byRuns.join(', ')}`);
 } else {
-  // The AOT runtime loads some assemblies before the first call that the interpreter never touches, FFmpeg.AutoGen
-  // among them (in the bundle because ShotDetector references it); interpreted, an assembly loads when code first
-  // needs it, so there "none at all" shows that nothing on this path touches FFmpeg.
+  // None at all, interpreted or AOT, since FFmpeg.AutoGen is no longer in the bundle (ShotDetector 3.22.0); before it
+  // the AOT runtime loaded it at start. tools/check.sh requires "none at all".
   console.error(atStart.length === 0
     ? 'No FFmpeg assembly loaded at all.'
     : `No FFmpeg assembly loaded by the runs (loaded at start: ${atStart.join(', ')}).`);

@@ -82,6 +82,11 @@ if [[ $wasm == true ]]; then
     licenses/ShotDetector.FastYuv/COPYING.LGPL; do
     if [[ ! -f $publish/$f ]]; then echo "Not in the App's publish output: $f" >&2; exit 1; fi
   done
+  # Nothing on the page's path reaches FFmpeg's code (ShotDetector 3.22.0, shotdetector#597), so the trimmer drops
+  # FFmpeg.AutoGen from both bundles.
+  for f in wwwroot/_framework/FFmpeg.AutoGen.wasm wwwroot/threads/_framework/FFmpeg.AutoGen.wasm; do
+    if [[ -f $publish/$f ]]; then echo "In the App's publish output, though nothing should reach it: $f" >&2; exit 1; fi
+  done
   rm -rf out/wasm
   # The runtime's own notes (under Node, that it can't load its symbol file) come on stdout, starting MONO_WASM.
   status=0
@@ -90,10 +95,8 @@ if [[ $wasm == true ]]; then
     | { grep -v '^MONO_WASM:' || true; } || status=$?
   cat out/wasm-stderr.txt
   if [[ $status != 0 ]]; then echo "The WebAssembly run failed (above)." >&2; exit 1; fi
-  # Interpreted, FFmpeg.AutoGen must not be loaded at all; AOT loads some assemblies before the first call, FFmpeg.AutoGen
-  # among them, so there only the runs must not load it.
-  if [[ $aot == true ]]; then expect='^No FFmpeg assembly loaded'; else expect='^No FFmpeg assembly loaded at all\.$'; fi
-  if ! grep -qE "$expect" out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
+  # No FFmpeg assembly loaded at all, interpreted or AOT: none is in the bundle.
+  if ! grep -qE '^No FFmpeg assembly loaded at all\.$' out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
 
   # The native CSVs, JSON and HTML of the samples run here (all of out/native/ unless samples were named), each written
   # by the run.
