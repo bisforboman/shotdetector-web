@@ -689,3 +689,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     517 s for a 492.1 s run of the two-hour film on 3 workers (the page's choice there); against the medians of three,
     1% short and 16% long. GitHub's runner ran the trailer at 151 fps the same day; the owner chose this VM's rate.
     README "Large files")
+
+- Threads in the browser
+  - Why: ManagedCodecs decodes a 720p P chain in about half the time on 4 threads (`H264Decoder.Threads`). Wasm
+    threads need `SharedArrayBuffer`, so COOP/COEP headers, which Pages can't set; a service worker that adds them to
+    its own responses (the `coi-serviceworker` trick) can. `DetectionMode.Parallel` doesn't apply to a frame source
+    (it reads once, in order), so only decoding would speed up.
+  - Status: Done (2026-10-30, decision `2026-10-30-threads.md`, the owner's choice: built for one-worker runs. .NET's
+    threaded runtime starts only on the page's own thread, so `threads.js` runs it there, beside the page's worker,
+    the run on .NET's thread pool (`Host.cs`); `sw.js` isolates the page. Sintel's trailer on 4 threads in 7.0 s instead
+    of 17.9 s, 2.6 times as fast (interleaved rounds, AOT, 4-core VM); `ThreadsCheck.cs` and the page check: the same
+    CSVs byte for byte)
+
+- Offline (a service worker caching the bundle)
+  - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
+  - Status: Done (2026-10-30, decision `2026-10-30-threads.md`: `sw.js`, network first, the cache as the fallback,
+    the demo cached once fetched; the page check reloads the page offline and runs the demo from the cache)

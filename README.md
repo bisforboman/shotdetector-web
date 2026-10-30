@@ -38,11 +38,16 @@ decided in
 ## Running the page
 
 ```
-dotnet publish src/ShotDetectorWeb.App -c Release            # -p:RunAOTCompilation=true for the build Pages gets
+dotnet publish src/ShotDetectorWeb.App -c Release -p:WasmEnableThreads=true -o out/threads-publish   # the threaded bundle
+rm -rf src/ShotDetectorWeb.App/obj src/ShotDetectorWeb.App/bin                                     # the next build mustn't reuse it
+dotnet publish src/ShotDetectorWeb.App -c Release            # -p:RunAOTCompilation=true (both) for the build Pages gets
+mkdir -p src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot/threads
+cp -r out/threads-publish/wwwroot/_framework src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot/threads/
 python3 -m http.server -d src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot 8000
 ```
 
-Then open http://localhost:8000. Any static server works if it serves `.wasm` as `application/wasm` (Python's does). The
+Then open http://localhost:8000 (`localhost`, a secure context: the service worker needs one). `tools/check.sh` publishes
+the two bundles the same way. Without `threads/_framework/` the page runs everything on its worker (Threads, below). Any static server works if it serves `.wasm` as `application/wasm` (Python's does). The
 page is `wwwroot/index.html`, `style.css`, `app.js` (the page's states), `timeline.js` and a module per panel in
 `panels/`, native ES modules with no build step and no dependencies; `worker.js` owns the .NET runtime and calls the
 exports the page names, `blob-read.js` reads the picked file for it and `blob-write.js` makes the stats CSV's `Blob`. Pick an MP4 (or drop one), choose the detector,
@@ -175,6 +180,37 @@ one-worker run's again; the renderer was not measured again. On Sintel's 52 s
 trailer splitting paid too: 19.0 s on one worker, 11.1 s on two, 10.0 s on three, 6.7 s on four (the median of two
 each; the three ranges at keyframes are less equal than the four), each worker about 100 MB more of renderer; below 2
 minutes the page keeps one worker anyway, for its live shots (the decision's "As measured").
+
+## Threads, and the page offline
+
+A run on one worker (a video up to 2 minutes, or `?workers=1`) decodes on several threads where the browser allows it
+(decision [2026-10-30-threads.md](docs/decisions/2026-10-30-threads.md)): ManagedCodecs' frame threading
+(`H264Decoder.Threads`, through `Mp4Input.DecoderThreads`), which gives the same frames, so the same CSVs (the native
+check's `ThreadsCheck.cs` and the page check prove it). Measured on a 4-core cloud VM, AOT, headless Chromium,
+interleaved rounds: Sintel's trailer went from 17.9 s to 7.0 s on 4 threads (2.6 times as fast), and the same at
+1280x720 from 23.4 s to 9.0 s.
+
+.NET's threaded runtime (`-p:WasmEnableThreads=true`) starts only on a page's own thread, not in a Web Worker, needs
+`SharedArrayBuffer` (so a cross-origin isolated page: COOP and COEP headers), and doesn't run under Node. So the page
+carries two bundles: `_framework/`, today's, in its workers (the page's own, a split run's, the sound's), and
+`threads/_framework/`, the threaded one, which `threads.js` starts on the page's thread for a one-worker run. There .NET
+runs the exports on a thread of its own and the run on its thread pool (`Host.cs`), and the file is read in slices of a
+megabyte with `Blob.arrayBuffer()` (the page's thread has no `FileReaderSync`), each one waited for on the pool. The
+page stays responsive, the shots come as they are found, and pause, resume and stop work as on the page's worker.
+A split run doesn't use threads: its workers already keep the cores busy. The decoder gets as many threads as
+`navigator.hardwareConcurrency` says the machine has cores, at most 4 (6 did no better on 4 cores; `MOST_THREADS` at the
+top of `app.js`; `?threads=N` in the page's address forces N, 0 or 1 meaning the page's worker).
+
+GitHub Pages can't set headers, so `sw.js`, the page's service worker, adds them to every response it gives (the
+`coi-serviceworker` trick). A first visit isn't controlled by it yet: it reloads once when the service worker takes
+over, unless a file has been picked by then (threads come with the next visit). Where there is no service worker (some
+private modes) or the page isn't isolated, every run goes on the page's worker as before. A threaded run that doesn't
+answer a stop can't be terminated as a worker can: it is abandoned, and runs go on the page's worker until a reload.
+
+The same service worker keeps the page for offline use, network first: online, every request goes to the network as
+it always did and its answer replaces the cached copy; offline, the cached copy answers, the page, both bundles and the
+demo clip once it has been fetched. A new deploy reaches a visitor as it did before; a visit cut off half-way through a
+new deploy's files can leave a mix that fails offline until the next online visit.
 
 ## Large files
 
@@ -328,6 +364,11 @@ ShotDetector), the AOT bundle would be 620 KB smaller compressed (5.76 to 5.14 M
 `dotnet.native.wasm`. Pages answers with `cache-control: max-age=600` and an
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
+The threaded bundle (`threads/_framework/`, 2026-10-30: Threads, above) is a second copy of the runtime and every
+assembly, built with `WasmEnableThreads`: AOT, 19.82 MB raw and 5.93 MB through `gzip -6` (today's: 19.24 and 5.78),
+interpreted 7.34 and 2.82 MB (7.12 and 2.75). A visit loads it only for a run on threads, after the page's own bundle,
+so a first visit that runs a short video downloads about 11.7 MB compressed where it was 5.8; the site holds both.
+
 The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's
 `_framework/` against `main` before it, files through `gzip -6`: 17.03 to 17.92 MB raw (+889 KB, 5.2%), 5.08 to 5.34 MB
 compressed (+258 KB, 5.1%). `ManagedCodecs.Aac.wasm` is 168 KB raw (43 KB compressed); the rest is mostly its AOT code
@@ -428,6 +469,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's run with all five detectors split
   into ranges at keyframes as the page splits a long video (`Mp4Input.Ranges`, at most 4: 2 to 4 on the samples), each
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
+  the same run decoded on four threads (`Mp4Input.DecoderThreads`, as the page's threaded runtime decodes), whole, in
+  ranges, and stopped half-way against the same run stopped on one thread, byte for byte (`ThreadsCheck.cs`);
   each sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio
   stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`); and the page's
   defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
@@ -477,13 +520,17 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   the interpreter never touches, FFmpeg.AutoGen among them, so there it fails only if the runs load one. No FFmpeg
   library exists in the browser either way.
 - **page** (`tools/page-check/page-check.mjs`, Playwright 1.63.0 pinned by its lockfile, Chromium only): the page's own
-  JavaScript (`app.js`, `worker.js`, the panels) in a browser, as a visitor drives it. The published `wwwroot` is
-  served as Pages serves it, the demo clip in `demo/` (`sintel_trailer-480p.mp4`, as `pages.yml` puts it), and the
-  page loaded fresh three times: `with-audio-320x240-25.mp4` set on the file input and detected with the options as
-  the page prefills them; the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers" in the
-  status); "Try the demo", paused a quarter of the way in (the button reading Resume, the bar and the status unchanged
-  for 2 s once the run has reached the pause it waits at) and resumed; and the demo detected again, paused and stopped
-  while paused. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
+  JavaScript (`app.js`, `worker.js`, `threads.js`, `sw.js`, the panels) in a browser, as a visitor drives it, and the
+  only check of the threaded bundle (it doesn't run under Node). The published `wwwroot` is
+  served as Pages serves it, without headers, the demo clip in `demo/` (`sintel_trailer-480p.mp4`, as `pages.yml` puts
+  it), and the page loaded fresh four times, each first made cross-origin isolated by its service worker (the one
+  reload of a first visit): `with-audio-320x240-25.mp4` set on the file input and detected with the options as
+  the page prefills them, on threads ("on N threads" in the status); the same on the page's worker (`?threads=0`, as
+  where the page isn't isolated); the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers"
+  in the status); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
+  the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
+  paused and stopped while paused; and the page reloaded offline (Playwright's network off), from the service worker's
+  cache, still isolated, the demo run again from the cache on threads. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
   clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the shots
   table must have a row per shot of the CSV; the demo's sound must be measured. The stopped run must end `stopped` at
   the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held
@@ -509,7 +556,7 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
     `tools/WebCodecsCheck/`, `tools/WebCodecsWasm/`): `build` runs and passes without a check, which can't see them;
   - **native** for `tools/NativeCheck/`: the native check alone;
   - **page** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
-    `versions.js`, `worker.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
+    `versions.js`, `worker.js`, `threads.js`, `sw.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
     `app.js` among it, then the page in Chromium on an interpreted publish (`tools/check.sh page`);
   - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js`,
     `blob-write.js` and `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
@@ -527,8 +574,9 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
   pull request before it merges, so this checks the merged tree before it deploys. Native on every sample, wasm AOT on
   every sample (that publish is the bundle deployed, copied out as it is, not a second one), the page in Chromium on
   that bundle with the demo clip, and replace with AOT.
-  Then it adds FastYuv's license, the demo clip and `.nojekyll`, fails unless the uploaded site has
-  `_framework/ShotDetector.FastYuv.wasm` and `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files of their own, and
+  Then it adds FastYuv's license, the demo clip and `.nojekyll`, fails unless the uploaded site has `sw.js`,
+  `_framework/ShotDetector.FastYuv.wasm`, `threads/_framework/ShotDetector.FastYuv.wasm` and
+  `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files of their own, and
   deploys it to GitHub Pages only if all of that passed. `workflow_dispatch` does the same for `main` by hand.
 
 So wasm interpreted on every sample, the one place that proves nothing of FFmpeg is touched on every sample's path,
@@ -599,7 +647,8 @@ rewrites an edit list with, is ManagedCodecs' `tools/mp4-edit-list.py` as it was
 
 MIT ([LICENSE](LICENSE)). The app bundles libraries under their own licenses, listed in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). **ShotDetector.FastYuv is LGPL-2.1-or-later**: it stays its own assembly
-(on WebAssembly its own `_framework/ShotDetector.FastYuv.wasm`), and its license text ships next to it
+(on WebAssembly its own `_framework/ShotDetector.FastYuv.wasm`, and `threads/_framework/ShotDetector.FastYuv.wasm` in
+the threaded bundle), and its license text ships next to it
 (`licenses/ShotDetector.FastYuv/COPYING.LGPL` in every build and publish output).
 
 To use a changed FastYuv, build it from its source and publish the app against it. Swapping the `.wasm` file in a
@@ -617,8 +666,9 @@ dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
   -p:FastYuvAssembly=$PWD/shotdetector/src/ShotDetector.FastYuv/bin/Release/net10.0/ShotDetector.FastYuv.dll
 # the page is shotdetector-web/src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot, FastYuv's license in
-# publish/licenses/ (pages.yml copies it into the site, as licenses/ShotDetector.FastYuv/COPYING.LGPL)
+# publish/licenses/ (pages.yml copies it into the site, as licenses/ShotDetector.FastYuv/COPYING.LGPL); the threaded
+# bundle the same, with -p:WasmEnableThreads=true as well, into wwwroot/threads/ (Running the page)
 ```
 
-`tools/check.sh replace` does this with a visibly changed FastYuv and checks the rebuilt bundle runs it; CI runs it
-compiled ahead of time.
+`tools/check.sh replace` does this, both bundles, with a visibly changed FastYuv and checks the rebuilt bundle runs it
+(the page's own: the threaded one doesn't run under Node); CI runs it compiled ahead of time.
