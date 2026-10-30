@@ -750,9 +750,10 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-30: ManagedCodecs 0.2.3 fixed #206 (narrowing that saturated under the interpreter,
     dotnet/runtime#136688); with ShotDetector 3.21.0 and FrameReader 2.16.0, natively every check agrees, and on
     browser-wasm 154 of 154 CSVs are identical interpreted and ahead of time, the page check and the replace check
-    passing. Speed against 0.1.0 not settled: the cloud VM is too noisy; AOT under Node, Sintel's trailer took 18.2 s
-    adaptive and 20.5 s all detectors, against 21.5 and 25.1 for 0.1.0 on 2026-10-29, a different hour of the same
-    kind of machine; `REFERENCE_FPS`, measured on 0.1.0 the same day, measured again in CI would tell)
+    passing. Speed against 0.1.0, timed in CI on one runner (AMD EPYC 9V45, 2026-10-30, run 41067439223): the AOT
+    bundle under Node, adaptive, six interleaved rounds of three runs each, Sintel's trailer at 480p 9.57 s with 0.1.0
+    and 7.23 s with 0.2.3 (median; 131 and 173 frames per second), the 1080p original 32.46 and 25.21 s (39 and 50):
+    0.2.3 takes 24 and 22% less time, and every one of its runs was faster than every one of 0.1.0's)
 
 - Threads in the browser
   - Why: ManagedCodecs decodes a 720p P chain in about half the time on 4 threads (`H264Decoder.Threads`). Wasm
@@ -785,3 +786,35 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     rounds (12.0 s, 11.1 s), 3 threads 1.45. A first visit said 17 s for a 17.4 s run on the worker, 12 s for 13.1 s on
     2 threads, 11 s for 11.2 s on 4. GitHub's runner ran it at 204 fps on 4 threads; the owner chose this VM's rate
     and the new thread gains. README "Large files")
+
+- Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
+  - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships, and THIRD-PARTY-NOTICES.md has to list it. Measured
+    2026-10-29 (ShotDetector 3.20.0, FrameReader 2.15.0): the App's publish already trims every assembly in full
+    (`TrimMode` is `full` for browser-wasm; ShotDetector and FrameReader are `IsAotCompatible`, so trimmable, and the
+    publish has no trim warnings). FFmpeg.AutoGen comes out at 447 KB of its 648 because ShotDetector's code *reaches*
+    it: the frame-source and merge paths the page runs share method bodies with the file path. `ShotDetection.Steps`
+    (the iterator behind `RunAsync`, `DetectAsync` and `Merge`) constructs `VideoReader` from a path or a stream and
+    calls `FindReferenceTone(path)`, and `VideoReader`'s members branch between in-process decoding and the caller's
+    frames (`Frames` → `FramesInProcess`, `TakeTimestampPass` → `InProcessProbe.FrameTimestamps`, `DecodesWithLibraries`,
+    `HasFrameThreads`). From the trimmer's dependency dump (`-p:_TrimmerDumpDependencies=true`), those six members are
+    every bridge: stubbed with ILLink substitutions (a local measurement, not committed), `FFmpeg.AutoGen.wasm` is gone,
+    `tools/check.sh wasm aot` passes (154 of 154 CSVs identical, "No FFmpeg assembly loaded at all." under AOT too),
+    and the AOT publish's `_framework/` through `gzip -6` goes from 19.19 MB to 16.31 MB raw (−2.88 MB, 15%) and from
+    5.76 to 5.14 MB compressed (−620 KB, 10.8%): `dotnet.native.wasm` −2.31 MB raw (−478 KB; the AOT code of the
+    FFmpeg paths), `FFmpeg.AutoGen.wasm` −447 KB (−103 KB), FrameReader 91 to 20 KB, ShotDetector 256 to 222 KB.
+  - Where: upstream (bisforboman/shotdetector), filed as #597 with the above: the frame-source entry
+    points (`Detect`/`DetectAsync`/`RunAsync` over `YuvFrame`s, `ScoreRangeAsync`, `Merge`) should not reach
+    FFmpeg-only code statically, so a trimmed app that never decodes with FFmpeg doesn't ship FFmpeg.AutoGen; e.g.
+    `Steps` takes its `VideoReader` from the `frames` factory always (the path and stream entries passing theirs) and
+    the reference-tone trim is decided by that entry, and `VideoReader`'s in-process members move behind the file
+    path's own type. A check upstream could hold it: benchmarks/wasm's publish with no `FFmpeg.AutoGen` in its bundle.
+    Then here: the package bump; app-check.mjs's and check.sh's "No FFmpeg assembly loaded" becomes "not bundled"
+    (the listing check fails if `_framework/FFmpeg.AutoGen.wasm` exists), interpreted and AOT alike; THIRD-PARTY-NOTICES.md
+    drops FFmpeg.AutoGen if no FFmpeg.AutoGen code is left in `dotnet.native.wasm` either; README "Size" measured again.
+  - Done when: `_framework/` has no `FFmpeg.AutoGen.wasm`, the checks are green, and the README's sizes are updated.
+  - Not: no change to the core library; no ILLink substitutions here (a stub of ShotDetector's internals would break
+    silently when they change, and CLAUDE.md: what belongs upstream is reported there).
+  - Status: Done (2026-10-30: ShotDetector 3.22.0 fixed #597; neither bundle has `FFmpeg.AutoGen.wasm` (`tools/check.sh`
+    fails if one does), no FFmpeg assembly loads at all interpreted or AOT, 308 of 308 CSVs, JSON and HTML identical
+    both ways, the page check and the replace check passing. AOT `_framework/` 16.23 MB raw and 5.12 MB through
+    `gzip -6`, from 19.86 and 5.97 (−18% and −14%); the threaded bundle 16.90 and 5.31, from 20.56 and 6.16)
