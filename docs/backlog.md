@@ -33,6 +33,18 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
+- The estimate's reference rate on ManagedCodecs 0.2.3
+  - Why: `REFERENCE_FPS` in `app.js` (64 frames per second at 854x480) was measured on ManagedCodecs 0.1.0
+    ("The estimate's reference rate measured again", backlog-done.md). 0.2.3, now on `main`, decodes faster: CI's AOT
+    bundle under Node ran Sintel 480p at 173 frames per second for 0.1.0's 131, adaptive, and the page's worker ran the
+    trailer in 13.7 s (the threads decision's "Measured again"), where 64 predicts 19.6 s, so a first visit's estimate
+    says about 40% too long.
+  - Where: `app.js`'s `REFERENCE_FPS` and its comment's date, measured as before (AOT, headless Chromium, Sintel's
+    trailer, the median of three, each a first visit), the threaded runs too (`THREADS_SPEEDUP` over the new rate).
+  - Done when: a first visit's estimate on the trailer within 20% of the run.
+  - Not: no change to how a browser's own rate is kept, nor to `SPLIT_SPEEDUP`.
+  - Status: In progress (2026-10-30)
+
 - Trimming: FFmpeg.AutoGen and the unused parts of ShotDetector out of the bundle
   - Why: nothing on this path uses FFmpeg.AutoGen, yet it ships, and THIRD-PARTY-NOTICES.md has to list it. Measured
     2026-10-29 (ShotDetector 3.20.0, FrameReader 2.15.0): the App's publish already trims every assembly in full
