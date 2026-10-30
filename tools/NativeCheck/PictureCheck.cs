@@ -138,7 +138,7 @@ static class PictureCheck
         string found = spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s => $"frames {s.FirstFrame}-{s.EndFrame - 1}"));
         bool three = name.StartsWith("cuts-", StringComparison.Ordinal) || name.StartsWith("baseline-", StringComparison.Ordinal) ||
             name.StartsWith("full-range-", StringComparison.Ordinal) || name.StartsWith("start-offset-", StringComparison.Ordinal) ||
-            name.StartsWith("with-audio-", StringComparison.Ordinal);
+            name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal);
         if (three)
         {
             int last = result.Cuts.Count > 0 ? (int)result.Cuts[^1].FrameNum : -1;

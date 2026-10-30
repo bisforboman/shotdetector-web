@@ -24,9 +24,10 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 (progressive) in a non-fragmented MP4, at a constant frame rate, not rotated.**
+Supported so far: **8-bit 4:2:0 H.264 (progressive) in an MP4, fragmented or not, at a constant frame rate, not rotated.**
 Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
-codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, fragmented, variable frame rate). Damaged files throw ManagedCodecs'
+codec, 4:2:2/4:4:4 or 10-bit, interlaced, rotated, variable frame rate; rotation and a variable rate wait on ShotDetector,
+decision `docs/decisions/2026-10-30-scope-widening.md`). Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
 The page's "Try the demo" runs Sintel's trailer, re-encoded at deploy time by the recipe CI's checks run on
@@ -434,8 +435,8 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 | YuvVideo | From |
 | --- | --- |
 | Width, Height | the first decoded frame (after the SPS's cropping) |
-| FrameRate | 'stts': timescale × samples / total duration (FFmpeg's avg_frame_rate) |
-| FrameCount | 'stts' sample count (FFmpeg's nb_frames; an edit list that ends early doesn't change it) |
+| FrameRate | timescale × samples / total duration (FFmpeg's avg_frame_rate): from 'stts', and in a fragmented file from every packet (each 'trun') |
+| FrameCount | 'stts' sample count (FFmpeg's nb_frames; an edit list that ends early doesn't change it; null in a fragmented file with an empty 'moov', the 'moov' box's samples alone where it has some) |
 | TimeBase | 1 / the 'mdhd' timescale |
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); full range is yuvj420p |

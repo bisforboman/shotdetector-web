@@ -11,7 +11,7 @@
 // here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
 //                        'chose'    { file }                     a new file: whatever was shown of the last one goes
-//                        'opened'   { video }                    the file's YuvVideo, from Api's Open
+//                        'opened'   { video }                    the file's YuvVideo, from Api's Open (its frames too)
 //                        'run'      { video, options, ranges, fallback, from }   a run starts: whatever was shown of
 //                                                                the last run goes. ranges: a run split across workers
 //                                                                (decision 2026-10-26-workers.md), Api's Ranges'
@@ -435,7 +435,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   result.hidden = false;
   progress.removeAttribute('value');
   const workers = plan?.ranges.length ?? 1, threads = plan ? 1 : threadCount();
-  const frames = Math.max(opened.frameCount - from, 0);
+  const frames = Math.max(opened.frames - from, 0);
   estimate = estimateText(opened, workers, threads, frames);
   estimated = estimateSeconds(opened, workers, threads, frames);
   const doing = fallback ? `${fallback} ${resumed ? 'Resuming' : 'Detecting again'} with one worker`
@@ -642,7 +642,7 @@ function replaceRunner(w) {
 // { count, frames, ranges }, or null for one worker (a short video, a machine with two cores, too few keyframes). A
 // resumed run's rest from frame from, by its own length.
 async function ranges(video, from = 0) {
-  const length = lengthOf(video) * Math.max(video.frameCount - from, 0) / video.frameCount;
+  const length = lengthOf(video) * Math.max(video.frames - from, 0) / video.frames;
   const count = ASKED_WORKERS ??
     (length > SPLIT_SECONDS ? Math.min((navigator.hardwareConcurrency || 1) - 1, MOST_WORKERS) : 1);
   if (count < 2) return null;
@@ -772,7 +772,7 @@ async function listen() {
 // worker (on as many threads), or the reference rate (REFERENCE_FPS) until it has one; split across workers,
 // SPLIT_SPEEDUP times as fast, on threads THREADS_SPEEDUP times (unless it has a rate of its own on them).
 // frames: the run's (a resumed run's rest), else the video's.
-function estimateText(video, workers, threads = 1, frames = video.frameCount) {
+function estimateText(video, workers, threads = 1, frames = video.frames) {
   const { width, height } = video;
   const { rate, own } = rateFor(workers, threads);
   const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
@@ -781,7 +781,7 @@ function estimateText(video, workers, threads = 1, frames = video.frameCount) {
     `${workers > 1 ? ` with ${workers} workers` : ''}${threads > 1 ? ` on ${threads} threads` : ''}, from ${from}).`;
 }
 
-function estimateSeconds({ width, height, frameCount }, workers = 1, threads = 1, frames = frameCount) {
+function estimateSeconds({ width, height, frames: shown }, workers = 1, threads = 1, frames = shown) {
   return frames * width * height / rateFor(workers, threads).rate;
 }
 
@@ -900,7 +900,7 @@ function show(r, seconds, workers, threads, restored = null) {
   const rate = `${(ran / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`;
   const read = r.frameCount * r.frameRate.den / r.frameRate.num, at = `${timecode(read)}, frame ${count(r.frameCount)} ` +
-    `of ${count(opened.frameCount)}`;
+    `of ${count(opened.frames)}`;
   shown = restored ? {
     text: `Stopped at ${at}, kept in this browser since ${new Date(restored.saved).toLocaleString()}: Resume goes on ` +
       'from there, Detect starts over',
@@ -971,7 +971,7 @@ function follow() {
 }
 
 // The video's length on the axis: Open's duration, or its frames over its rate.
-const lengthOf = v => v.duration ?? v.frameCount * v.frameRate.den / v.frameRate.num;
+const lengthOf = v => v.duration ?? v.frames * v.frameRate.den / v.frameRate.num;
 
 // The toolbar's line on the file: its size, and once opened the description's first facts.
 function facts(f, v) {

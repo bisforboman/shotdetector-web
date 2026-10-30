@@ -38,7 +38,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   (`PictureJson`), which NativeCheck also writes.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
-  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `audio`: `{ codec, sampleRate,
+  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`Mp4Input.ShownFrames`, the page's
+  count: `frameCount` is FFmpeg's nb_frames, null when fragmented) and `audio`: `{ codec, sampleRate,
   channels }` from `Mp4Input.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
   frameWindow, minContentVal }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
   rate, duration, `stopped` and `warnings` as JSON; one range from frame 0 scored with `OnShot` and merged without it,
@@ -193,7 +194,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `2026-10-30-resume-across-visits.md`: resuming a stopped run, the kept run shown at once, only the last kept, a long
   rest split, Firefox in CI;
   `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline;
-  `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg); `docs/mockups/`: static HTML
+  `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg;
+  `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
@@ -204,7 +206,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 progressive H.264 in non-fragmented MP4, constant frame rate, not rotated; anything else
+- Scope so far: 8-bit 4:2:0 progressive H.264 in MP4 (fragmented too), constant frame rate, not rotated; anything else
   is refused in `Mp4Input`'s constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it.
 - A new sample isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg tags its

@@ -15,7 +15,7 @@ namespace ShotDetectorWeb;
 /// with FFmpeg and the same converter does.
 /// </summary>
 /// <remarks>
-/// So far: 8-bit 4:2:0 H.264 (progressive) in a non-fragmented MP4, at a constant frame rate, not rotated; anything else
+/// So far: 8-bit 4:2:0 H.264 (progressive) in an MP4, fragmented or not, at a constant frame rate, not rotated; anything else
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
 /// <see cref="InvalidDataException"/>.
 /// </remarks>
@@ -35,15 +35,16 @@ public sealed partial class Mp4Input
         _open = open;
         using var stream = new TimingOnlyStream(open());
         var header = Mp4Header.Read(stream);
-        if (header.Fragmented)
-            throw new UnsupportedVideoException("Fragmented MP4 isn't supported yet.");
         if (header.SampleEntry is not ("avc1" or "avc3"))
             throw new UnsupportedVideoException($"The video is '{header.SampleEntry}', not H.264 ('avc1'): only H.264 is supported so far.");
         if (header.Transformed)
             throw new UnsupportedVideoException("The video is rotated or flipped (its track matrix): not supported yet.");
-        if (header.SampleCount == 0 || header.TotalDuration <= 0 || header.Timescale == 0)
+        // A fragmented file's samples are in its 'moof' boxes (its 'moov' may have some, or none): they are counted on
+        // the walk below.
+        if (header.Timescale == 0 || (!header.Fragmented && (header.SampleCount == 0 || header.TotalDuration <= 0)))
             throw new UnsupportedVideoException("The video track has no samples.");
-        CheckConstantRate(header);
+        if (!header.Fragmented)
+            CheckConstantRate(header);
 
         var sps = SpsInfo.FromAvcConfig(header.AvcConfig.Span);
         if (sps.ChromaFormatIdc != 1 || sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8)
@@ -74,8 +75,21 @@ public sealed partial class Mp4Input
         stream.SkipReads = true;
         var timeBase = new FrameReader.Rational(1, checked((int)header.Timescale));
         var packets = new VideoPackets.Builder(timeBase, (int)Math.Min(header.SampleCount, Array.MaxLength));
-        long? duration = FormatDuration(demuxer, packets);
+        var samples = new SampleDurations();
+        long? duration = FormatDuration(demuxer, packets, samples);
         Packets = packets.Build();
+
+        // FFmpeg's average rate is mov.c's nb_frames_for_fps over duration_for_fps: every sample of 'stts' and of each
+        // track fragment's 'trun'. In a file without fragments that is the 'stts' totals.
+        long sampleCount = header.SampleCount, totalDuration = header.TotalDuration;
+        if (header.Fragmented)
+        {
+            if (samples.Count == 0 || samples.Total <= 0)
+                throw new UnsupportedVideoException("The video track has no samples.");
+            if (samples.Varies)
+                throw new UnsupportedVideoException(VariableRate);
+            (sampleCount, totalDuration) = (samples.Count, samples.Total);
+        }
 
         // The decoder's colour tags: the SPS's VUI where it has them, else the container's 'colr' box (FFmpeg's h264
         // decoder overrides the container's values with the SPS's). Full range makes FFmpeg's h264 decoder output yuvj420p.
@@ -83,7 +97,7 @@ public sealed partial class Mp4Input
         int? matrix = sps.MatrixCoefficients ?? header.ColrMatrix;
         string colorSpace = matrix is int m && m < MatrixNames.Length ? MatrixNames[m] : "";
 
-        var rate = ManagedCodecs.Rational.Reduce(header.Timescale * header.SampleCount, header.TotalDuration);
+        var rate = ManagedCodecs.Rational.Reduce(header.Timescale * sampleCount, totalDuration);
         Video = new YuvVideo
         {
             Width = width,
@@ -94,7 +108,9 @@ public sealed partial class Mp4Input
             FullRange = fullRange,
             TimeBase = timeBase,
             StartPts = firstPts,
-            FrameCount = header.SampleCount,
+            // FFmpeg's nb_frames is the 'stts' count alone: unknown with an empty 'moov', short of the fragments' with
+            // samples in it (ShotDetector takes the length from the duration without it, as OpenCV).
+            FrameCount = header.SampleCount > 0 ? header.SampleCount : null,
             Duration = duration is long us
                 ? Seconds((us * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture))
                 : null,
@@ -260,15 +276,18 @@ public sealed partial class Mp4Input
     /// FFmpeg's AVFormatContext.duration in microseconds (update_stream_timings): from the earliest stream start to the
     /// latest stream end, video and audio, as the edit lists present them; null without packets. ShotDetector reports it
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
-    /// result. Adds each video packet to <paramref name="packets"/> on the way.
+    /// result. Adds each video packet to <paramref name="packets"/> and its duration to <paramref name="samples"/> on the way.
     /// </summary>
-    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets)
+    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples)
     {
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPackets())
         {
             if (demuxer.Video is { } video && packet.StreamIndex == video.StreamIndex)
+            {
                 packets.Add(packet);
+                samples.Add(packet.Duration);
+            }
             if (packet.Discard)
                 continue;
             ManagedCodecs.Rational timeBase;
@@ -396,7 +415,41 @@ public sealed partial class Mp4Input
         for (int i = 1; i < checkedEntries; i++)
         {
             if (entries[i].Delta != entries[0].Delta)
-                throw new UnsupportedVideoException("The video has a variable frame rate: only a constant frame rate is supported so far.");
+                throw new UnsupportedVideoException(VariableRate);
+        }
+    }
+
+    const string VariableRate = "The video has a variable frame rate: only a constant frame rate is supported so far.";
+
+    /// <summary>
+    /// The video packets' count and total duration, and whether any lasts otherwise than the first, the last excepted (as
+    /// <see cref="CheckConstantRate"/> excepts the last 'stts' entry): a fragmented file's 'trun' samples, as the walk
+    /// gives them.
+    /// </summary>
+    sealed class SampleDurations
+    {
+        long _first = -1, _previous = -1;
+
+        public long Count { get; private set; }
+
+        public long Total { get; private set; }
+
+        public bool Varies { get; private set; }
+
+        public void Add(long duration)
+        {
+            // The packet before this one is not the last: it counts for the check.
+            if (_previous >= 0)
+            {
+                if (_first < 0)
+                    _first = _previous;
+                else if (_previous != _first)
+                    Varies = true;
+            }
+
+            _previous = duration;
+            Count++;
+            Total += duration;
         }
     }
 }

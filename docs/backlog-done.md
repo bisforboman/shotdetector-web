@@ -819,6 +819,18 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     both ways, the page check and the replace check passing. AOT `_framework/` 16.23 MB raw and 5.12 MB through
     `gzip -6`, from 19.86 and 5.97 (−18% and −14%); the threaded bundle 16.90 and 5.31, from 20.56 and 6.16)
 
+- Fragmented MP4
+  - Why: screen recordings and streaming exports are fragmented; ManagedCodecs already demuxes them as FFmpeg does, the
+    core refuses them ([decisions/2026-10-30-scope-widening.md](decisions/2026-10-30-scope-widening.md)).
+  - Where: `Mp4Header`/`Mp4Input` (the sample count, the rate and the constant-rate check from the packets' walk,
+    `FrameCount` FFmpeg's `nb_frames`: null with an empty `moov`, the `moov`'s own count otherwise), two samples in
+    `tools/make-samples.sh` (`empty_moov` with B-frames and AAC; `frag_keyframe` alone), README and CLAUDE.md's scope.
+  - Done when: `tools/check.sh native` and the wasm checks pass on both samples, every field and run byte for byte.
+  - Not: variable rate within fragments (refused, as in `stts`); rotation.
+  - Status: Done (2026-10-30: PR #72; both samples byte for byte natively, on wasm (336 of 336 files) and on the
+    page in Chromium on threads, one worker and two; rotation and a variable rate are rows of their own, waiting on
+    shotdetector#608 and #609)
+
 - Resume after Stop, across visits
   - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
     between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that

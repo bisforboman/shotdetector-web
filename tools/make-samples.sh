@@ -58,6 +58,22 @@ enc -filter_complex "$(three 1280x720 25 1),$untagged" -c:v libx264 -preset very
 # With an AAC track that runs on 0.45 s past the video: the format's duration (DetectedVideo.Duration) spans both.
 enc -filter_complex "$(three 320x240 25 1)" -f lavfi -i sine=d=3.45 -c:v libx264 -pix_fmt yuv420p -c:a aac "$out/with-audio-320x240-25.mp4"
 
+# Fragmented (decision 2026-10-30-scope-widening.md), each a copy of one encode: an empty 'moov' and a fragment per
+# keyframe, with AAC; no edit list, so the video starts at libx264's B-frame delay (start_pts 1024 in 1/12800) and FFmpeg
+# knows no nb_frames. And the first fragment's samples in 'moov' (frag_keyframe alone): nb_frames counts those, 38 of 112.
+f="$out/fragmented-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 25 1.5)" -f lavfi -i sine=d=4.8 -c:v libx264 -pix_fmt yuv420p -c:a aac "$out/fragmented.tmp.mp4"
+enc -i "$out/fragmented.tmp.mp4" -c copy -movflags frag_keyframe+empty_moov "$f"
+enc -i "$out/fragmented.tmp.mp4" -map 0:v -c copy -movflags frag_keyframe "$out/fragmented-moov-320x240-25.mp4"
+rm "$out/fragmented.tmp.mp4"
+# What they must be: fragments ('moof'), and the video's average rate, start and nb_frames as above.
+got=
+for s in "$f" "$out/fragmented-moov-320x240-25.mp4"; do
+  (( $("$fp" -v trace "$s" 2>&1 | grep -c "type:'moof'") > 0 )) || { echo "$s: no 'moof' box." >&2; exit 1; }
+  got+="$("$fp" -v error -select_streams v:0 -show_entries stream=avg_frame_rate,start_pts,nb_frames -of csv=p=0 "$s") "
+done
+[[ $got == '25/1,1024,N/A 25/1,1024,38 ' ]] || { echo "fragmented samples: avg_frame_rate, start_pts, nb_frames are $got" >&2; exit 1; }
+
 # Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
 # 0.1), 3 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 15 s of video. The
 # gap is 3 s, not 2, because FFmpeg's AAC encoder spreads the tone's edges into it by a few milliseconds: a 2 s gap
