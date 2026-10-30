@@ -677,11 +677,14 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     `${rest.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}: the whole run's`);
 }
 
-// A stopped run's kept bytes resumed with other options than its own: NOT_RESUMED and ShotDetector's reason.
+// A stopped run's kept bytes resumed with other options than its own: NOT_RESUMED and ShotDetector's reason. Stopped
+// at 90% of the frames, past the last place a range can start on every sample (the tone sample's is frame 252 of
+// 375): kept bytes with no place to resume from but frame 0 start over, and nothing of theirs is compared.
 async function checkNotResumed(sample) {
-  stopAt = Math.floor(JSON.parse(Ranges(1, 0)).frames / 2);
+  stopAt = Math.floor(JSON.parse(Ranges(1, 0)).frames * 9 / 10);
   try { await Detect(JSON.stringify(RUNS.content)); } finally { stopAt = null; }
-  const { bytes } = await kept();
+  const { bytes, from } = await kept();
+  if (from <= 0) return console.error(`${basename(sample)}: kept bytes of other options: no place to resume from but frame 0`);
   let message = null;
   try {
     await Resume(JSON.stringify(RUNS.adaptive), bytes);
