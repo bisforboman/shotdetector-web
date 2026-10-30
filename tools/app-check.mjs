@@ -23,6 +23,9 @@
 // front, on which the page detects again with one worker.
 // The video's packets (Api's Packets, the bitrate lane's): every sample's against ffprobe's, whose lines the native
 // check wrote (--native: <sample>.packets.txt), exactly.
+// The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
+// <sample>.picture.json, FFmpeg's figures there), exactly; a split run's merge the whole run's; a stopped run's (one
+// worker or split) for the frames its result read.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -59,6 +62,7 @@ for (const arg of rest) {
 const { samples, '--reject': rejects, '--no-aac': noAac, '--native': [nativeDir] } = lists;
 
 let progress = [], told = [], toldAt = [];
+let wholePicture = null; // the sample's first run's Picture(), which every other whole run's must be
 // Detect's pauses (the 'pause' import, pause.js as in the worker): how many, and how long they took in all, and the
 // frame to stop the run at, at the first pause from there (as the worker does on a 'stop' message: Api's Stop, between
 // two pauses), or to cancel it (Api's Cancel).
@@ -91,7 +95,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, Picture, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -171,6 +175,7 @@ for (const [i, sample] of samples.entries()) {
     if (!Array.isArray(result.warnings) || result.warnings.some(w => typeof w !== 'string'))
       fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
+    if (run === Object.keys(RUNS)[0]) wholePicture = checkPicture(sample, result);
     await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
@@ -246,6 +251,7 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
   }
   if (progress.at(-1)?.[0] !== n) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}, not at ${n}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots told aren't the result's`);
+  checkPictureStopped(name, result);
   checkStopped(name, video, result, await statsText(), whole, wholeStats);
 }
 
@@ -524,6 +530,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
     fail(`${name}: ${same ? 'the same CSVs, JSON and HTML' : 'other CSVs, JSON or HTML'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
       `(stopped ${result.stopped}), the whole run's ${whole.shots.length} of ${whole.frameCount}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots the merge told aren't its result's`);
+  if (Picture() !== wholePicture) fail(`${name}: the merged picture measures aren't the whole run's`);
   console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
     `${bytes.map(b => b.length).join(' + ')} bytes, ${seconds.toFixed(2)} s: ${same ? 'the whole run\'s CSVs' : 'DIFFERENT CSVs'}`);
 
@@ -536,7 +543,29 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
       `${n} frames, stopped ${partial.stopped}`);
     return;
   }
+  checkPictureStopped(`${name} stopped in range ${stopFrom}`, partial);
   checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, await statsText(), whole, wholeStats);
+}
+
+// The whole run's picture measures (Api's Picture): the native check's, which it compared with FFmpeg's filters,
+// exactly (the same JSON); every frame of the run's. Returns them, for the other runs of the sample.
+function checkPicture(sample, result) {
+  const json = Picture(), picture = JSON.parse(json), name = `${basename(sample)} picture`;
+  if (picture.frames !== result.frameCount) fail(`${name}: ${picture.frames} frames, the run read ${result.frameCount}`);
+  const native = join(nativeDir ?? '', `${basename(sample, extname(sample))}.picture.json`);
+  if (!nativeDir || !existsSync(native)) fail(`${name}: no native ${native} to compare with`);
+  else if (readFileSync(native, 'utf8') !== json) fail(`${name}: differs from the native check's ${native}`);
+  else {
+    console.error(`${name}: the native check's (${picture.black.length} black spans, ${picture.bars.length} colour bars, ` +
+      `BRNG in ${picture.brng.frames} frames, ${picture.crop ? `crop=${picture.crop.w}:${picture.crop.h}:${picture.crop.x}:${picture.crop.y}` : 'no crop'})`);
+  }
+  return json;
+}
+
+// A stopped run's picture measures: the frames its result read.
+function checkPictureStopped(name, result) {
+  const picture = JSON.parse(Picture());
+  if (picture.frames !== result.frameCount) fail(`${name}: picture measures of ${picture.frames} frames, the result read ${result.frameCount}`);
 }
 
 // Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other

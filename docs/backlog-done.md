@@ -708,6 +708,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-30: NativeCheck "same, same" on every sample and run; the wasm check 308 of 308 CSVs, JSON
     and HTML identical; the page check's downloads byte for byte the native run's, the stopped run's its shots)
 
+- Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
+  - Why: the picture side of a check before delivery, next to the audio measures.
+  - Status: Done (2026-10-30: decision [2026-10-30-picture-measures.md](decisions/2026-10-30-picture-measures.md),
+    the owner's answers: all five, in every run in the same pass, checked exactly. `PictureMeter` measures each frame
+    as a run reads it, about 2% of a run (0.12 ms a frame natively, 0.27 ms AOT at 854x480); a split run's ranges carry
+    theirs in `RangeBytes`. `PictureCheck.cs`: signalstats and cropdetect per frame, cropdetect's whole crop and
+    blackdetect at d=0 and 2 s equal FFmpeg 8.1's on all 11 samples; the colour bars by their definition where
+    make-samples.sh puts them and nowhere else; the ranges joined the whole run's byte for byte. app-check.mjs:
+    `Picture()` the native JSON interpreted and AOT; page-check.mjs: the card's crop and bars. The page: a Picture lane
+    and card, marked measured)
+
 - ManagedCodecs 0.2.0 on wasm: other pixels under the interpreter
   - Why: 0.2.0 (nuget.org, 2026-10-28 18:28 UTC, 97 commits past 0.1.0, nearly all H.264 decoder speed work in
     `Vector128` paths: deblocking a macroblock at a time, edge strengths and the residual add in vectors) is what the
