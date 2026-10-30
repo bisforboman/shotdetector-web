@@ -675,6 +675,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     downloads; on the two-hour control the wasm heap after the stats CSV is 115 MB, where the run leaves it, instead
     of 143 MB with the string, AOT under Node (README "What the heap holds"))
 
+- The estimate's reference rate measured again
+  - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
+    3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on
+    one worker, where the reference predicts 82, so a first visit's estimate says about twice the time (12 min for a
+    run that took 6 with 4 workers).
+  - Where: `app.js`'s `REFERENCE_FPS`, measured on the Sintel trailer as before (AOT, headless Chromium, the median of
+    three), and the comment's date.
+  - Done when: a first visit's estimate on the trailer and on the two-hour film within 20% of the run.
+  - Not: no change to how a browser's own rate is kept.
+  - Status: Done (2026-10-30: `REFERENCE_FPS` 64, was 46: the trailer's median of three on the AOT bundle in headless
+    Chromium, 4-core cloud VM, each a first visit. A first visit's estimate said 19.6 s for a 20.5 s trailer run and
+    517 s for a 492.1 s run of the two-hour film on 3 workers (the page's choice there); against the medians of three,
+    1% short and 16% long. GitHub's runner ran the trailer at 151 fps the same day; the owner chose this VM's rate.
+    README "Large files")
+
 - ManagedCodecs 0.2.0 on wasm: other pixels under the interpreter
   - Why: 0.2.0 (nuget.org, 2026-10-28 18:28 UTC, 97 commits past 0.1.0, nearly all H.264 decoder speed work in
     `Vector128` paths: deblocking a macroblock at a time, edge strengths and the residual add in vectors) is what the
@@ -708,4 +723,4 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     browser-wasm 154 of 154 CSVs are identical interpreted and ahead of time, the page check and the replace check
     passing. Speed against 0.1.0 not settled: the cloud VM is too noisy; AOT under Node, Sintel's trailer took 18.2 s
     adaptive and 20.5 s all detectors, against 21.5 and 25.1 for 0.1.0 on 2026-10-29, a different hour of the same
-    kind of machine; the page's own frames per second (the estimate row) will tell)
+    kind of machine; `REFERENCE_FPS`, measured on 0.1.0 the same day, measured again in CI would tell)

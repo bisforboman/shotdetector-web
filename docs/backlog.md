@@ -24,17 +24,6 @@ The first release's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### After the first release
 
-- The estimate's reference rate measured again
-  - Why: `REFERENCE_FPS` in `app.js` (46 frames per second at 854x480, measured 2026-10-25) predates ShotDetector
-    3.16's SIMD conversion and today's runs: on 2026-10-27 the two-hour film (640x360) ran at 131 frames per second on
-    one worker, where the reference predicts 82, so a first visit's estimate says about twice the time (12 min for a
-    run that took 6 with 4 workers).
-  - Where: `app.js`'s `REFERENCE_FPS`, measured on the Sintel trailer as before (AOT, headless Chromium, the median of
-    three), and the comment's date.
-  - Done when: a first visit's estimate on the trailer and on the two-hour film within 20% of the run.
-  - Not: no change to how a browser's own rate is kept.
-  - Status: Open
-
 The rows below add to what the page shows (the owner's choice, 2026-10-24). They widen the decision's "The page
 itself", which lists the first release's page, not every page there will be. Since the page's structure row
 (decision [2026-10-25-one-page.md](decisions/2026-10-25-one-page.md)), each is a lane of the timeline or a card, in a
