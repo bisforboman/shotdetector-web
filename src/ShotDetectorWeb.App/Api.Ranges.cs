@@ -24,30 +24,32 @@ public static partial class Api
     /// <summary>
     /// The opened file split into at most <paramref name="count"/> ranges at keyframes (<see cref="Mp4Input.Ranges"/>),
     /// as JSON: <c>{ frames, ranges: [{ firstFrame, endFrame }] }</c>, frames the video shows; fewer ranges when the
-    /// keyframes are too few.
+    /// keyframes are too few. From <paramref name="from"/> (0, or a stopped run's rest's first frame: <see cref="Kept"/>),
+    /// the frames from there on.
     /// </summary>
     [JSExport]
-    public static string Ranges(int count)
+    public static string Ranges(int count, int from)
     {
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var ranges = input.Ranges(count).Select(r => new RangeResponse(r.FirstFrame, r.EndFrame)).ToArray();
+        var ranges = input.Ranges(count, from).Select(r => new RangeResponse(r.FirstFrame, r.EndFrame)).ToArray();
         return JsonSerializer.Serialize(new RangesResponse(input.ShownFrames, ranges), RangesJson.Default.RangesResponse);
     }
 
     /// <summary>
-    /// Scores range <paramref name="index"/> of <see cref="Ranges"/>(<paramref name="count"/>) with the page's options, as
+    /// Scores range <paramref name="index"/> of <see cref="Ranges"/>(<paramref name="count"/>, <paramref name="from"/>) with the page's options, as
     /// <see cref="Detect"/> runs (progress, pauses, <see cref="Stop"/> and <see cref="Cancel"/>): a promise of
     /// <c>{ frames, stopped }</c>, the frames scored from the range's first; its scores' bytes then come from
     /// <see cref="RangeBytes"/>. A stop ends the range where it got to; one before its first frame leaves it empty.
     /// </summary>
     [JSExport]
-    public static async Task<string> ScoreRange(string optionsJson, int count, int index)
+    public static async Task<string> ScoreRange(string optionsJson, int count, int index, int from)
     {
         _result = null;
         _picture = null;
+        _kept = null;
         _rangeBytes = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var range = input.Ranges(count)[index];
+        var range = input.Ranges(count, from)[index];
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         _stopping = _stopped = false;
@@ -94,21 +96,39 @@ public static partial class Api
     /// reach the video's end, and tells the shots through <see cref="ShotFound"/>. Ranges that don't make up the video's
     /// frames (ShotDetector's <see cref="ShotDetectionException"/>: an overlap frame that differs, damaged bytes; or
     /// damaged picture measures) throw with <see cref="NotMerged"/> in front of the reason. The ranges' picture measures
-    /// join from the start the same way (<see cref="PictureMeasures.Join"/>), for the frames the result read.
+    /// join from the start the same way (<see cref="PictureMeasures.Join"/>), for the frames the result read. A stopped
+    /// run's <paramref name="kept"/> bytes (<see cref="Kept"/>'s; empty for none) go first: with no ranges, the stopped
+    /// part's result again; with the ranges of its rest (<see cref="Ranges"/> from its first frame), the earlier ranges
+    /// <see cref="Mp4Input.Continue"/> keeps and theirs, the whole run's.
     /// </summary>
     [JSExport]
-    public static string Merge(string optionsJson, [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] ranges, int[] lengths)
+    public static string Merge(string optionsJson, [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] kept,
+        [JSMarshalAs<JSType.Array<JSType.Number>>] byte[] ranges, int[] lengths)
     {
         _result = null;
         _picture = null;
+        _kept = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         DetectionResult result;
+        IReadOnlyList<RangeScores> merged;
         var pictures = new List<PictureMeasures>();
         try
         {
-            var scores = new List<RangeScores>();
+            var earlier = KeptRun.FromBytes(kept);
+            var scores = new List<RangeScores>(earlier.Scores);
+            if (earlier.Picture is { } p)
+                pictures.Add(p);
+            if (lengths.Length > 0 && earlier.Scores.Count > 0)
+            {
+                // The rest's ranges start where the continuation does: the kept ranges from there on, and their
+                // measures, are scored again.
+                var go = input.Continue(earlier.Scores);
+                scores = [.. go.Earlier];
+                pictures = earlier.Picture is { } q && go.Rest is { } rest ? [q.Take(rest.FirstFrame)] : [];
+            }
+
             int at = 0;
             foreach (int length in lengths)
             {
@@ -122,20 +142,15 @@ public static partial class Api
                 at += length;
             }
 
-            result = input.Merge(Mp4Input.FromStart(scores), request.ToOptions(new JsProgress(), new JsShots()));
+            merged = Mp4Input.FromStart(scores);
+            result = input.Merge(merged, request.ToOptions(new JsProgress(), new JsShots()));
         }
         catch (Exception e) when (e is ShotDetectionException or InvalidDataException)
         {
             throw new InvalidOperationException(NotMerged + e.Message, e);
         }
 
-        _result = result;
-        _picture = PictureMeasures.Join(pictures)?.Take(result.FrameCount);
-        using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
-        return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
-                result.FrameCount < input.ShownFrames, result.Warnings),
-            ApiJson.Default.DetectResponse);
+        return Answered(input, result, merged, PictureMeasures.Join(pictures));
     }
 
     /// <summary>A range's progress: its frames scored and its own frame count (ScoreRange's expected count is 0).</summary>

@@ -59,23 +59,53 @@ public static partial class Api
     /// <see cref="ShotFound"/> as soon as ShotDetector knows it
     /// (<see cref="DetectionOptions.OnShot"/>). A promise to the worker: every <see cref="PauseEvery"/> frames the run
     /// waits for the worker's next task (<see cref="Pause"/>), so <see cref="Stop"/> and <see cref="Cancel"/> can come in.
+    /// The video is scored as one range from frame 0 and merged (ShotDetector's ScoreRange and Merge: Detect's result
+    /// byte for byte), so that a stopped run leaves its scores (<see cref="Kept"/>) for <see cref="Resume"/>.
     /// </summary>
     [JSExport]
-    public static async Task<string> Detect(string optionsJson)
+    public static Task<string> Detect(string optionsJson) => Continued(optionsJson, KeptRun.None);
+
+    /// <summary>
+    /// <see cref="Detect"/> on the opened file going on from <paramref name="earlier"/>'s scores
+    /// (<see cref="Mp4Input.Continue"/>), the rest of the video scored from the place a range can start before where they
+    /// end, each shot of the rest told as <see cref="Detect"/> tells them, and the result the whole run's.
+    /// </summary>
+    static async Task<string> Continued(string optionsJson, KeptRun earlier)
     {
         _result = null;
         _picture = null;
+        _kept = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
-        var picture = new PictureMeter(input.Video);
+        var go = input.Continue(earlier.Scores);
+        var picture = go.Rest is { } planned ? new PictureMeter(input.Video, planned) : null;
+        var options = request.ToOptions(new JsProgress(go.Rest?.FirstFrame ?? 0, input.ShownFrames), new JsShots());
         DetectionResult result;
+        IReadOnlyList<RangeScores> ranges;
         try
         {
-            result = await Host.Run(() => DamagedPrefixed(() => input.DetectAsync(PauseEvery, Between,
-                request.ToOptions(new JsProgress(), new JsShots()), run.Token, picture)));
+            (result, ranges) = await Host.Run(() => DamagedPrefixed(async () =>
+            {
+                var scored = go.Earlier.ToList();
+                if (go.Rest is { } rest)
+                {
+                    try
+                    {
+                        scored.Add(await input.ScoreRangeAsync(go.Earlier, rest, PauseEvery, Between, options, run.Token, picture));
+                    }
+                    catch (ShotDetectionException) when (_stopped && scored.Count > 0)
+                    {
+                        // Stopped before the rest's first frame: the earlier ranges are the result.
+                    }
+                }
+
+                var merged = Mp4Input.FromStart(scored);
+                // The shots were told as the frames were scored, the merge's would be told twice.
+                return (input.Merge(merged, options with { OnShot = null, Progress = null }), merged);
+            }));
         }
         catch (OperationCanceledException e) when (run.IsCancellationRequested)
         {
@@ -88,12 +118,24 @@ public static partial class Api
             _run = null;
         }
 
+        var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
+        return Answered(input, result, ranges,
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()));
+    }
+
+    /// <summary>
+    /// A run's result kept for the exports that show more of it (<see cref="Picture"/> for the frames it read,
+    /// <see cref="Kept"/> its ranges), and its answer as JSON (<see cref="DetectResponse"/>).
+    /// </summary>
+    static string Answered(Mp4Input input, DetectionResult result, IReadOnlyList<RangeScores> ranges, PictureMeasures? picture)
+    {
         _result = result;
-        _picture = picture.Measures.Take(result.FrameCount);
+        _picture = picture?.Take(result.FrameCount);
+        _kept = new KeptRun(ranges, _picture);
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration, _stopped,
-                result.Warnings),
+            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
+                result.FrameCount < input.ShownFrames, result.Warnings),
             ApiJson.Default.DetectResponse);
     }
 
@@ -169,9 +211,14 @@ public static partial class Api
     [JSImport("shot", "host")]
     internal static partial void ShotFound(string shotJson);
 
-    sealed class JsProgress : IProgress<DetectionProgress>
+    /// <summary>
+    /// A run's progress as frames of the video: a range's frames scored (counted from its first frame,
+    /// <paramref name="first"/>) and the frames the video shows (a range expects none of its own).
+    /// </summary>
+    sealed class JsProgress(int first = 0, int frames = 0) : IProgress<DetectionProgress>
     {
-        public void Report(DetectionProgress value) => Host.Post(() => Progress(value.FramesProcessed, value.ExpectedFrames));
+        public void Report(DetectionProgress value) =>
+            Host.Post(() => Progress(first + value.FramesProcessed, frames > 0 ? frames : value.ExpectedFrames));
     }
 
     // Not Progress<T>: that would post to a synchronization context and could tell a shot after Detect returned.

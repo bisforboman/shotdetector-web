@@ -14,6 +14,13 @@
 // read; for a sample without audio, the core's words the page shows nothing for (NO_AUDIO); the tone sample's waveform
 // loud, silent, loud, each edge within a video frame; each waveform against the native check's (--native:
 // <sample>.waveform.json), each value within 1; each file of --no-aac answered with why it isn't measured.
+// Resume after Stop (Api's Kept, Resume, and Merge with kept bytes; backlog "Resume after Stop, across visits"): the
+// default run and the run with every detector stopped at a third of the frames, their kept bytes (a Blob, as the page
+// keeps it in IndexedDB) shown again after the file is opened again (Merge of them alone: the stopped run's result),
+// resumed and stopped again at two thirds, then opened again and resumed to the end: the whole run's CSVs, shots, JSON,
+// HTML and picture measures, the shots told after the stopped part's (up to the first told again) the whole run's;
+// stopped in its second range split, the rest split again from the kept bytes' first frame (Ranges from it), merged
+// with them: the whole run's too (checkResume). Kept bytes of other options fail with NOT_RESUMED (checkNotResumed).
 // A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
 // the default run and the run with every detector (SPLIT_RUNS) split into ranges at keyframes (at most RANGES), each
 // scored on its own and merged from their bytes, must give the whole run's CSVs and shots, the merge telling the shots
@@ -51,6 +58,8 @@ const RANGES = 4;
 const SPLIT_RUNS = ['adaptive', 'all'];
 // What a merge that fails says first (Api's NotMerged): the page then detects again with one worker.
 const NOT_MERGED = 'The ranges didn\'t merge: ';
+// What a resume that fails on its kept scores says first (Api's NotResumed): the page then detects from the start.
+const NOT_RESUMED = 'The stopped run didn\'t resume: ';
 
 const [wwwroot, outDir, ...rest] = process.argv.slice(2);
 const lists = { samples: [], '--reject': [], '--no-aac': [], '--native': [] };
@@ -95,7 +104,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, Picture, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, Picture, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -179,7 +188,9 @@ for (const [i, sample] of samples.entries()) {
     await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
+    if (SPLIT_RUNS.includes(run)) await checkResume(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
   }
+  await checkNotResumed(sample);
   await checkNotMerged(sample);
   checkAudio(sample, video);
   checkPackets(sample);
@@ -484,12 +495,12 @@ function checkPackets(sample) {
 
 // Scores every range of Ranges(RANGES) one after another on this runtime, as the page's workers each score one, each
 // stopped at half its frames from range `stopFrom` on (as the page stops every worker at once): each one's bytes.
-async function scoreRanges(options, plan, stopFrom = plan.ranges.length) {
+async function scoreRanges(options, plan, stopFrom = plan.ranges.length, from = 0) {
   const bytes = [];
   for (const [i, { firstFrame, endFrame }] of plan.ranges.entries()) {
     stopAt = i >= stopFrom ? Math.floor((endFrame - firstFrame) / 2) : null;
     try {
-      const scored = JSON.parse(await ScoreRange(JSON.stringify(options), RANGES, i));
+      const scored = JSON.parse(await ScoreRange(JSON.stringify(options), RANGES, i, from));
       if (scored.stopped !== (stopAt !== null)) fail(`range ${i}: stopped ${scored.stopped}`);
     } finally {
       stopAt = null;
@@ -499,8 +510,9 @@ async function scoreRanges(options, plan, stopFrom = plan.ranges.length) {
   return bytes;
 }
 
-// Merge(options, the ranges' bytes one after another, their lengths), as the page's worker is called.
-function merge(options, bytes) {
+// Merge(options, a stopped run's kept bytes, the ranges' bytes one after another, their lengths), as the page's worker
+// is called.
+function merge(options, bytes, kept = new Uint8Array(0)) {
   const joined = new Uint8Array(bytes.reduce((n, b) => n + b.length, 0));
   let at = 0;
   for (const b of bytes) {
@@ -508,7 +520,7 @@ function merge(options, bytes) {
     at += b.length;
   }
   told = [];
-  return JSON.parse(Merge(JSON.stringify(options), joined, bytes.map(b => b.length)));
+  return JSON.parse(Merge(JSON.stringify(options), kept, joined, bytes.map(b => b.length)));
 }
 
 // The run split into ranges at keyframes, scored range by range and merged: the whole run's CSVs, shots (and their JSON
@@ -517,7 +529,7 @@ function merge(options, bytes) {
 // frames from the start.
 async function checkRanges(sample, video, run, options, whole, wholeScenes, wholeStats, wholeShotFiles) {
   const name = `${basename(sample)} ${run} in ranges`;
-  const plan = JSON.parse(Ranges(RANGES));
+  const plan = JSON.parse(Ranges(RANGES, 0));
   if (plan.frames !== whole.frameCount) fail(`${name}: Ranges says ${plan.frames} frames, the whole run read ${whole.frameCount}`);
   const started = performance.now();
   const bytes = await scoreRanges(options, plan);
@@ -570,7 +582,7 @@ function checkPictureStopped(name, result) {
 // Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other
 // options than the merge's (another fingerprint), or their bytes damaged (the checksum).
 async function checkNotMerged(sample) {
-  const plan = JSON.parse(Ranges(RANGES));
+  const plan = JSON.parse(Ranges(RANGES, 0));
   const bytes = await scoreRanges(RUNS.content, plan);
   const damaged = bytes.map(b => b.slice());
   damaged.at(-1)[damaged.at(-1).length >> 1] ^= 1;
@@ -584,4 +596,98 @@ async function checkNotMerged(sample) {
     if (!message?.startsWith(NOT_MERGED)) fail(`${basename(sample)}: ranges with ${what} merged, or failed otherwise: ${message}`);
     else console.error(`${basename(sample)}: ranges with ${what} don't merge: "${message}"`);
   }
+}
+
+// A stopped run's kept bytes (Api's Kept: a Blob, which the page keeps in IndexedDB), and the frame its rest starts at
+// (their first four bytes).
+async function kept() {
+  const blob = Kept();
+  if (!(blob instanceof Blob)) throw new Error(`Kept gave ${Object.prototype.toString.call(blob)}, not a Blob`);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return { bytes, from: new DataView(bytes.buffer).getInt32(0, true) };
+}
+
+// The shots the page shows across a resume: the stopped part's, then each told replacing those from its number on (the
+// last one, cut short at the stop, is told again to where it ends).
+function shown(stoppedShots, toldShots) {
+  const shots = [...stoppedShots];
+  for (const shot of toldShots) shots.splice(shot.shot - 1, Infinity, shot);
+  return shots;
+}
+
+async function checkResume(sample, video, run, options, whole, wholeScenes, wholeStats, wholeShotFiles) {
+  const name = `${basename(sample)} ${run} resumed`, json = JSON.stringify(options);
+  const same = async r => ScenesCsv() === wholeScenes && await statsText() === wholeStats && sameShotFiles(wholeShotFiles) &&
+    JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
+    Picture() === wholePicture;
+
+  // Stopped at a third, opened again (a later visit) and shown from the kept bytes, resumed and stopped at two thirds.
+  told = [];
+  stopAt = Math.floor(video.frameCount / 3);
+  let first;
+  try { first = JSON.parse(await Detect(json)); } finally { stopAt = null; }
+  const keep1 = await kept(), scenes1 = ScenesCsv(), stats1 = await statsText();
+  if (first.stopped !== true) return fail(`${name}: stopped at a third, the run says stopped ${first.stopped}`);
+  Open(fileBlob(sample));
+  const again = merge(options, [], keep1.bytes);
+  if (JSON.stringify(again) !== JSON.stringify({ ...first }) || ScenesCsv() !== scenes1 || await statsText() !== stats1)
+    fail(`${name}: the kept bytes shown again aren't the stopped run's result (${again.frameCount} frames, ${first.frameCount} stopped)`);
+  let shots = first.shots;
+  progress = [];
+  told = [];
+  stopAt = Math.floor(video.frameCount * 2 / 3) - Math.max(keep1.from - 1, 0);
+  let second;
+  try { second = JSON.parse(await Resume(json, keep1.bytes)); } finally { stopAt = null; }
+  shots = shown(shots, told);
+  if (second.stopped !== true || second.frameCount <= first.frameCount)
+    return fail(`${name}: resumed from ${keep1.from} and stopped at two thirds: ${second.frameCount} frames, stopped ${second.stopped}`);
+  if (JSON.stringify(shots) !== JSON.stringify(second.shots)) fail(`${name}: stopped again, the shots shown aren't its result's`);
+  if (progress.at(-1)?.[0] !== second.frameCount) fail(`${name}: stopped again, progress ended at ${JSON.stringify(progress.at(-1))}`);
+  checkStopped(`${name}, stopped again`, video, second, await statsText(), whole, wholeStats);
+  const keep2 = await kept();
+
+  // Opened again and resumed to the end: the whole run's.
+  Open(fileBlob(sample));
+  progress = [];
+  told = [];
+  const started = performance.now();
+  const last = JSON.parse(await Resume(json, keep2.bytes));
+  const seconds = (performance.now() - started) / 1000;
+  shots = shown(shots, told);
+  if (!await same(last)) fail(`${name}: resumed to the end, not the whole run's CSVs, shots, JSON, HTML or picture`);
+  if (JSON.stringify(shots) !== JSON.stringify(whole.shots)) fail(`${name}: the shots shown across the resumes aren't the whole run's`);
+  if (progress.at(-1)?.[0] !== whole.frameCount) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}`);
+  const kept3 = await kept();
+  if (kept3.from !== -1) fail(`${name}: a finished run's kept bytes say its rest starts at ${kept3.from}`);
+  console.error(`${name}: stopped at ${first.frameCount}, resumed from ${keep1.from} (${keep1.bytes.length} bytes kept), ` +
+    `stopped at ${second.frameCount}, resumed from ${keep2.from} (${keep2.bytes.length} bytes) to the end in ` +
+    `${seconds.toFixed(2)} s: the whole run's`);
+
+  // Split: stopped in its second range, the rest split again from the kept bytes' first frame.
+  const plan = JSON.parse(Ranges(RANGES, 0));
+  if (plan.ranges.length < 2) return;
+  const partial = merge(options, await scoreRanges(options, plan, 1));
+  const keep = await kept();
+  Open(fileBlob(sample));
+  const rest = JSON.parse(Ranges(RANGES, keep.from));
+  if (rest.ranges[0].firstFrame !== keep.from) fail(`${name} split: the rest's ranges start at ${rest.ranges[0].firstFrame}, not ${keep.from}`);
+  const merged = merge(options, await scoreRanges(options, rest, rest.ranges.length, keep.from), keep.bytes);
+  if (!await same(merged)) fail(`${name} split: the rest merged with the kept bytes isn't the whole run's`);
+  else console.error(`${name} split: stopped at ${partial.frameCount}, the rest from ${keep.from} in ` +
+    `${rest.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}: the whole run's`);
+}
+
+// A stopped run's kept bytes resumed with other options than its own: NOT_RESUMED and ShotDetector's reason.
+async function checkNotResumed(sample) {
+  stopAt = Math.floor(JSON.parse(Ranges(1, 0)).frames / 2);
+  try { await Detect(JSON.stringify(RUNS.content)); } finally { stopAt = null; }
+  const { bytes } = await kept();
+  let message = null;
+  try {
+    await Resume(JSON.stringify(RUNS.adaptive), bytes);
+  } catch (e) {
+    message = e.message.split('\n')[0];
+  }
+  if (!message?.startsWith(NOT_RESUMED)) fail(`${basename(sample)}: kept bytes of other options resumed, or failed otherwise: ${message}`);
+  else console.error(`${basename(sample)}: kept bytes of other options don't resume: "${message}"`);
 }
