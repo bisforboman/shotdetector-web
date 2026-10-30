@@ -147,13 +147,13 @@ function fill({ summary: p, video }) {
 
   section.append(heading('Black', `blackdetect: 98% of a frame's pixels at or under ${p.fullRange ? 25 : 37}, ` +
     'checked against it exactly; it lists the spans of 2 s or more by default'));
-  const long = p.black.filter(s => s.long);
-  if (long.length === 0) section.append(paragraph('Black: none of 2 s or more.'));
+  const long = p.black.filter(s => s.long), short = p.black.length - long.length;
+  const shorter = `${short} shorter, on the timeline`;
+  if (long.length === 0) section.append(paragraph(`Black: none of 2 s or more${short > 0 ? `; ${shorter}` : ''}.`));
   for (const s of long) {
     section.append(paragraph(`Black: ${at(s.firstFrame)} to ${at(s.endFrame)}`, `blackdetect: ${s.start} s to ${s.end} s`));
   }
-  const short = p.black.length - long.length;
-  if (short > 0) section.append(paragraph(`and ${short} shorter, on the timeline.`));
+  if (long.length > 0 && short > 0) section.append(paragraph(`And ${shorter}.`));
 
   section.append(heading('Letterbox', 'cropdetect with its defaults (limit 24, round 16, the first two frames skipped), ' +
     'checked against it exactly'));

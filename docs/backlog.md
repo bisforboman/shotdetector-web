@@ -33,6 +33,43 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
+### The page's UI, after the review of 2026-10-30
+
+A review of the page check's screenshots (`out/page/*.png`) on 2026-10-30 found wrong numbers and misleading text, and
+a layout that leaves holes and says too much. The owner's choice the same day: two pull requests, the fixes first, then
+the polish; decision [2026-10-26-new-ui.md](decisions/2026-10-26-new-ui.md)'s layout (B) stays.
+
+- The page's numbers and words after a stop, a resume and a reload
+  - Why: after a resumed run the status line's "times real time" divided the whole video by the rest's time (5.2
+    against the statistics' 4.7); "resumed from frame 124" after a stop at 216 named the keyframe the rest scores
+    again from, not where the run had got to; the kept run shown again after a reload had no sound, and its bitrate
+    and statistics cards counted the whole file's keyframes and the cut-short last shot as a length; the picture card
+    said "and 3 shorter, on the timeline." after "Black: none of 2 s or more."; Forget, which deletes the kept run,
+    looked like Detect.
+  - Where: `app.js` (`show`, `resumedFrom`, `restore` measuring the sound as a run does), `panels/stats.js`,
+    `panels/bitrate.js`, `panels/picture.js`, `index.html` and `style.css` (Forget's `danger` style),
+    `tools/page-check/page-check.mjs`.
+  - Done when: the page check asserts each: the two times real time equal after a resume, the resumed status naming
+    the stopped frame (the keyframe in brackets), the kept run's sound card and waveform, its bitrate and statistics of
+    the frames read, no picture line that isn't a sentence, Forget unfilled and not Detect's colour; the CSVs, JSON and
+    HTML byte for byte as before (`tools/check.sh native page`).
+  - Not: no change to the layout (the next row) or to any export.
+  - Status: In progress (2026-10-30)
+
+- The page's layout and styling
+  - Why: the details grid (auto-fill, 17rem) leaves a card alone on a row with holes beside it; the shots table spreads
+    five columns over the width with small stills, in a 70vh scroll box that clips its last row even with 8 shots; the
+    picture lane's out-of-range ticks paint it red end to end, the playhead's red; every card opens with 3 to 5 lines
+    of how it is checked; the cuts lane doesn't show which shot is playing.
+  - Where: mostly `style.css`, with `panels/cuts.js`, `panels/picture.js`, `panels/run.js` and the cards' notes; the
+    page check's screenshots at 1280 and 390 px, light and dark, of done, kept and resumed.
+  - Done when: no details row with more than about 100 px of empty height under a card; every shot row visible
+    without an inner scrollbar at 15 shots or fewer; no red in a lane but the playhead; the run card's figures above
+    the fold at 1280x800; the owner has seen the screenshots before and after; the CSVs, JSON and HTML byte for byte.
+  - Not: the layout B stays; no new export; no mark loses what it means (CLAUDE.md "Adding to the page").
+  - Depends on: the row above (it edits the same panels).
+  - Status: In progress (2026-10-30)
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
