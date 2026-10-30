@@ -15,7 +15,8 @@ namespace ShotDetectorWeb;
 /// with FFmpeg and the same converter does.
 /// </summary>
 /// <remarks>
-/// So far: 8-bit 4:2:0 H.264 (progressive) in an MP4, fragmented or not, at a constant frame rate, not rotated; anything else
+/// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive, or
+/// interlaced coded as MBAFF frames (the frames as decoded, woven: deinterlacing waits on ShotDetector#614); anything else
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
 /// <see cref="InvalidDataException"/>.
 /// </remarks>
@@ -52,9 +53,6 @@ public sealed partial class Mp4Input
             string chroma = sps.ChromaFormatIdc switch { 0 => "4:0:0", 1 => "4:2:0", 2 => "4:2:2", _ => "4:4:4" };
             throw new UnsupportedVideoException($"The video is {chroma} at {sps.BitDepthLuma} bits: only 8-bit 4:2:0 is supported so far.");
         }
-
-        if (!sps.FrameMbsOnly)
-            throw new UnsupportedVideoException("The video is interlaced (field or MBAFF coding): not supported yet.");
 
         // One demuxer for the first frame and the format's duration: building its sample index allocates about 77 bytes
         // a sample and keeps 29 (ManagedCodecs 0.1.0), which the browser's heap keeps once it has grown (README, "What the

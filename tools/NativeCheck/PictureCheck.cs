@@ -7,7 +7,7 @@
 // - blackdetect with d=0 and with its default 2 s: the same spans, their times to the digits FFmpeg prints (-copyts:
 //   the stream's own pts, as ours);
 // - the colour bars, which no FFmpeg filter finds, by their definition: on the samples whose last shot is smptehdbars
-//   (make-samples.sh's three()), one span, the last shot's frames (from the default run's last cut); on the fades sample
+//   (make-samples.sh's three(), the interlaced ones woven), one span, the last shot's frames (from the default run's last cut); on the fades sample
 //   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
 // joined, their measures must be the whole run's, byte for byte. Each sample's summary (the App's Picture() JSON) goes
@@ -138,7 +138,8 @@ static class PictureCheck
         string found = spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s => $"frames {s.FirstFrame}-{s.EndFrame - 1}"));
         bool three = name.StartsWith("cuts-", StringComparison.Ordinal) || name.StartsWith("baseline-", StringComparison.Ordinal) ||
             name.StartsWith("full-range-", StringComparison.Ordinal) || name.StartsWith("start-offset-", StringComparison.Ordinal) ||
-            name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal);
+            name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
+            name.StartsWith("interlaced-", StringComparison.Ordinal);
         if (three)
         {
             int last = result.Cuts.Count > 0 ? (int)result.Cuts[^1].FrameNum : -1;

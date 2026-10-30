@@ -177,7 +177,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream;
   `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline;
   `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg;
-  `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where); `docs/mockups/`: static HTML
+  `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
+  `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
@@ -188,7 +189,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 progressive H.264 in MP4 (fragmented too), constant frame rate, not rotated; anything else
+- Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant frame rate, not rotated, progressive or interlaced
+  as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); anything else
   is refused in `Mp4Input`'s constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it.
 - A new sample isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg tags its
