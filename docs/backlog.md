@@ -91,7 +91,7 @@ since 2026-10-28 carry what they asked for, or part of it.
     [#23](https://github.com/bisforboman/shotdetector-web/pull/23) less the columns: `Stats.WriteCsv(TextWriter,
     position)` writing one row at a time. Then here: `Api.StatsCsv` writes through it into a `Blob` in pieces (a
     `[JSImport]` the worker gives), so the whole CSV is never one string.
-  - Status: Open (2026-10-28: `Stats.WriteCsv(TextWriter, position)` shipped in ShotDetector 3.20.0, the version the
+  - Status: In progress (2026-10-30; `Stats.WriteCsv(TextWriter, position)` shipped in ShotDetector 3.20.0, the version the
     page builds against since 2026-10-28; [shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519)
     was filed 2026-10-26, the columns shipped in 3.16.1 on 2026-10-25)
 
