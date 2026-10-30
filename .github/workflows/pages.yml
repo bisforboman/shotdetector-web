@@ -137,12 +137,13 @@ jobs:
           include-hidden-files: true
 
       # LGPL-2.1 (README, Licensing): checked in the archive just uploaded, the one Pages deploys. FastYuv must be its
-      # own file in _framework/ and its license must be there; the deploy job doesn't run if not. Nor without the demo.
+      # own file in each bundle's _framework/ (the threaded one's in threads/, decision 2026-10-30-threads.md) and its
+      # license must be there; the deploy job doesn't run if not. Nor without the demo, or the service worker.
       - name: Check the uploaded site
         run: |
           tar -tvf "$RUNNER_TEMP/artifact.tar" | tee "$RUNNER_TEMP/listing.txt" | wc -l | xargs echo "Files and folders:"
           status=0
-          for f in .nojekyll index.html _framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL demo/sintel-trailer.mp4; do
+          for f in .nojekyll index.html sw.js _framework/ShotDetector.FastYuv.wasm threads/_framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL demo/sintel-trailer.mp4; do
             # A regular file (type -), not a link: tar's long listing starts with the type.
             if awk -v f="./$f" '$1 ~ /^-/ && $NF == f { found = 1 } END { exit !found }' "$RUNNER_TEMP/listing.txt"; then echo "In the site: $f"; else echo "::error::Not in the site as its own file: $f"; status=1; fi
           done

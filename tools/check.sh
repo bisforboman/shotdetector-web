@@ -5,9 +5,10 @@
 #   wasm:   the same library on browser-wasm under Node, through the page's own exports (src/ShotDetectorWeb.App,
 #           driven by tools/app-check.mjs), its CSVs against the native run's;
 #   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
-#           PAGE_SAMPLE picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
-#           run's downloaded CSVs against the native run's (the samples named are not used: always those two). Reuses the bundle wasm published in the same
-#           call, else publishes one.
+#           each page isolated by its service worker, PAGE_SAMPLE picked on threads, on the page's worker and on two
+#           workers, the demo on threads paused and resumed, then stopped while paused, then offline, each run's
+#           downloaded CSVs against the native run's (the samples named are not used: always those two); the only check
+#           of the threaded bundle. Reuses the bundles wasm published in the same call, else publishes them.
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
 #
@@ -38,6 +39,23 @@ done
 if [[ $native == false && $wasm == false && $page == false && $replace == false ]]; then native=true wasm=true; fi
 
 shopt -s nullglob
+
+# The App's publish: the page with its two bundles (decision 2026-10-30-threads.md), the threaded one (WasmEnableThreads,
+# for a one-worker run on the page's own thread) first, its _framework/ copied into the page's as threads/_framework/,
+# then the page's own. obj/ and bin/ go before each: a build reuses the last one's (its runtime pack's files, an AOT
+# build's stripped IL: CLAUDE.md, Gotchas). Arguments: more properties for both builds.
+publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
+publish_app() {
+  local threads=out/threads-publish
+  rm -rf src/ShotDetectorWeb.App/obj src/ShotDetectorWeb.App/bin "$threads"
+  dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot \
+    -p:WasmEnableThreads=true -o "$threads" "$@"
+  rm -rf src/ShotDetectorWeb.App/obj src/ShotDetectorWeb.App/bin
+  dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot "$@"
+  mkdir -p "$publish/wwwroot/threads"
+  cp -r "$threads/wwwroot/_framework" "$publish/wwwroot/threads/_framework"
+  rm -rf "$threads"
+}
 if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4); fi
 rejects=(samples/reject/*)
 noAac=(samples/no-aac/*)
@@ -57,11 +75,10 @@ fi
 
 if [[ $wasm == true ]]; then
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
-  publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
-  rm -rf "$publish"
-  dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot
-  # LGPL-2.1: FastYuv is its own file in the bundle, its license in the publish output.
-  for f in wwwroot/_framework/ShotDetector.FastYuv.wasm licenses/ShotDetector.FastYuv/COPYING.LGPL; do
+  publish_app
+  # LGPL-2.1: FastYuv is its own file in each bundle, its license in the publish output.
+  for f in wwwroot/_framework/ShotDetector.FastYuv.wasm wwwroot/threads/_framework/ShotDetector.FastYuv.wasm \
+    licenses/ShotDetector.FastYuv/COPYING.LGPL; do
     if [[ ! -f $publish/$f ]]; then echo "Not in the App's publish output: $f" >&2; exit 1; fi
   done
   rm -rf out/wasm
@@ -104,15 +121,11 @@ if [[ $page == true ]]; then
   demo=samples/sintel_trailer-480p.mp4
   for f in "$sample" "$demo"; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
-  publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
-  if [[ $wasm == false ]]; then
-    rm -rf "$publish"
-    dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot
-  fi
+  if [[ $wasm == false ]]; then publish_app; fi
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" --native out/native || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "picked, on two workers, the demo paused and resumed and stopped while paused, the downloaded CSVs the native run's" || echo "FAILED")."
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, then offline, the downloaded CSVs the native run's" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi
@@ -139,9 +152,7 @@ PY
   dotnet build "$work/shotdetector/src/ShotDetector.FastYuv" -c Release -v q -nologo \
     -p:ShotDetectorVersion="$version" -p:FrameReaderVersion="$frameReader"
   dll=$work/shotdetector/src/ShotDetector.FastYuv/bin/Release/net10.0/ShotDetector.FastYuv.dll
-  publish=src/ShotDetectorWeb.App/bin/Release/net10.0/publish
-  rm -rf "$publish"
-  dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=$aot -p:FastYuvAssembly="$dll"
+  publish_app -p:FastYuvAssembly="$dll"
   status=0
   node tools/replace-check.mjs "$publish/wwwroot" "${samples[0]}" | { grep -v '^MONO_WASM:' || true; } || status=$?
   # The next publish is the package's again (and not this bundle by accident).
