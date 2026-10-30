@@ -6,9 +6,10 @@
     <PackageVersion Include="FrameReader" Version="2.16.0" />
     <PackageVersion Include="ShotDetector" Version="3.22.0" />
     <PackageVersion Include="ShotDetector.FastYuv" Version="3.22.0" />
-    <PackageVersion Include="ManagedCodecs.Aac" Version="0.2.4" />
-    <PackageVersion Include="ManagedCodecs.Containers" Version="0.2.4" />
-    <PackageVersion Include="ManagedCodecs.H264" Version="0.2.4" />
-    <PackageVersion Include="ManagedCodecs.Mjpeg" Version="0.2.4" />
+    <PackageVersion Include="ManagedCodecs.Aac" Version="0.3.0" />
+    <PackageVersion Include="ManagedCodecs.Core" Version="0.3.0" />
+    <PackageVersion Include="ManagedCodecs.Containers" Version="0.3.0" />
+    <PackageVersion Include="ManagedCodecs.H264" Version="0.3.0" />
+    <PackageVersion Include="ManagedCodecs.Mjpeg" Version="0.3.0" />
   </ItemGroup>
 </Project>
