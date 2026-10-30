@@ -100,8 +100,10 @@ page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the pa
 
 ## Stopping a run
 
-`Api.Detect` runs ShotDetector's `DetectAsync` over `Mp4Input.FramesAsync`, which every 8 frames (`PauseEvery` in
-`Api.cs`) awaits the worker's next task (`[JSImport] pause`, `wwwroot/pause.js`: a `MessageChannel` message). Between
+`Api.Detect` scores the video as one range from frame 0 with ShotDetector's `ScoreRangeAsync` (which tells each shot
+as `DetectAsync` would) and merges it (`Merge`: `Detect`'s result byte for byte), so that a stopped run leaves scores
+to resume from (Resuming a stopped run, below). Its frames come from `Mp4Input.RangeFramesAsync`, which every 8 frames
+(`PauseEvery` in `Api.cs`) awaits the worker's next task (`[JSImport] pause`, `wwwroot/pause.js`: a `MessageChannel` message). Between
 two pauses the worker handles the page's `stop`, which makes the frames end there as if the file did, so `Detect`
 answers with the result for the frames read: the frame count read, its shots (the last one ending where the run
 stopped) and both CSVs, and `stopped: true`. A file picked during a run abandons it with `cancel` (the token: no
@@ -136,6 +138,28 @@ fails on any progress meanwhile, and compares the resumed run's CSVs and shots w
 sample a run stopped while paused ends at the frame it was paused at. Seen 2026-10-29 in headless Chromium on Sintel's
 trailer: paused at frame 320 of 1,253, the bar and status unchanged 4 s later, Resume going on from there to its 8
 shots in 107.5 s, the pause left out; paused at 192 and stopped, the result for 192 frames.
+
+### Resuming a stopped run
+
+A stopped run can be resumed, in the same visit or a later one (backlog-done, "Resume after Stop, across visits";
+decision [2026-10-30-resume-across-visits.md](docs/decisions/2026-10-30-resume-across-visits.md)). Every run keeps its
+ranges' scores and its picture measures; once stopped, the page asks for them (`Api.Kept`: a `Blob`, little-endian,
+the frame the rest starts at first) and keeps them in IndexedDB with the file's name, size and modified time and the
+run's options, one record in all (the owner's choice: only the last stopped run, of any file). Picking that file again,
+in this visit or a later one, puts the run's options in the form and shows the stopped part at once (`Api.Merge` of
+the kept bytes alone: its shots, stats, CSVs and picture measures, as the stopped run had them), with Resume and
+Forget beside Detect, which starts over. Resume goes on from the last place a range can start (one past a keyframe) at
+or before the last frame scored (`Mp4Input.Continue`), so at most a keyframe interval is scored again, frames both
+have, which ShotDetector compares: on one worker `Api.Resume` scores the rest with the earlier ranges given
+(ShotDetector 3.22.0's `ScoreRangeAsync(video, earlier, ...)`), telling the rest's shots as they are known after the
+stopped part's, its last one, cut short at the stop, told again to where it ends; a rest longer than 2 minutes is split
+across workers as a run of its length would be (the owner's choice: `Api.Ranges` from the rest's first frame, each
+range scored as a split run's are, `Api.Merge` with the kept bytes first). The result is the whole run's, byte for
+byte. A finished run of the kept file and options, another stop, or Forget replaces or drops the record; kept scores
+that don't resume (another version's, other options) are forgotten and the run detected from the start, saying why.
+Nothing leaves the browser, and where storage is off (a private window) a run resumes only in its visit. Kept bytes
+are about 97 bytes a frame for the adaptive detector (Long videos across workers, below) plus the picture's, so a
+two-hour film stopped half-way keeps about 9 MB.
 
 ## Long videos across workers
 
@@ -512,6 +536,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
   the same run decoded on four threads (`Mp4Input.DecoderThreads`, as the page's threaded runtime decodes), whole, in
   ranges, and stopped half-way against the same run stopped on one thread, byte for byte (`ThreadsCheck.cs`);
+  the default run and the run with all five detectors scored as the page's one-worker run is (one range from frame 0),
+  stopped at a third, its scores carried as bytes and resumed (`Mp4Input.Continue`, the earlier ranges given to
+  `ScoreRangeAsync`), stopped again at two thirds and resumed to the end, against the whole run's CSVs, JSON and HTML
+  byte for byte, the shots told across the parts the whole run's and the picture measures joined the whole run's; and
+  split into 4 ranges each stopped past 60%, the rest split into 4 again from the continuation's first frame, merged
+  with the earlier ranges, against the whole run's too (`ResumeCheck.cs`);
   each sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio
   stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`); and the page's
   defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
@@ -555,7 +585,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   `Detect` does, and stopped half-way through its second range (and every range after it, as the page stops every
   worker) the result for its start, held to the whole run as a stopped run is, that ranges scored with other options
   or with damaged bytes fail the merge with "The ranges didn't merge: " in front (the page then detects with one
-  worker), that `samples/reject/` is refused through
+  worker), that the same two runs stopped at a third, their kept bytes (`Kept`) shown again after the file is opened
+  again (`Merge` of them alone: the stopped run's result exactly), resumed (`Resume`) and stopped again at two thirds,
+  then opened again and resumed to the end give the whole run's CSVs, shots, JSON, HTML and picture measures, the shots
+  told after the stopped part's the whole run's, and stopped in their second range split, the rest split again from
+  the kept bytes' first frame and merged with them, the whole run's too, that kept bytes of other options fail to
+  resume with "The stopped run didn't resume: " in front (the page then detects from the start), that `samples/reject/` is refused through
   `Open`, that `Open`'s `audio` is the track `Audio()` measures (none
 where it says the file has none; for `samples/no-aac/`, the codec in the file's name), that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
@@ -572,7 +607,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   page's path reaching FFmpeg's code), and if any FFmpeg assembly is loaded at all, the audio pass included
   (`LoadedAssemblies()`), interpreted and compiled ahead of time (`aot`, a few minutes more to build) alike. No FFmpeg
   library exists in the browser either way.
-- **page** (`tools/page-check/page-check.mjs`, Playwright 1.63.0 pinned by its lockfile, Chromium only): the page's own
+- **page** (`tools/page-check/page-check.mjs`, Playwright 1.63.0 pinned by its lockfile, Chromium, and Firefox for a
+  resume across a reload): the page's own
   JavaScript (`app.js`, `worker.js`, `threads.js`, `sw.js`, the panels) in a browser, as a visitor drives it, and the
   only check of the threaded bundle (it doesn't run under Node). The published `wwwroot` is
   served as Pages serves it, without headers, the demo clip in `demo/` (`sintel_trailer-480p.mp4`, as `pages.yml` puts
@@ -582,8 +618,13 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   where the page isn't isolated); the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers"
   in the status); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
-  paused and stopped while paused; and the page reloaded offline (Playwright's network off), from the service worker's
-  cache, still isolated, the demo run again from the cache on threads. Each whole run must end `done`, its scenes and
+  paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
+  in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on
+  threads to the whole run's downloads (screenshots of both in `out/page/`); the page reloaded offline (Playwright's network off), from the service worker's
+  cache, still isolated, the demo run again from the cache on threads; the demo on two workers (`?workers=2`) stopped
+  at 40% and resumed in the same visit, the rest split again; and in Firefox, on the page's worker (`?threads=0`), the
+  demo stopped at 30%, the page reloaded, shown again and resumed (`PAGE_CHECK_FIREFOX=skip` leaves Firefox out, where
+  Playwright can't download it: a cloud session). Each whole run must end `done`, its scenes and
   stats CSVs and its shots as JSON and HTML, downloaded from the run's card as a visitor clicks them (`out/page/`),
   must equal the native check's run of the detector picked byte for byte, the shots table must have a row per shot of
   the CSV, and the picture's card must show the native check's cropdetect crop and colour bars with its lane drawn; the
