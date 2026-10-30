@@ -690,6 +690,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     1% short and 16% long. GitHub's runner ran the trailer at 151 fps the same day; the owner chose this VM's rate.
     README "Large files")
 
+- Shots as JSON and HTML
+  - Why: ShotDetector writes the shots as JSON (`Shots.Json`) and as scenedetect's save-html page (`Shots.Html`); a
+    visitor who wants the shots in a program or a browser tab gets them without reading the scenes CSV. The owner chose
+    it out of Maybe on 2026-10-30.
+  - Where: `src/ShotDetectorWeb.App/Api.Shots.cs` (`ShotsJson()`, `ShotsHtml()`: the last run's, the HTML without
+    images and with the run's cuts), `wwwroot/panels/run.js` (two more downloads next to the CSVs,
+    `<file>.shots.json` and `<file>.shots.html`, a stopped run's too, for the part read: the owner's choices,
+    2026-10-30); `tools/Shared/Runs.cs`, `tools/NativeCheck` (the core's against the FFmpeg path's, and the ranges'
+    merge's), `tools/app-check.mjs` and `tools/check.sh` (the wasm run's against the native run's, file for file),
+    `tools/page-check/page-check.mjs` (the downloads).
+  - Done when: NativeCheck's table says "same, same" for every sample and run; `tools/check.sh wasm` compares the
+    `.shots.json` and `.shots.html` with the native ones as it does the CSVs, and app-check.mjs holds a paused and
+    resumed run's and a merge's to the whole run's, a stopped run's to its own shots; the page check downloads both
+    from each whole run, byte for byte the native run's, and the stopped run's carry its scenes CSV's shots.
+  - Not: images in the HTML (the page's stills are the browser's decode, not ShotDetector's frames); `app.js`.
+  - Status: Done (2026-10-30: NativeCheck "same, same" on every sample and run; the wasm check 308 of 308 CSVs, JSON
+    and HTML identical; the page check's downloads byte for byte the native run's, the stopped run's its shots)
+
 - Picture measures: black frames, brightness, broadcast-safe levels, letterbox, colour bars
   - Why: the picture side of a check before delivery, next to the audio measures.
   - Status: Done (2026-10-30: decision [2026-10-30-picture-measures.md](decisions/2026-10-30-picture-measures.md),

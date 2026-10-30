@@ -1,6 +1,7 @@
 // The App's exports under Node, as the page's worker calls them (src/ShotDetectorWeb.App/wwwroot/worker.js): each
-// sample opened, then every run of tools/Shared/Runs.cs (RUNS below) detected on it, the scene and stats CSVs written to
-// the output folder under the names tools/NativeCheck gives its own (tools/check.sh compares the two folders). Each
+// sample opened, then every run of tools/Shared/Runs.cs (RUNS below) detected on it, the scene and stats CSVs and the
+// shots as JSON and HTML (ShotsJson, ShotsHtml) written to the output folder under the names tools/NativeCheck gives its
+// own (tools/check.sh compares the two folders). Each
 // file to refuse must be refused when opened. The shots told while a run goes (the 'shot' import, which the worker posts
 // to the page as they come) must be the result's shots, exactly. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
 // through the published blob-read.js (tools/node-host.mjs). Fails if the runs load an assembly of FFmpeg's; says whether one was
@@ -94,7 +95,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, Audio, Packets, Picture, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, Audio, Packets, Picture, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -111,6 +112,9 @@ const statsText = () => {
     throw new Error(`StatsCsv gave ${Object.prototype.toString.call(blob)} of type ${blob?.type}, not a text/csv Blob`);
   return blob.text();
 };
+// The last run's shots as JSON and HTML (Api's ShotsJson and ShotsHtml, the page's downloads beside the CSVs) are a whole
+// run's, byte for byte.
+const sameShotFiles = ({ json, html }) => ShotsJson() === json && ShotsHtml() === html;
 let runSeconds = 0, pauseSeconds = 0;
 
 mkdirSync(outDir, { recursive: true });
@@ -148,6 +152,12 @@ for (const [i, sample] of samples.entries()) {
     const scenesCsv = ScenesCsv(), statsCsv = await statsText();
     writeFileSync(`${name}.scenes.csv`, scenesCsv);
     writeFileSync(`${name}.stats.csv`, statsCsv);
+    const shotFiles = { json: ShotsJson(), html: ShotsHtml() };
+    writeFileSync(`${name}.shots.json`, shotFiles.json);
+    writeFileSync(`${name}.shots.html`, shotFiles.html);
+    // The JSON download is the shots Detect's JSON gives (each one of Shots.Json's array), only indented.
+    if (JSON.stringify(JSON.parse(shotFiles.json)) !== JSON.stringify(result.shots))
+      fail(`${basename(sample)} ${run}: ShotsJson's shots aren't the result's`);
     // How many shots were told before the last frame's progress: with one detector, all but the last, give or take
     // the progress reports' spacing (about ten a second).
     const early = toldAt.filter(done => done < result.frameCount).length;
@@ -167,8 +177,8 @@ for (const [i, sample] of samples.entries()) {
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
     if (run === Object.keys(RUNS)[0]) wholePicture = checkPicture(sample, result);
     await checkStop(sample, video, run, options, result, statsCsv);
-    if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, i === 0);
-    if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv);
+    if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
+    if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
   }
   await checkNotMerged(sample);
   checkAudio(sample, video);
@@ -246,9 +256,9 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
 }
 
 // A run paused half-way (the worker's 'pause') stays where it is while held, no frame read and no progress told, and
-// once resumed gives exactly the CSVs and shots of the run never paused. On the first sample also a run stopped while
+// once resumed gives exactly the CSVs, shots, JSON and HTML of the run never paused. On the first sample also a run stopped while
 // paused (the worker's 'stop': Api's Stop, then the release), which ends at the frame it was paused at.
-async function checkPause(sample, video, options, whole, wholeScenes, wholeStats, alsoStop) {
+async function checkPause(sample, video, options, whole, wholeScenes, wholeStats, wholeShotFiles, alsoStop) {
   const name = `${basename(sample)} adaptive paused`;
   const half = Math.floor(video.frameCount / 2);
   let still = null;
@@ -260,7 +270,7 @@ async function checkPause(sample, video, options, whole, wholeScenes, wholeStats
   if (still === null) fail(`${name}: never held (at ${half} of ${video.frameCount} frames)`);
   else if (still.moved > 0) fail(`${name}: ${still.moved} progress reports while held at frame ${still.framesRead}`);
   if (result.stopped !== false || ScenesCsv() !== wholeScenes || await statsText() !== wholeStats ||
-    JSON.stringify(result.shots) !== JSON.stringify(whole.shots))
+    JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || !sameShotFiles(wholeShotFiles))
     fail(`${name}: resumed, the result isn't the run never paused's (stopped ${result.stopped})`);
   else console.error(`${name} at ${still?.framesRead} of ${video.frameCount} frames, held ${HELD_MS} ms with no ` +
     'frame read, then resumed: the CSVs and shots of the run never paused');
@@ -311,10 +321,19 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats) {
     fail(`${name} at ${n}: shots ${JSON.stringify(result.shots.map(s => [s.startFrame, s.endFrame]))}, the whole ` +
       `run's ${JSON.stringify(whole.shots.map(s => [s.startFrame, s.endFrame]))}`);
   }
+  // The JSON and HTML downloads: the stopped run's own shots, as JSON and as a row each of the HTML's shot table.
+  const htmlRows = htmlShots(ShotsHtml());
+  if (JSON.stringify(JSON.parse(ShotsJson())) !== JSON.stringify(result.shots) || htmlRows !== result.shots.length)
+    fail(`${name}: ShotsJson or ShotsHtml (${htmlRows} rows) isn't the stopped run's ${result.shots.length} shots`);
   console.error(`${name} at ${n} of ${whole.frameCount} frames: ${result.shots.length} shots, ` +
     `the whole run's ${kept.length} and the next cut short; ${ours.length - 1} stats rows, the whole run's` +
     `${window > 0 ? `, the adaptive ratio None in the last ${window}` : ''}` +
     `${missed.length > 0 ? `; cuts decided after the stop: ${missed.join(', ')}` : ''}`);
+}
+
+// How many shots scenedetect's save-html page (Shots.Html) has: the rows of its last table, the shots, but its header.
+function htmlShots(html) {
+  return (html.split('<table').at(-1).match(/<tr>/g)?.length ?? 1) - 1;
 }
 
 // A run cancelled half-way (Api's Cancel at a pause, as the worker does on a 'cancel' message) fails and keeps no
@@ -493,10 +512,11 @@ function merge(options, bytes) {
   return JSON.parse(Merge(JSON.stringify(options), joined, bytes.map(b => b.length)));
 }
 
-// The run split into ranges at keyframes, scored range by range and merged: the whole run's CSVs, shots and frames, the
+// The run split into ranges at keyframes, scored range by range and merged: the whole run's CSVs, shots (and their JSON
+// and HTML) and frames, the
 // shots told by the merge; then stopped half-way through the second range (the first, with one), the result for the
 // frames from the start.
-async function checkRanges(sample, video, run, options, whole, wholeScenes, wholeStats) {
+async function checkRanges(sample, video, run, options, whole, wholeScenes, wholeStats, wholeShotFiles) {
   const name = `${basename(sample)} ${run} in ranges`;
   const plan = JSON.parse(Ranges(RANGES));
   if (plan.frames !== whole.frameCount) fail(`${name}: Ranges says ${plan.frames} frames, the whole run read ${whole.frameCount}`);
@@ -504,10 +524,10 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
   const bytes = await scoreRanges(options, plan);
   const result = merge(options, bytes);
   const seconds = (performance.now() - started) / 1000;
-  const same = ScenesCsv() === wholeScenes && await statsText() === wholeStats;
+  const same = ScenesCsv() === wholeScenes && await statsText() === wholeStats && sameShotFiles(wholeShotFiles);
   if (!same || JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || result.frameCount !== whole.frameCount ||
     result.stopped !== false || JSON.stringify(result.warnings) !== JSON.stringify(whole.warnings))
-    fail(`${name}: ${same ? 'the same CSVs' : 'other CSVs'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
+    fail(`${name}: ${same ? 'the same CSVs, JSON and HTML' : 'other CSVs, JSON or HTML'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
       `(stopped ${result.stopped}), the whole run's ${whole.shots.length} of ${whole.frameCount}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots the merge told aren't its result's`);
   if (Picture() !== wholePicture) fail(`${name}: the merged picture measures aren't the whole run's`);

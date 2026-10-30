@@ -7,7 +7,7 @@ owner's decisions are in shotdetector's docs/decisions/2026-10-24-managedcodecs-
 
 ## Core idea
 
-Exactness first: the scene and stats CSVs must equal ShotDetector's FFmpeg path's (`Detect(path)`, FFmpeg in-process,
+Exactness first: the scene and stats CSVs (and the shots as JSON and HTML) must equal ShotDetector's FFmpeg path's (`Detect(path)`, FFmpeg in-process,
 same FastYuv converter) byte for byte, natively and on browser-wasm, before anything else. That rests on `YuvVideo`
 saying what FFmpeg says about the file (average frame rate, nb_frames, time base, start pts, colour tags, duration):
 ManagedCodecs doesn't expose all of it, so `Mp4Header`/`SpsInfo` read it, and NativeCheck compares every field with
@@ -45,7 +45,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `ScenesCsv()` and `StatsCsv()` (the last run's CSVs, not inside the JSON: the scenes CSV a string, the stats CSV a
   `Blob` written a row at a time by `Stats.WriteCsv` through `BlobWriter`, a write-only `Stream` whose parts go out
   through the `[JSImport]`s `parts`, `append` and `blob`, so it is never one string in the heap: README "What the heap
-  holds"),
+  holds"); `Api.Shots.cs` has `ShotsJson()` and `ShotsHtml()` (the last run's shots as `Shots.Json` and as
+  `Shots.Html` without images, the run card's other two downloads, which `run.js` asks for on `done`),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
@@ -90,7 +91,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
-  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads), `shots.js`
+  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads, the CSVs and the shots as JSON and HTML), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
   decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
@@ -114,7 +115,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     in `style.css`. A new export is `Api.<Feature>.cs`, a partial file of its own with its own `JsonSerializerContext`
     if it needs JSON; the panel calls it with `call('<Export>', ...)`, and `worker.js` doesn't change. `app.js` changes
     only for a new event of the page's.
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector, and `PacketCheck.cs`: `Mp4Input.Packets` vs
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `Mp4Input.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
@@ -134,8 +135,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, a sample picked on one worker and on two, the demo paused and resumed, then stopped while paused, each
-  run's downloaded CSVs against the native run's, the picture card's crop and colour bars the native run's, any page or
-  worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
+  run's downloaded CSVs, JSON and HTML against the native run's, the picture card's crop and colour bars the native
+  run's, any page or worker error failing it; `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
   frame), `tools/webcodecs/` (a page any browser opens from `serve.mjs`: `VideoDecoder` on those units, every plane

@@ -2,20 +2,21 @@
 // wwwroot served as Pages serves it, with the demo clip in demo/ (pages.yml's "Make the site"), and the page itself in
 // Chromium through Playwright, its own JavaScript (app.js, worker.js, the panels) as a visitor drives it:
 //   1. a sample set on the file input, detected with the options as the page prefills them, its scenes and stats CSVs
-//      downloaded from the run's card and compared with the native check's run of that detector byte for byte, the
-//      shots table one row per shot of the CSV;
+//      and its shots as JSON and HTML downloaded from the run's card and compared with the native check's run of that
+//      detector byte for byte, the shots table one row per shot of the CSV;
 //   2. the same sample split across two workers (?workers=2): the ranges lane, and the same CSVs;
 //   3. "Try the demo": the clip fetched and run as picked, paused a quarter of the way in (the bar and the status held
 //      still, the button reading Resume), resumed, the same comparison, the sound measured;
 //   4. the demo detected again, paused and stopped while paused: it ends stopped at the pause it was held at, its
-//      stats CSV the native run's first rows up to there, the shots table a row per shot of its scenes CSV.
+//      stats CSV the native run's first rows up to there, the shots table, the JSON and the HTML a shot each of its
+//      scenes CSV's.
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
-//   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded CSVs.
+//   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -105,27 +106,40 @@ async function finished(page, what, expected = 'done') {
   return status;
 }
 
-// The run's downloads, as a visitor clicks them, against the native check's CSVs of the same run; the shots table
-// against the scenes CSV. A run stopped at frame stoppedAt: its stats CSV the native run's rows up to that frame, but
-// for the adaptive ratio of the last w frames, None (its window after them isn't read), as app-check.mjs's checkStopped;
-// its scenes CSV's last shot ending there.
+// The run's downloads, as a visitor clicks them, against the native check's files of the same run (its CSVs and the
+// shots as JSON and HTML); the shots table against the scenes CSV. A run stopped at frame stoppedAt: its stats CSV the
+// native run's rows up to that frame, but for the adaptive ratio of the last w frames, None (its window after them
+// isn't read), as app-check.mjs's checkStopped; its scenes CSV's last shot ending there, and its JSON and HTML the
+// scenes CSV's shots.
 async function compare(page, what, name, run, stoppedAt = null) {
-  for (const kind of ['scenes', 'stats']) {
-    const link = page.locator(`#${kind}-csv`);
+  let scenes = null; // the downloaded scenes CSV's shots, [start frame, end frame] each
+  for (const [kind, ext, label] of [['scenes', 'csv', 'scenes CSV'], ['stats', 'csv', 'stats CSV'],
+    ['shots', 'json', 'shots JSON'], ['shots', 'html', 'shots HTML']]) {
+    const link = page.locator(`#${kind}-${ext}`);
     if (!await link.isVisible()) {
-      fail(`${what}: no ${kind} CSV to download`);
+      fail(`${what}: no ${label} to download`);
       continue;
     }
     const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
-    const expectedName = `${basename(name, '.mp4')}.${kind}.csv`;
+    const expectedName = `${basename(name, '.mp4')}.${kind}.${ext}`;
     if (download.suggestedFilename() !== expectedName) {
-      fail(`${what}: the ${kind} CSV downloads as ${download.suggestedFilename()}, not ${expectedName}`);
+      fail(`${what}: the ${label} downloads as ${download.suggestedFilename()}, not ${expectedName}`);
     }
-    const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${kind}.csv`);
+    const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${kind}.${ext}`);
     await download.saveAs(saved);
-    const native = join(nativeDir, `${basename(name === 'sintel-trailer.mp4' ? demo : sample, '.mp4')}.${run}.${kind}.csv`);
+    const native = join(nativeDir, `${basename(name === 'sintel-trailer.mp4' ? demo : sample, '.mp4')}.${run}.${kind}.${ext}`);
     if (!existsSync(native)) {
-      fail(`${what}: no native CSV ${native} (tools/check.sh native first)`);
+      fail(`${what}: no native ${label} ${native} (tools/check.sh native first)`);
+    } else if (stoppedAt !== null && kind === 'shots') {
+      // Shots.Json's and Shots.Html's (its last table, a row a shot after the header) shots, the scenes CSV's.
+      const text = readFileSync(saved, 'utf8');
+      const ours = ext === 'json'
+        ? JSON.parse(text).map(s => [s.startFrame, s.endFrame])
+        : text.split('<table').at(-1).split('<tr>').slice(2).map(row => [...row.matchAll(/<td>([^<]*)<\/td>/g)])
+          .map(cells => [Number(cells[1][1]), Number(cells[4][1])]);
+      if (scenes === null || JSON.stringify(ours) !== JSON.stringify(scenes))
+        fail(`${what}: the downloaded ${label}'s shots (${saved}) aren't the scenes CSV's`);
+      else console.log(`${what}: ${expectedName} has the scenes CSV's ${scenes.length} shots`);
     } else if (stoppedAt !== null) {
       const ours = lines(readFileSync(saved, 'utf8')), theirs = lines(readFileSync(native, 'utf8'));
       if (kind === 'stats') {
@@ -147,13 +161,15 @@ async function compare(page, what, name, run, stoppedAt = null) {
         fail(`${what}: the scenes CSV's last shot doesn't end at frame ${stoppedAt}: ${ours.at(-1)}`);
       }
     } else if (!readFileSync(saved).equals(readFileSync(native))) {
-      fail(`${what}: the downloaded ${kind} CSV (${saved}) differs from ${native}`);
+      fail(`${what}: the downloaded ${label} (${saved}) differs from ${native}`);
     } else {
       console.log(`${what}: ${expectedName} identical to ${basename(native)}`);
     }
     if (kind === 'scenes') {
       // scenedetect's list-scenes CSV: the cuts' timecodes (when there are any) and the header, then a shot a line.
-      const shots = lines(readFileSync(saved, 'utf8')).filter(line => /^\d/.test(line)).length;
+      scenes = lines(readFileSync(saved, 'utf8')).filter(line => /^\d/.test(line)).map(line => line.split(','))
+        .map(cells => [Number(cells[1]), Number(cells[4])]);
+      const shots = scenes.length;
       const rows = await page.locator('#shots tbody tr').count();
       if (shots < 1 || rows !== shots) fail(`${what}: the shots table has ${rows} rows for the CSV's ${shots} shots`);
     }
@@ -283,5 +299,5 @@ if (failures.length > 0) {
   console.log(`The page check failed: ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}.`);
   process.exit(1);
 }
-console.log('The page check passed: picked, split across two workers and the demo paused and resumed, the CSVs ' +
-  'identical to the native run\'s; the demo stopped while paused, the result for the frames read.');
+console.log('The page check passed: picked, split across two workers and the demo paused and resumed, the CSVs, JSON ' +
+  'and HTML identical to the native run\'s; the demo stopped while paused, the result for the frames read.');

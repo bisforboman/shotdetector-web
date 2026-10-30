@@ -79,7 +79,9 @@ in its tooltip and Open's JSON one click away. Each card's title has one chip sa
 names each library with the version its assembly in the bundle carries, `Api.Versions` filled in by `versions.js`,
 which app-check.mjs checks against Directory.Packages.props' pins). At phone width it is one column in the same
 order. The scenes and stats CSVs
-(`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes. A file
+(`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes; the
+shots as JSON and HTML beside them (`<file>.shots.json`, ShotDetector's `Shots.Json`; `<file>.shots.html`, scenedetect's
+save-html page, `Shots.Html`, without images) are ShotDetector's, and checked as the CSVs are. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -447,7 +449,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   of the file (FrameReader's probe and first decoded frame, as ShotDetector's own FrameInputTests builds it), field by
   field; then each detector (adaptive, content, threshold, histogram, hash, and all five in one run, with stats) on
   (a) the core library and (b) ShotDetector's `Detect(path)` with FFmpeg in-process and the same FastYuv converter:
-  frame count, frame rate, length, duration, processed size, cuts, scene CSV and stats CSV must be equal. It also
+  frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV and the shots as JSON and HTML
+  (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) must be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
@@ -459,7 +462,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
   every sample the cuts of the run without it, as the page sends a default as none (`DefaultsCheck.cs`; Sintel's
   trailer is the sample that tells histogram's 0.05 from 0.2). Markdown tables go
-  to `out/native-report.md`, (a)'s CSVs to `out/native/`.
+  to `out/native-report.md`, (a)'s CSVs, JSON and HTML to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
   byte-exact**: the decoded samples are within 3e-7 of FFmpeg's, not equal, and the measures are computed by other code.
@@ -485,13 +488,15 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs,
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
   gives Node the `FileReaderSync` it lacks);
-  its CSVs written to `out/wasm/` and compared with `out/native/` file for file (none missing, none extra). It also
+  its CSVs and its shots as JSON and HTML (`ShotsJson`, `ShotsHtml`) written to `out/wasm/` and compared with
+  `out/native/` file for file (none missing, none extra), the JSON's shots `Detect`'s. It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
   to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
-  the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), that a run cancelled
+  the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), its JSON and HTML its own
+  shots, that a run cancelled
   half-way keeps no result, that the pauses take under 1% of the runs' time, that the default run and the run with all five
   detectors, split into ranges as the page's workers score them (`Ranges`, `ScoreRange`, `RangeBytes`, one range after another on the one runtime) and
-  merged from their bytes (`Merge`) gives the whole run's CSVs, shots and warnings, the merge telling the shots as
+  merged from their bytes (`Merge`) gives the whole run's CSVs, shots (their JSON and HTML too) and warnings, the merge telling the shots as
   `Detect` does, and stopped half-way through its second range (and every range after it, as the page stops every
   worker) the result for its start, held to the whole run as a stopped run is, that ranges scored with other options
   or with damaged bytes fail the merge with "The ranges didn't merge: " in front (the page then detects with one
@@ -521,13 +526,14 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   the page prefills them; the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers" in the
   status); "Try the demo", paused a quarter of the way in (the button reading Resume, the bar and the status unchanged
   for 2 s once the run has reached the pause it waits at) and resumed; and the demo detected again, paused and stopped
-  while paused. Each whole run must end `done`, its scenes and stats CSVs, downloaded from the run's card as a visitor
-  clicks them (`out/page/`), must equal the native check's run of the detector picked byte for byte, and the shots
-  table must have a row per shot of the CSV, the picture's card must show the native check's cropdetect crop and
-  colour bars with its lane drawn; the demo's sound must be measured. The stopped run must end `stopped` at
+  while paused. Each whole run must end `done`, its scenes and stats CSVs and its shots as JSON and HTML, downloaded
+  from the run's card as a visitor clicks them (`out/page/`), must equal the native check's run of the detector picked
+  byte for byte, the shots table must have a row per shot of the CSV, and the picture's card must show the native
+  check's cropdetect crop and colour bars with its lane drawn; the demo's sound must be measured. The stopped run must end `stopped` at
   the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held
   at"), its stats CSV the whole run's rows up to there (the adaptive ratio `None` in the last
-  frames of its window, as app-check.mjs holds it), its last shot ending there. Any exception, console error (the
+  frames of its window, as app-check.mjs holds it), its last shot ending there, its JSON and HTML the scenes CSV's
+  shots. Any exception, console error (the
   workers' too), failed request or HTTP error fails it. It reuses the bundle `wasm` published in the same call, else
   publishes one (interpreted unless `aot`): about 2 min 20 s interpreted, most of it the demo's run, and well under a
   minute compiled ahead of time (2026-10-29).
