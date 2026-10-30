@@ -39,22 +39,23 @@ function add(shot) {
 
 on('chose', clear);
 on('run', clear);
-on('done', ({ result, seconds }) => {
+on('done', ({ video: { frameRate: { num, den } }, result, seconds, from, restored }) => {
   clear();
   for (const shot of result.shots) add(shot);
   if (shots.length === 0) return;
-  fill(seconds);
+  // A stopped run shown again ran in an earlier visit; a resumed one read the video from its rest's first frame.
+  fill(restored ? null : seconds, from * den / num);
   section.hidden = false;
 });
 
-function fill(seconds) {
+function fill(seconds, skipped) {
   const lengths = shots.map(s => s.durationSeconds);
   const n = lengths.length, total = ends.at(-1) - starts[0];
   const sorted = [...lengths].sort((a, b) => a - b);
   const median = n % 2 === 1 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
   const shortest = lengths.indexOf(sorted[0]), longest = lengths.indexOf(sorted.at(-1));
   const cuts = n - 1;
-  const factor = total / seconds;
+  const factor = (total - skipped) / seconds;
   for (const [term, value, title] of [
     ['Shots', `${n}`, `${n} ${n === 1 ? 'shot' : 'shots'} in ${total.toFixed(3)} s`],
     ['Average length', length(total / n), `${(total / n).toFixed(6)} s: ${total.toFixed(3)} s over ${n} shots`],
@@ -63,8 +64,9 @@ function fill(seconds) {
     ['Longest', which(longest), `Shot ${shots[longest].shot}, ${lengths[longest].toFixed(3)} s. Play it`],
     ['Cuts per minute', total > 0 ? (cuts / total * 60).toFixed(1) : '–',
       `${cuts} ${cuts === 1 ? 'cut' : 'cuts'} in ${(total / 60).toFixed(3)} min`],
-    ['Run', `${factor.toFixed(1)} times real time`,
-      `${seconds.toFixed(1)} s for ${total.toFixed(1)} s of video${factor >= 1 ? '' : ': slower than playing it'}`],
+    ...seconds === null ? [] : [['Run', `${factor.toFixed(1)} times real time`,
+      `${seconds.toFixed(1)} s for ${(total - skipped).toFixed(1)} s of video${skipped > 0 ? ' (the rest of a stopped run)' : ''}` +
+      `${factor >= 1 ? '' : ': slower than playing it'}`]],
   ]) {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = term;

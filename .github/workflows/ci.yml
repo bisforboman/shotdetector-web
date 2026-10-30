@@ -81,13 +81,14 @@ jobs:
         if: steps.scope.outputs.page == 'true'
         run: dotnet workload install wasm-tools
 
-      # Playwright for the page's smoke test, pinned by tools/page-check's lockfile, and the Chromium of that version.
-      - name: Install Playwright and Chromium
+      # Playwright for the page's smoke test, pinned by tools/page-check's lockfile, and the Chromium and Firefox of that
+      # version (Firefox: the page check's resume across a reload there).
+      - name: Install Playwright, Chromium and Firefox
         if: steps.scope.outputs.page == 'true'
         working-directory: tools/page-check
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium firefox
 
       # Sintel's trailer (Blender Foundation, CC-BY 3.0), the real trailer the checks run and the page's demo is made
       # from: sintel_trailer-1080p.mp4, the largest of Blender's H.264 MP4s of it (1920x1080, 24 fps, 52 s, 14.6 MB), so

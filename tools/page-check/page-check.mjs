@@ -14,8 +14,17 @@
 //   4. the demo detected again, paused and stopped while paused: it ends stopped at the pause it was held at, its
 //      stats CSV the native run's first rows up to there, the shots table, the JSON and the HTML a shot each of its
 //      scenes CSV's;
-//   5. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
-//      (cached when it was fetched) runs on threads to the same downloads.
+//   5. across a reload (backlog "Resume after Stop, across visits"): the page reloaded, the demo picked again shows the
+//      stopped run kept in IndexedDB (its downloads the stopped run's, its options in the form, Resume beside Detect),
+//      and Resume goes on from there on threads to the whole run's downloads;
+//   6. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
+//      (cached when it was fetched) runs on threads to the same downloads;
+//   7. the demo split across two workers (?workers=2), stopped half-way and resumed in the same visit: the rest split
+//      again, merged with the kept scores to the whole run's downloads;
+//   8. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
+//      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
+//      Firefox: a cloud session's).
+// Screenshots of the stopped run shown again after the reload and of its resume go to <out>.
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
@@ -44,7 +53,7 @@ try {
 } catch {
   playwright = createRequire(import.meta.url)('playwright');
 }
-const { chromium } = playwright;
+const { chromium, firefox } = playwright;
 
 // Pages' types for what the bundle has; anything else as bytes. .wasm must be application/wasm (README, "Running the
 // page").
@@ -76,8 +85,8 @@ const fail = message => { failures.push(message); console.log(`FAIL ${message}`)
 
 // A fresh page each time, as a visitor's first visit (no rate kept from an earlier run), its errors collected:
 // exceptions, console errors (the workers' too) and failed or missing requests.
-async function open(query = '') {
-  const context = await browser.newContext({ acceptDownloads: true });
+async function open(query = '', on = browser) {
+  const context = await on.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   const errors = [];
   const watch = (where, target) => {
@@ -93,8 +102,49 @@ async function open(query = '') {
   });
   page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()}: ${r.url()}`); });
   await page.goto(base + query);
-  await isolated(page);
+  await (on === browser ? isolated(page) : served(page));
   return { context, page, errors };
+}
+
+// Another browser, which needn't become isolated (the runs go on the page's worker): its service worker in control,
+// and the reload a first visit makes, if it makes one (app.js, serve), done.
+async function served(page) {
+  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await page.waitForLoadState('load');
+}
+
+// Stops a run once its bar reaches at (a fraction): the stopped result, its frames read (null if it didn't stop).
+async function stopped(page, what, at) {
+  await page.waitForFunction(f => document.body.dataset.state === 'detecting' &&
+    document.getElementById('progress').value >= f, at, { timeout: 15 * 60 * 1000, polling: 50 });
+  await page.click('#stop');
+  const status = await finished(page, what, 'stopped');
+  return status === null ? null : Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
+}
+
+// The page reloaded (a later visit) and the demo picked again: the stopped run kept in this browser shown at once,
+// stopped at frames, with Resume and Forget, its downloads the stopped run's; then resumed to the whole run's.
+async function resumedAfterReload(page, what, frames, run, settle, threads) {
+  await page.reload();
+  await settle(page);
+  await page.click('#demo');
+  const status = await finished(page, `${what}, shown again`, 'stopped');
+  if (status === null) return;
+  const at = Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
+  if (at !== frames || !status.includes('kept in this browser') || !await page.isVisible('#resume') ||
+    await page.inputValue('#detector') !== run)
+    fail(`${what}: after the reload, not the stopped run at frame ${frames} kept with Resume: ${status}`);
+  await compare(page, `${what}, shown again`, 'sintel-trailer.mp4', run, frames);
+  await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.kept.png`), fullPage: true });
+  await page.click('#resume');
+  const done = await finished(page, `${what}, resumed`);
+  if (done === null) return;
+  if (!done.includes('resumed from frame') || THREADED.test(done) !== threads)
+    fail(`${what}: resumed, the status says ${done}`);
+  await compare(page, `${what}, resumed`, 'sintel-trailer.mp4', run);
+  await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.resumed.png`), fullPage: true });
+  if (await page.isVisible('#resume')) fail(`${what}: finished, Resume is still offered`);
 }
 
 // The page cross-origin isolated: on a first visit, once sw.js has taken over and the page has reloaded (app.js, serve).
@@ -319,6 +369,8 @@ try {
         if (frames !== at)
           fail(`${again}: stopped at frame ${frames}, not at ${at}, where it said it was held: ${status}`);
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
+        if (!await page.isVisible('#resume')) fail(`${again}: no Resume offered`);
+        await resumedAfterReload(page, 'the demo across a reload', frames, run, isolated, true);
       }
     }
 
@@ -336,6 +388,42 @@ try {
   }
   report(what, errors);
   await context.close();
+
+  // Split across two workers, stopped and resumed in the same visit: the rest split again.
+  {
+    const what = 'the demo on two workers, resumed';
+    const { context, page, errors } = await open('?workers=2');
+    await page.click('#demo');
+    if (await stopped(page, `${what}, stopped`, 0.4) !== null) {
+      await page.click('#resume');
+      const status = await finished(page, what);
+      if (status !== null) {
+        if (!/with 2 workers/.test(status) || !status.includes('resumed from frame'))
+          fail(`${what}: not resumed on 2 workers: ${status}`);
+        await compare(page, what, 'sintel-trailer.mp4', await page.inputValue('#detector'));
+      }
+    }
+    report(what, errors);
+    await context.close();
+  }
+
+  if (process.env.PAGE_CHECK_FIREFOX === 'skip') {
+    console.log('Firefox: left out (PAGE_CHECK_FIREFOX=skip)');
+  } else {
+    const fox = await firefox.launch();
+    try {
+      const what = 'Firefox';
+      const { context, page, errors } = await open('?threads=0', fox);
+      await page.click('#demo');
+      const run = await page.inputValue('#detector');
+      const frames = await stopped(page, `${what}, the demo stopped`, 0.3);
+      if (frames !== null) await resumedAfterReload(page, `${what}, the demo across a reload`, frames, run, served, false);
+      report(what, errors);
+      await context.close();
+    } finally {
+      await fox.close();
+    }
+  }
 } finally {
   await browser.close();
   server.close();
@@ -347,4 +435,4 @@ if (failures.length > 0) {
 }
 console.log('The page check passed: isolated, picked on threads, on the page\'s worker and split across two workers, ' +
   'the demo on threads paused and resumed, and offline, the CSVs, JSON and HTML identical to the native run\'s; the ' +
-  'demo stopped while paused, the result for the frames read.');
+  'demo stopped while paused, the result for the frames read, and resumed across a reload (in Firefox too) and split.');
