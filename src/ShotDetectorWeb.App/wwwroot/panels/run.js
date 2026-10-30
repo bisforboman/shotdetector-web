@@ -92,7 +92,7 @@ on('done', async ({ video, result: r, name }) => {
     show([String(n), `${n === 1 ? 'shot' : 'shots'}, the last ending where the run stopped`],
       [String(cuts), cuts === 1 ? 'cut' : 'cuts'],
       [timecode(r.frameCount / rate), `stopped at: frame ${r.frameCount.toLocaleString('en')} of ` +
-        `${video.frameCount.toLocaleString('en')} read`, `Stopped at frame ${r.frameCount} of ${video.frameCount}, at ${fps}`],
+        `${video.frames.toLocaleString('en')} read`, `Stopped at frame ${r.frameCount} of ${video.frames}, at ${fps}`],
       ran());
     summary.textContent = `${count(n)} in the ${r.frameCount} frames read. The CSVs are the ones for that part of the video.`;
   } else {

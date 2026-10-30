@@ -135,7 +135,7 @@ for (const [id, version] of Object.entries(versions.packages)) {
 }
 for (const [i, sample] of samples.entries()) {
   const video = JSON.parse(Open(fileBlob(sample)));
-  console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frameCount} frames, ${video.duration} s`);
+  console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frames} frames, ${video.duration} s`);
   // Once: a run cancelled half-way fails as cancelled, keeps no result, and the next run goes on as if it hadn't been.
   if (i === 0) await checkCancel(sample, video);
   for (const [run, options] of Object.entries(RUNS)) {
@@ -234,7 +234,7 @@ process.exit(failed ? 1 : 0);
 // fade-out the stop falls in with a cut, as at a file's end: no sample stops in one.)
 async function checkStop(sample, video, run, options, whole, wholeStats) {
   const name = `${basename(sample)} ${run} stopped`;
-  const half = Math.floor(video.frameCount / 2);
+  const half = Math.floor(video.frames / 2);
   progress = [];
   told = [];
   stopAt = half;
@@ -260,19 +260,19 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
 // paused (the worker's 'stop': Api's Stop, then the release), which ends at the frame it was paused at.
 async function checkPause(sample, video, options, whole, wholeScenes, wholeStats, wholeShotFiles, alsoStop) {
   const name = `${basename(sample)} adaptive paused`;
-  const half = Math.floor(video.frameCount / 2);
+  const half = Math.floor(video.frames / 2);
   let still = null;
   progress = [];
   told = [];
   holdAt = half;
   holding = (framesRead, moved) => { still = { framesRead, moved }; };
   const result = JSON.parse(await Detect(JSON.stringify(options)));
-  if (still === null) fail(`${name}: never held (at ${half} of ${video.frameCount} frames)`);
+  if (still === null) fail(`${name}: never held (at ${half} of ${video.frames} frames)`);
   else if (still.moved > 0) fail(`${name}: ${still.moved} progress reports while held at frame ${still.framesRead}`);
   if (result.stopped !== false || ScenesCsv() !== wholeScenes || await statsText() !== wholeStats ||
     JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || !sameShotFiles(wholeShotFiles))
     fail(`${name}: resumed, the result isn't the run never paused's (stopped ${result.stopped})`);
-  else console.error(`${name} at ${still?.framesRead} of ${video.frameCount} frames, held ${HELD_MS} ms with no ` +
+  else console.error(`${name} at ${still?.framesRead} of ${video.frames} frames, held ${HELD_MS} ms with no ` +
     'frame read, then resumed: the CSVs and shots of the run never paused');
   if (!alsoStop) return;
 
@@ -339,7 +339,7 @@ function htmlShots(html) {
 // A run cancelled half-way (Api's Cancel at a pause, as the worker does on a 'cancel' message) fails and keeps no
 // result; the file stays open for the next run.
 async function checkCancel(sample, video) {
-  cancelAt = Math.floor(video.frameCount / 2);
+  cancelAt = Math.floor(video.frames / 2);
   let message = null;
   try {
     await Detect(JSON.stringify(RUNS.adaptive));

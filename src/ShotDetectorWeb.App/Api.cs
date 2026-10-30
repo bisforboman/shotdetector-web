@@ -24,7 +24,9 @@ public static partial class Api
     const string Damaged = "The file is damaged or not an MP4 this page can read: ";
 
     /// <summary>
-    /// Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with its audio track
+    /// Opens an MP4 for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with the frames it shows
+    /// (<see cref="Mp4Input.ShownFrames"/>, what a whole run reads, where <c>frameCount</c> is FFmpeg's nb_frames: null in a
+    /// fragmented file, the track's samples past an edit list's end) as <c>frames</c>, and its audio track
     /// (<see cref="Mp4Input.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one; or the
     /// library's exception (a damaged file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
     /// in slices as the library needs them (<see cref="BlobStream"/>), never copied in whole.
@@ -45,6 +47,7 @@ public static partial class Api
     {
         _input = input;
         var json = JsonSerializer.SerializeToNode(input.Video, ApiJson.Default.YuvVideo)!.AsObject();
+        json["frames"] = input.ShownFrames;
         json["audio"] = input.Audio is { } a
             ? new JsonObject { ["codec"] = a.Codec, ["sampleRate"] = a.SampleRate, ["channels"] = a.Channels }
             : null;
