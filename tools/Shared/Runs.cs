@@ -31,6 +31,13 @@ internal static class Runs
     public static (string Scenes, string Stats) Csvs(DetectionResult result) =>
         (Shots.Csv(result.Shots, cuts: result.Cuts), result.Stats?.Csv(result.Video.Position) ?? "");
 
-    /// <summary>Where a sample's run goes: {sample}.{run}.scenes.csv and .stats.csv.</summary>
+    /// <summary>
+    /// The shots as JSON (<see cref="Shots.Json"/>) and as scenedetect's save-html page without images
+    /// (<see cref="Shots.Html"/>): the page's two downloads beside the CSVs.
+    /// </summary>
+    public static (string Json, string Html) ShotFiles(DetectionResult result) =>
+        (Shots.Json(result.Shots), Shots.Html(result.Shots, cuts: result.Cuts));
+
+    /// <summary>Where a sample's run goes: {sample}.{run}.scenes.csv, .stats.csv, .shots.json and .shots.html.</summary>
     public static string BaseName(string sample, string run) => $"{Path.GetFileNameWithoutExtension(sample)}.{run}";
 }
