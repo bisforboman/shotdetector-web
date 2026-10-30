@@ -146,9 +146,20 @@ file out of `samples/reject/`, and passes the native check.
 - 10-bit 4:2:0 and 8-bit 4:2:2
   - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
   - Where: first upstream: `YuvFrame` for 16-bit planes and 4:2:2 chroma, and `YuvVideo.PixelFormat` accepting
-    yuv420p10le / yuv422p; then here, the chroma and bit-depth check in `Mp4Input`, two samples (already in
-    `samples/reject/`).
+    yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
+    the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
+    `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
   - Status: Maybe (needs ShotDetector)
+
+- The picture of an AVI on the page
+  - Why: no browser plays MJPEG in AVI, so an AVI's page shows a line where the video would be and its shots' table no
+    stills (decision `2026-10-30-mjpeg-avi.md`, the owner's choice 3). Each MJPEG packet is a JPEG the browser shows.
+  - Where: an export of a packet's bytes (`Api.Frame(index)`, `VideoInput.Packets` says where); the player an `<img>` of
+    the packet at the playhead when the `<video>` can't play, no sound; `panels/shots.js`'s stills from the same.
+  - Done when: picking `samples/mjpeg-320x240-25.avi` in the page check shows the frame at the playhead and a still per
+    shot, and the downloads are the native run's.
+  - Not: no transcoding, no decoding of the JPEGs in .NET for the picture (the browser's own JPEG decoder).
+  - Status: Maybe
 
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and

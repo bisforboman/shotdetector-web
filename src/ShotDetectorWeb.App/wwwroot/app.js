@@ -349,6 +349,8 @@ async function choose(chosen) {
   document.body.classList.add('picked');
   file = chosen;
   if (video.src) URL.revokeObjectURL(video.src);
+  unplayable.hidden = true;
+  video.hidden = false;
   video.src = URL.createObjectURL(file);
   say('');
   setState('idle');
@@ -827,6 +829,14 @@ changeButton.onclick = () => fileInput.click();
 // The whole drop zone picks a file, not only its label: all but the demo's line.
 drop.onclick = e => { if (e.target === drop) fileInput.click(); };
 for (const type of ['timeupdate', 'seeking', 'emptied', 'play', 'pause']) video.addEventListener(type, follow);
+// A file the browser can't play (MJPEG in AVI: decision 2026-10-30-mjpeg-avi.md) is analysed all the same: a line in the
+// player's place says so.
+const unplayable = $('unplayable');
+video.addEventListener('error', () => {
+  if (!video.error || video.error.code === MediaError.MEDIA_ERR_ABORTED) return;
+  video.hidden = true;
+  unplayable.hidden = false;
+});
 form.onsubmit = e => { e.preventDefault(); start(); };
 stopButton.onclick = stop;
 pauseButton.onclick = pauseOrResume;
