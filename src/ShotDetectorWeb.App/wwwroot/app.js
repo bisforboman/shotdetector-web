@@ -10,7 +10,7 @@
 // here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
 //                        'chose'    { file }                     a new file: whatever was shown of the last one goes
-//                        'opened'   { video }                    the file's YuvVideo, from Api's Open
+//                        'opened'   { video }                    the file's YuvVideo, from Api's Open (its frames too)
 //                        'run'      { video, options, ranges, fallback }   a run starts: whatever was shown of the
 //                                                                last run goes. ranges: a run split across workers
 //                                                                (decision 2026-10-26-workers.md), Api's Ranges'
@@ -398,7 +398,7 @@ async function go(run, plan, fallback = null) {
   estimate = estimateText(opened, workers, threads);
   estimated = estimateSeconds(opened, workers, threads);
   say(`${fallback ? `${fallback} Detecting again with one worker` : 'Detecting'} · about ${duration(estimated)} for ` +
-    `${count(opened.frameCount)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
+    `${count(opened.frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
   pausedFor = 0;
@@ -621,16 +621,16 @@ async function listen() {
 // worker (on as many threads), or the reference rate (REFERENCE_FPS) until it has one; split across workers,
 // SPLIT_SPEEDUP times as fast, on threads THREADS_SPEEDUP times (unless it has a rate of its own on them).
 function estimateText(video, workers, threads = 1) {
-  const { width, height, frameCount } = video;
+  const { width, height, frames } = video;
   const { rate, own } = rateFor(workers, threads);
   const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
-  return `Estimate: about ${duration(estimateSeconds(video, workers, threads))} for ${frameCount} frames at ` +
+  return `Estimate: about ${duration(estimateSeconds(video, workers, threads))} for ${frames} frames at ` +
     `${width}x${height} (${(rate / (width * height)).toFixed(0)} frames per second` +
     `${workers > 1 ? ` with ${workers} workers` : ''}${threads > 1 ? ` on ${threads} threads` : ''}, from ${from}).`;
 }
 
-function estimateSeconds({ width, height, frameCount }, workers = 1, threads = 1) {
-  return frameCount * width * height / rateFor(workers, threads).rate;
+function estimateSeconds({ width, height, frames }, workers = 1, threads = 1) {
+  return frames * width * height / rateFor(workers, threads).rate;
 }
 
 // Pixels per second for a run, and whether it is this browser's own.
@@ -747,7 +747,7 @@ function show(r, seconds, workers, threads) {
   const read = r.frameCount * r.frameRate.den / r.frameRate.num;
   shown = {
     text: r.stopped
-      ? `Stopped at ${timecode(read)}, frame ${count(r.frameCount)} of ${count(opened.frameCount)}, after ` +
+      ? `Stopped at ${timecode(read)}, frame ${count(r.frameCount)} of ${count(opened.frames)}, after ` +
         `${seconds.toFixed(1)} s (${rate})`
       : `Done in ${seconds.toFixed(1)} s, ${rate} (${(read / seconds).toFixed(1)} times real time)`,
     title: `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, in ${seconds.toFixed(3)} s; ${estimate}`,
@@ -804,7 +804,7 @@ function follow() {
 }
 
 // The video's length on the axis: Open's duration, or its frames over its rate.
-const lengthOf = v => v.duration ?? v.frameCount * v.frameRate.den / v.frameRate.num;
+const lengthOf = v => v.duration ?? v.frames * v.frameRate.den / v.frameRate.num;
 
 // The toolbar's line on the file: its size, and once opened the description's first facts.
 function facts(f, v) {

@@ -91,6 +91,23 @@ are in Next again.
   - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
     2026-10-30)
 
+- Rotation
+  - Why: phones record rotated; the FFmpeg path turns frames upright.
+  - Where: first upstream, [shotdetector#608](https://github.com/bisforboman/shotdetector/issues/608)
+    (`YuvVideo.Rotation`); then `Mp4Header` reads the `tkhd` matrix's angle as `av_display_rotation_get`, quarter turns
+    only, samples at 90, 180 and 270, `PictureMeter`'s crop and colour bars in the upright frame's coordinates (the
+    owner's choice, decision 2026-10-30-scope-widening.md).
+  - Done when: the native, wasm and page checks pass on the rotated samples byte for byte.
+  - Status: Waiting on upstream (shotdetector#608, filed 2026-10-30)
+
+- Variable frame rate
+  - Why: screen recordings and phones; the FFmpeg path takes it at the frames' own timestamps.
+  - Where: first upstream, [shotdetector#609](https://github.com/bisforboman/shotdetector/issues/609) (no grid check,
+    ranges by pts, `StartTime` from timestamps); then `Mp4Input.CheckConstantRate` goes, a VFR sample, split runs as
+    any other (the owner's choice).
+  - Done when: the native, wasm (whole and split) and page checks pass on the VFR sample byte for byte.
+  - Status: Waiting on upstream (shotdetector#609, filed 2026-10-30)
+
 - Frame types (I, P, B) on the strip
   - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
     chose it on 2026-10-30.
@@ -132,15 +149,6 @@ file out of `samples/reject/`, and passes the native check.
     yuv420p10le / yuv422p; then here, the chroma and bit-depth check in `Mp4Input`, two samples (already in
     `samples/reject/`).
   - Status: Maybe (needs ShotDetector)
-
-- Fragmented MP4, variable frame rate, rotation
-  - Why: screen recordings and phones. ManagedCodecs demuxes fragmented files; FFmpeg's `nb_frames` is 0 for them, so
-    the description differs (`Mp4Header` counts `moof` samples, `FrameCount` null, the length from the duration as
-    OpenCV's). A variable rate is an error in the frame-source API (a frame more than half a frame off) and in
-    scenedetect's model. Rotation: FFmpeg's path reports it and leaves frames upright; the frame-source API applies
-    none.
-  - Where: each its own row when wanted; each needs a decision about what "the FFmpeg path's result" means for it.
-  - Status: Maybe
 
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and

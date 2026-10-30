@@ -50,7 +50,7 @@ on('opened', ({ video: v }) => {
     ['Pixel format', PIXEL_FORMATS[v.pixelFormat] ?? v.pixelFormat, `pixelFormat: ${v.pixelFormat}`],
     ['Colour space', v.colorSpace === '' ? 'Not tagged' : COLOR_SPACES[v.colorSpace] ?? v.colorSpace, `colorSpace: "${v.colorSpace}"`],
     ['Range', v.fullRange ? 'Full (0–255)' : 'Limited (16–235)', `fullRange: ${v.fullRange}`],
-    ['Frames', v.frameCount.toLocaleString('en'), `frameCount: ${v.frameCount}`],
+    ['Frames', v.frames.toLocaleString('en'), `frames: ${v.frames} (shown); frameCount: ${v.frameCount} (FFmpeg's nb_frames)`],
     ['Duration', v.duration == null ? 'Not known' : clock(v.duration), `duration: ${v.duration}`],
     ['Audio', v.audio == null ? 'No audio' : audio(v.audio), v.audio == null ? 'audio: null' :
       `codec: ${v.audio.codec}, sampleRate: ${v.audio.sampleRate}, channels: ${v.audio.channels}`],
