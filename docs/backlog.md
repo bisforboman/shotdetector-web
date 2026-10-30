@@ -134,7 +134,7 @@ file out of `samples/reject/`, and passes the native check.
   - Where: an `AviInput` beside `Mp4Input` describing the file as FFmpeg does (frame rate from the AVI header, no
     time base subtleties); `Demuxer.Open` to pick by content; the page's file filter. 4:2:2 JPEG waits for the 4:2:2
     row.
-  - Status: Maybe
+  - Status: In progress (2026-10-30; decision [2026-10-30-mjpeg-avi.md](decisions/2026-10-30-mjpeg-avi.md))
 
 - Interlaced H.264
   - Why: broadcast material. ManagedCodecs decodes fields and MBAFF; ShotDetector.FastYuv has the row-wise `Yadif`
