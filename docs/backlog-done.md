@@ -846,3 +846,18 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `Mp4Input` and `AviInput`, `AviHeader` for the audio streams' description and VBR length; three AVI samples, every
     description field, CSV, JSON and HTML byte for byte, natively and on wasm, interpreted and AOT; 4:2:2 MJPEG waits
     for the 4:2:2 row; a dropped frame refused, ManagedCodecs#226; the page's picture of an AVI a row of its own)
+
+- Frame types (I, P, B) on the strip
+  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
+    chose it on 2026-10-30.
+  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
+    exists inside the decoder, `SliceType` internal; neither 0.2.4 nor main has it, 2026-10-30), filed as
+    ManagedCodecs#221: each frame's type as FFmpeg's `pict_type`, checked against `ffprobe -show_frames`. Then here: a
+    lane of the frame types from the run's frames after `bitrate.js`'s keyframes lane, marked `core` with a
+    NativeCheck comparison against `ffprobe -show_frames` field by field, as `PacketCheck.cs`.
+  - Done when: a ManagedCodecs release has it, and the lane shows each frame's type, checked natively against ffprobe.
+  - Not: no parsing of slice headers here (CLAUDE.md: report it there, don't work around it).
+  - Status: Done (2026-10-30: ManagedCodecs 0.3.0's `VideoFrame.PictureType`, kept by `PictureMeter` as a column of
+    `PictureMeasures`; `Api.FrameTypes`, `panels/frametypes.js` marked core; `FrameTypeCheck.cs` the same as
+    `ffprobe -show_frames` on all 19 samples, MBAFF and MJPEG (all I) included, whole, on four threads and in ranges;
+    app-check.mjs and the page check hold the App and the page to it)
