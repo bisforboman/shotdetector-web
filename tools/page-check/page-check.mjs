@@ -17,7 +17,8 @@
 //   5. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
 //      (cached when it was fetched) runs on threads to the same downloads.
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
-// colour bars, and its lane is there.
+// colour bars, and its lane is there; the frame types' card (panels/frametypes.js) the counts of ffprobe's pict_type
+// as the native check wrote them, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>
@@ -253,6 +254,26 @@ async function picture(page, what, file) {
     console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, as the native check's`);
 }
 
+// The frame types' card after a whole run: the counts of ffprobe's types (<sample>.frametypes.txt, which the native
+// check compared the core's with), and the lane shown.
+async function frameTypes(page, what, file) {
+  const native = join(nativeDir, `${basename(file, '.mp4')}.frametypes.txt`);
+  if (!existsSync(native)) {
+    fail(`${what}: no native ${native} (tools/check.sh native first)`);
+    return;
+  }
+  const types = readFileSync(native, 'utf8'), n = t => (types.split(t).length - 1).toLocaleString('en');
+  const expected = `${types.length.toLocaleString('en')} frames: ${n('I')} I, ${n('P')} P, ${n('B')} B`;
+  await page.waitForFunction(() => document.getElementById('frametypes')?.hidden === false &&
+    document.querySelector('#frametypes .note') !== null, null, { timeout: 60 * 1000 }).catch(() => {});
+  const text = await page.textContent('#frametypes') ?? '';
+  const lane = await page.locator('.track.frametypes canvas').count();
+  if (!text.includes(expected) || lane !== 1)
+    fail(`${what}: the frame types' card says "${text.slice(0, 200)}" (${lane} lane), not "${expected}"`);
+  else
+    console.log(`${what}: the frame types' card: ${expected}, ffprobe's`);
+}
+
 function lines(csv) {
   return csv.split(/\r?\n/).filter(line => line !== '');
 }
@@ -277,6 +298,7 @@ async function picked(query, what) {
     }
     await compare(page, what, basename(sample), run);
     await picture(page, what, sample);
+    await frameTypes(page, what, sample);
   }
   report(what, errors);
   await context.close();
@@ -300,6 +322,7 @@ try {
     if (!THREADED.test(status)) fail(`${what}: not on threads: ${status}`);
     await compare(page, what, 'sintel-trailer.mp4', run);
     await picture(page, what, demo);
+    await frameTypes(page, what, demo);
     // The sound's worker, alongside the run: done when the status no longer says it is measuring.
     await page.waitForFunction(() => !document.getElementById('status-text').textContent.includes('measuring the sound'),
       null, { timeout: 5 * 60 * 1000 });
