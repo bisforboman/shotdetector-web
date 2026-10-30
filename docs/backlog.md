@@ -95,18 +95,6 @@ since 2026-10-28 carry what they asked for, or part of it.
     page builds against since 2026-10-28; [shotdetector#519](https://github.com/bisforboman/shotdetector/issues/519)
     was filed 2026-10-26, the columns shipped in 3.16.1 on 2026-10-25)
 
-- ManagedCodecs: the MP4 index without its copies
-  - Why: `Mp4Demuxer` allocates about 275 B a sample to index a file and keeps 56 (140 MB and 28.5 MB for a two-hour
-    film with audio): it takes the wasm heap from 34 to 174 MB when a file opens, 208 MB once a run builds its own
-    (README "What the heap holds", 2026-10-26).
-  - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
-    [#23](https://github.com/bisforboman/shotdetector-web/pull/23): each track's samples filled once, a smaller
-    `Sample`, optionally only the tracks asked for. Then here: the submodule bumped, the steps measured again.
-  - Status: Open (2026-10-28: ManagedCodecs 0.1.0, the package the page builds against since 2026-10-28, builds the
-    sample table once at its final size (ManagedCodecs#123); whether that is all of
-    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138), filed 2026-10-26, the steps measured
-    again will say)
-
 - The frame a paused run is held at
   - Why: paused, the status says "Paused at frame N" from the last `progress` (frames processed), but the run is held
     at its next pause, by frames read, up to 8 frames on (Api's `PauseEvery`): stopped there, the result says another
@@ -125,6 +113,22 @@ The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
 in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
 3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are under Next.
+
+- ManagedCodecs: a demuxer of the tracks asked for, packets without their data
+  - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
+    allocates every packet's data even where the stream skips the reads. On the two-hour control natively, 342 MB of
+    zeroed arrays come out of `Open`'s 405 MB allocated, and a run allocates and throws away the audio track's 115 MB.
+    It doesn't grow the wasm heap: both were tried in a patched local build, 84 MB opened and 121 MB after the run either
+    way (README "What the heap holds", 2026-10-29). So low priority: allocation and time, not memory.
+  - Where: upstream (bisforboman/ManagedCodecs), an issue for the owner to file, its text in
+    [#59](https://github.com/bisforboman/shotdetector-web/pull/59), a follow-up to
+    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138). Then here: the run's demuxer
+    (`Mp4Input.DecodedFrames`, the ranges') of the video track only, and the opening pass through the timing-only
+    read, measured again as README does.
+  - Done when: a ManagedCodecs release has both, and the page uses them with the checks unchanged.
+  - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it); stays on 0.1.0
+    (ManagedCodecs#206).
+  - Status: Waiting on upstream (the issue's text in #59, 2026-10-29; not filed yet)
 
 - ManagedCodecs 0.2.0 on wasm: other pixels under the interpreter
   - Why: 0.2.0 (nuget.org, 2026-10-28 18:28 UTC, 97 commits past 0.1.0, nearly all H.264 decoder speed work in
