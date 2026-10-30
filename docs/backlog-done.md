@@ -634,6 +634,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `app.js` changes the scenes CSV fails all three whole runs, one whose Pause doesn't pause the worker fails the
     pause)
 
+- ManagedCodecs: the MP4 index without its copies
+  - Why: `Mp4Demuxer` allocated about 275 B a sample to index a file and kept 56: the wasm heap went from 34 to 174 MB
+    when a two-hour film opened, 208 MB once a run built its own (README "What the heap holds", 2026-10-26).
+  - Where: upstream, [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138) (filed 2026-10-26);
+    0.1.0 builds each track's sample table once, at its final size, 29 B a sample (ManagedCodecs#123).
+  - Status: Done (2026-10-29: measured again the same way, the bundle before the package and with it side by side
+    under Node, AOT, on the control made again by its recipe: opened 174 to 84 MB, the run 208 to 121 MB, the stats
+    CSV's peak 208 to 151 MB, a split run's worker 174/208 to 84/121 MB; natively 77 B a sample allocated, 29 kept.
+    #138 is answered for the heap. What it asked for that didn't ship, only the tracks asked for, and the packets' data
+    allocated where the reads are skipped, change only what is allocated: the backlog's Waiting row
+    "ManagedCodecs: a demuxer of the tracks asked for, packets without their data";
+    [#59](https://github.com/bisforboman/shotdetector-web/pull/59))
+
 - The frame a paused run is held at
   - Why: paused, the status says "Paused at frame N" from the last `progress` (frames processed), but the run is held
     at its next pause, by frames read, up to 8 frames on (Api's `PauseEvery`): stopped there, the result says another
