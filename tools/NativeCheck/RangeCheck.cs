@@ -4,11 +4,11 @@ namespace ShotDetectorWeb.Checks;
 
 /// <summary>
 /// The range check (README, "Checks"): for each sample, the run with every detector (<see cref="Runs.All"/>' last) split
-/// into ranges at keyframes as the page splits a long video across workers (<see cref="Mp4Input.Ranges"/>, at most 4),
-/// each range scored on its own (<see cref="Mp4Input.ScoreRangeAsync"/>), carried as bytes and merged
-/// (<see cref="Mp4Input.Merge"/>): the scene and stats CSVs must be the whole run's, which the main check wrote to the
+/// into ranges at keyframes as the page splits a long video across workers (<see cref="VideoInput.Ranges"/>, at most 4),
+/// each range scored on its own (<see cref="VideoInput.ScoreRangeAsync"/>), carried as bytes and merged
+/// (<see cref="VideoInput.Merge"/>): the scene and stats CSVs must be the whole run's, which the main check wrote to the
 /// output folder, byte for byte, and so must the shots as JSON and HTML; and the frames the video shows
-/// (<see cref="Mp4Input.ShownFrames"/>, which the last range runs to) must be the whole run's frame count.
+/// (<see cref="VideoInput.ShownFrames"/>, which the last range runs to) must be the whole run's frame count.
 /// </summary>
 internal static class RangeCheck
 {
@@ -27,16 +27,16 @@ internal static class RangeCheck
             string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
             try
             {
-                var input = Mp4Input.Open(sample);
+                var input = VideoInput.Open(sample);
                 var ranges = input.Ranges(MostRanges);
                 var scores = ranges
                     .Select(r => RangeScores.FromBytes(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options)
                         .GetAwaiter().GetResult().ToBytes()))
                     .ToList();
-                var merged = input.Merge(Mp4Input.FromStart(scores), options);
+                var merged = input.Merge(VideoInput.FromStart(scores), options);
                 var (scenes, stats) = Runs.Csvs(merged);
                 var problems = new List<string>();
-                if (Mp4Input.FromStart(scores).Count != ranges.Count)
+                if (VideoInput.FromStart(scores).Count != ranges.Count)
                     problems.Add("not every range follows the one before");
                 if (scenes != File.ReadAllText(baseName + ".scenes.csv"))
                     problems.Add("the scenes CSV DIFFERS");

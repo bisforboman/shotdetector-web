@@ -6,7 +6,7 @@ namespace ShotDetectorWeb.App;
 
 /// <summary>
 /// The threaded bundle's exports (decision 2026-10-30-threads.md): the page's main thread (wwwroot/threads.js) runs a
-/// one-worker run there, its decoder on several threads (<see cref="Mp4Input.DecoderThreads"/>). On the main thread .NET
+/// one-worker run there, its decoder on several threads (<see cref="VideoInput.DecoderThreads"/>). On the main thread .NET
 /// takes no synchronous export (it would block the page), so these are <see cref="Open"/>, <see cref="Stop"/>,
 /// <see cref="Cancel"/> and the exports of the last run's result (<see cref="ScenesCsv"/>, <see cref="StatsCsv"/>,
 /// <see cref="ShotsJson"/>, <see cref="ShotsHtml"/>, <see cref="Picture"/>) as tasks; <see cref="Detect"/> is one
@@ -24,7 +24,7 @@ public static partial class Api
         _result = null;
         _file?.Dispose();
         _file = file;
-        var input = await Host.Run(() => Task.FromResult(DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file)))));
+        var input = await Host.Run(() => Task.FromResult(DamagedPrefixed(() => VideoInput.Open(() => new BlobStream(file)))));
         input.DecoderThreads = threads;
         return Opened(input);
     }

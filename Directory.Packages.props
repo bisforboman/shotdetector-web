@@ -9,5 +9,6 @@
     <PackageVersion Include="ManagedCodecs.Aac" Version="0.2.4" />
     <PackageVersion Include="ManagedCodecs.Containers" Version="0.2.4" />
     <PackageVersion Include="ManagedCodecs.H264" Version="0.2.4" />
+    <PackageVersion Include="ManagedCodecs.Mjpeg" Version="0.2.4" />
   </ItemGroup>
 </Project>

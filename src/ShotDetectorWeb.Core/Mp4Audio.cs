@@ -23,12 +23,22 @@ public static class Mp4Audio
 
     /// <summary>
     /// Measures the audio of the MP4 file in <paramref name="stream"/> (readable and seekable; not disposed). A file
-    /// without an audio track, a track that isn't AAC, or one ManagedCodecs' decoder refuses gives measures with
+    /// without an audio track, a track that isn't AAC, an AVI's audio, or one ManagedCodecs' decoder refuses gives measures with
     /// <see cref="AudioMeasures.NotMeasured"/> saying so; a damaged file throws ManagedCodecs' <see cref="InvalidDataException"/>.
     /// </summary>
     public static AudioMeasures Measure(Stream stream, AudioOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= new AudioOptions();
+        // An AVI's audio isn't decoded (ManagedCodecs' AVI demuxer gives no audio): said so, as for audio that isn't AAC.
+        if (AviHeader.IsAvi(stream))
+        {
+            var avi = AviHeader.Read(stream);
+            stream.Position = 0;
+            return avi.Audio.FirstOrDefault() is { } track
+                ? AudioMeasures.Without($"The audio is '{track.Codec}' in an AVI file: only AAC in MP4 is measured.")
+                : AudioMeasures.Without("The file has no audio track.");
+        }
+
         var reader = new AudioDataStream(stream);
         using var demuxer = new Mp4Demuxer(reader, leaveOpen: true);
         if (demuxer.Audio is not { } info)

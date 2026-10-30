@@ -32,7 +32,7 @@ public sealed class PictureMeter
     }
 
     /// <summary>
-    /// A meter of <paramref name="range"/>'s frames, as <see cref="Mp4Input.RangeFramesAsync"/> gives them: from the
+    /// A meter of <paramref name="range"/>'s frames, as <see cref="VideoInput.RangeFramesAsync"/> gives them: from the
     /// frame before its first (not measured: the range before measures it) to the next range's first (not measured).
     /// </summary>
     public PictureMeter(YuvVideo video, FrameRange range)
@@ -583,7 +583,7 @@ public sealed class PictureMeasures
 
     /// <summary>
     /// Ranges' measures joined from the first frame on, while each starts where the one before ends (a range stopped
-    /// short ends them, as <see cref="Mp4Input.FromStart"/> ends the scores); null when none starts at frame 0.
+    /// short ends them, as <see cref="VideoInput.FromStart"/> ends the scores); null when none starts at frame 0.
     /// </summary>
     public static PictureMeasures? Join(IEnumerable<PictureMeasures> ranges)
     {

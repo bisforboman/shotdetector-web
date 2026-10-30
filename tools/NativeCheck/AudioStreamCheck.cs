@@ -1,5 +1,5 @@
 // The audio track's description (README, "Checks"): for each sample and each file in no-aac/ beside them,
-// Mp4Input.Audio (the codec named from the headers, the rate and channels ManagedCodecs' demuxer reads, nothing decoded)
+// VideoInput.Audio (the codec named from the headers, the rate and channels ManagedCodecs' demuxer reads, nothing decoded)
 // against ffprobe's first audio stream (FrameReader's probe): codec_name, sample_rate and channels, or no audio at all.
 // A Markdown table on standard output.
 using FrameReader;
@@ -22,7 +22,7 @@ static class AudioStreamCheck
             string ours, theirs;
             try
             {
-                ours = Describe(Mp4Input.Open(file).Audio);
+                ours = Describe(VideoInput.Open(file).Audio);
                 var stream = MediaProbe.Probe(file).Streams.FirstOrDefault(s => s.Type == StreamType.Audio);
                 theirs = Describe(stream is null ? null : new AudioStream(stream.Codec, stream.SampleRate ?? 0, stream.Channels ?? 0));
             }

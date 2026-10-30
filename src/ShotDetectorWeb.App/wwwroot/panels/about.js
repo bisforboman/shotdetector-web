@@ -4,7 +4,7 @@
 // the page's own reading: only the core's fields, named.
 import { card, on } from '../app.js';
 
-// FFmpeg's names of the matrix coefficients (Mp4Input's MatrixNames), as a viewer knows them; "" is untagged.
+// FFmpeg's names of the matrix coefficients (Mp4Input's MatrixNames; an AVI's MJPEG is always bt470bg), as a viewer knows them; "" is untagged.
 const COLOR_SPACES = {
   gbr: 'RGB (GBR)', bt709: 'BT.709', fcc: 'FCC', bt470bg: 'BT.601 (625 lines, PAL)',
   smpte170m: 'BT.601 (525 lines, NTSC)', smpte240m: 'SMPTE 240M', ycgco: 'YCgCo',
@@ -17,7 +17,7 @@ const CODECS = {
   h264: 'H.264 (AVC)', aac: 'AAC', mp3: 'MP3', opus: 'Opus', ac3: 'Dolby Digital (AC-3)', eac3: 'Dolby Digital Plus (E-AC-3)',
   flac: 'FLAC', alac: 'Apple Lossless (ALAC)', vorbis: 'Vorbis', dts: 'DTS', amr_nb: 'AMR-NB', amr_wb: 'AMR-WB',
 };
-// The pixel formats Mp4Input gives (8-bit 4:2:0 only, so far).
+// The pixel formats VideoInput gives (8-bit 4:2:0 only, so far: yuvj420p for MJPEG).
 const PIXEL_FORMATS = { yuv420p: '4:2:0, 8 bits', yuvj420p: '4:2:0, 8 bits, full range' };
 
 const section = card('About this file', {

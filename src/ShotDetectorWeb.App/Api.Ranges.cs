@@ -22,7 +22,7 @@ public static partial class Api
     const string NotMerged = "The ranges didn't merge: ";
 
     /// <summary>
-    /// The opened file split into at most <paramref name="count"/> ranges at keyframes (<see cref="Mp4Input.Ranges"/>),
+    /// The opened file split into at most <paramref name="count"/> ranges at keyframes (<see cref="VideoInput.Ranges"/>),
     /// as JSON: <c>{ frames, ranges: [{ firstFrame, endFrame }] }</c>, frames the video shows; fewer ranges when the
     /// keyframes are too few.
     /// </summary>
@@ -89,7 +89,7 @@ public static partial class Api
     /// <summary>
     /// Merges the ranges' bytes (<see cref="RangeBytes"/> of every worker's, one after another in
     /// <paramref name="ranges"/>, each <paramref name="lengths"/> long) with the options they were scored with: the ones
-    /// that follow each other from the start (<see cref="Mp4Input.FromStart"/>), so a stopped run's result is the one
+    /// that follow each other from the start (<see cref="VideoInput.FromStart"/>), so a stopped run's result is the one
     /// for the frames from the start without a gap. Answers as <see cref="Detect"/> does, <c>stopped</c> when they don't
     /// reach the video's end, and tells the shots through <see cref="ShotFound"/>. Ranges that don't make up the video's
     /// frames (ShotDetector's <see cref="ShotDetectionException"/>: an overlap frame that differs, damaged bytes; or
@@ -122,7 +122,7 @@ public static partial class Api
                 at += length;
             }
 
-            result = input.Merge(Mp4Input.FromStart(scores), request.ToOptions(new JsProgress(), new JsShots()));
+            result = input.Merge(VideoInput.FromStart(scores), request.ToOptions(new JsProgress(), new JsShots()));
         }
         catch (Exception e) when (e is ShotDetectionException or InvalidDataException)
         {
