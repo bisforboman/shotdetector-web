@@ -36,7 +36,12 @@ public static partial class Api
         _result = null;
         _file?.Dispose();
         _file = file;
-        var input = DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file)));
+        return Opened(DamagedPrefixed(() => Mp4Input.Open(() => new BlobStream(file))));
+    }
+
+    /// <summary><see cref="Open"/>'s JSON of the file just opened, which <see cref="Detect"/> then runs on.</summary>
+    static string Opened(Mp4Input input)
+    {
         _input = input;
         var json = JsonSerializer.SerializeToNode(input.Video, ApiJson.Default.YuvVideo)!.AsObject();
         json["audio"] = input.Audio is { } a
@@ -66,8 +71,8 @@ public static partial class Api
         DetectionResult result;
         try
         {
-            result = await DamagedPrefixed(() =>
-                input.DetectAsync(PauseEvery, Between, request.ToOptions(new JsProgress(), new JsShots()), run.Token));
+            result = await Host.Run(() => DamagedPrefixed(() =>
+                input.DetectAsync(PauseEvery, Between, request.ToOptions(new JsProgress(), new JsShots()), run.Token)));
         }
         catch (OperationCanceledException e) when (run.IsCancellationRequested)
         {
@@ -114,11 +119,12 @@ public static partial class Api
     const int PauseEvery = 8;
 
     static CancellationTokenSource? _run;
-    static bool _stopping, _stopped;
+    // Set by Stop on the JavaScript thread, read between frames by the run (on the thread pool with threads, Host).
+    static volatile bool _stopping, _stopped;
 
     static async ValueTask<bool> Between(int framesRead)
     {
-        await Pause(framesRead);
+        await Host.Call(() => Pause(framesRead));
         _stopped = _stopping;
         return !_stopping;
     }
@@ -161,7 +167,7 @@ public static partial class Api
 
     sealed class JsProgress : IProgress<DetectionProgress>
     {
-        public void Report(DetectionProgress value) => Progress(value.FramesProcessed, value.ExpectedFrames);
+        public void Report(DetectionProgress value) => Host.Post(() => Progress(value.FramesProcessed, value.ExpectedFrames));
     }
 
     // Not Progress<T>: that would post to a synchronization context and could tell a shot after Detect returned.
@@ -170,7 +176,8 @@ public static partial class Api
         public void Report(Shot value)
         {
             using var json = JsonDocument.Parse(Shots.Json([value]));
-            ShotFound(json.RootElement[0].GetRawText());
+            string shot = json.RootElement[0].GetRawText();
+            Host.Post(() => ShotFound(shot));
         }
     }
 }
