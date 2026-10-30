@@ -628,12 +628,11 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.20.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.15.0;
-ShotDetector 3.20.0 asks for 2.14.0 or later), ManagedCodecs (0.1.0, its first release on nuget.org, 2026-10-28: the
-`ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each pinning `ManagedCodecs.Core` at
-its own version; until then a git submodule referenced by project. Not 0.2.0, whose H.264 decoder gives other pixels
-under the wasm interpreter: backlog, Waiting, "ManagedCodecs 0.2.0 on wasm") and what they depend on come from
-nuget.org.
+ShotDetector and ShotDetector.FastYuv (3.21.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
+ManagedCodecs (0.2.3: the `ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each
+pinning `ManagedCodecs.Core` at its own version; on nuget.org since 0.1.0, 2026-10-28, until then a git submodule
+referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3)
+and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
 referenced it, 2026-10-29). The page's footer shows the versions its bundle carries (`Api.Versions`), and
@@ -651,12 +650,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.20.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.21.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.20.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.21.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.20.0 -p:FrameReaderVersion=2.15.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.21.0 -p:FrameReaderVersion=2.16.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
