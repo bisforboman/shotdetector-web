@@ -24,12 +24,16 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 (progressive) in an MP4, fragmented or not, at a constant frame rate, not rotated;
-and 4:2:0 MJPEG in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured). Anything else is refused
-when the file is opened, with an `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec,
-4:2:2/4:4:4 or 10-bit, interlaced H.264, rotated, variable frame rate, an AVI that drops frames or an OpenDML AVI over
-1 GB; rotation, a variable rate and 4:2:2 wait on ShotDetector, decisions `docs/decisions/2026-10-30-scope-widening.md`
-and `2026-10-30-mjpeg-avi.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg can't make a sample of it. Damaged files throw ManagedCodecs'
+Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive,
+or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
+ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
+pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
+in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
+`docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
+`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, rotated, variable
+frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; rotation, a variable rate and 4:2:2 wait on
+ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
+can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
 The page's "Try the demo" runs Sintel's trailer, re-encoded at deploy time by the recipe CI's checks run on

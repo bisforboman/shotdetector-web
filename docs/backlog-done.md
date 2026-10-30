@@ -830,3 +830,11 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-30: PR #72; both samples byte for byte natively, on wasm (336 of 336 files) and on the
     page in Chromium on threads, one worker and two; rotation and a variable rate are rows of their own, waiting on
     shotdetector#608 and #609)
+
+- Interlaced H.264
+  - Why: broadcast material. ManagedCodecs decodes MBAFF frames and field pictures bit-exactly; `Mp4Input` refused
+    any SPS with `frame_mbs_only_flag` 0.
+  - Status: Done (2026-10-30: MBAFF frames, top and bottom field first, and libx264's fake-interlaced accepted, detected
+    on the frames as decoded with deinterlacing off (ShotDetector's default), byte for byte natively and on wasm on
+    three samples checked with `trace_headers` and ffprobe; deinterlacing and the field order wait on shotdetector#614
+    and ManagedCodecs#225, the "Deinterlacing interlaced H.264" row; decision 2026-10-30-interlaced.md)

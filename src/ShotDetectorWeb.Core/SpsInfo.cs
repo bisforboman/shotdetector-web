@@ -5,7 +5,7 @@ namespace ShotDetectorWeb;
 /// format and colour tags as FFmpeg's decoder reports them. ManagedCodecs' own parser is internal and skips the colour
 /// fields of the VUI, so this reads them.
 /// </summary>
-internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDepthChroma, bool FrameMbsOnly, bool VideoSignalTypePresent, bool FullRange, int? MatrixCoefficients)
+internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDepthChroma, bool VideoSignalTypePresent, bool FullRange, int? MatrixCoefficients)
 {
     /// <summary>The first SPS of an 'avcC' record (ISO/IEC 14496-15, 5.3.3.1).</summary>
     public static SpsInfo FromAvcConfig(ReadOnlySpan<byte> avcC)
@@ -79,8 +79,7 @@ internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDep
         r.U(1); // gaps_in_frame_num_value_allowed_flag
         r.Ue(); // pic_width_in_mbs_minus1
         r.Ue(); // pic_height_in_map_units_minus1
-        bool frameMbsOnly = r.U(1) == 1;
-        if (!frameMbsOnly)
+        if (r.U(1) == 0) // frame_mbs_only_flag
             r.U(1); // mb_adaptive_frame_field_flag
         r.U(1); // direct_8x8_inference_flag
         if (r.U(1) == 1)
@@ -112,7 +111,7 @@ internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDep
             }
         }
 
-        return new SpsInfo(chroma, depthLuma, depthChroma, frameMbsOnly, signalType, fullRange, matrix);
+        return new SpsInfo(chroma, depthLuma, depthChroma, signalType, fullRange, matrix);
     }
 
     static void SkipScalingList(Bits r, int size)

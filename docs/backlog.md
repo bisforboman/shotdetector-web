@@ -121,6 +121,23 @@ are in Next again.
   - Status: Waiting on upstream ([ManagedCodecs#221](https://github.com/bisforboman/ManagedCodecs/issues/221), filed
     2026-10-30)
 
+- Deinterlacing interlaced H.264
+  - Why: broadcast material is interlaced; MBAFF video is detected on its woven frames since the "Interlaced H.264"
+    row, as ShotDetector's default, but `--deinterlace auto` (yadif) is the setting for it, and FFmpeg's field order
+    belongs in the description (decision [2026-10-30-interlaced.md](decisions/2026-10-30-interlaced.md)).
+  - Where: first upstream, [shotdetector#614](https://github.com/bisforboman/shotdetector/issues/614) (`YuvVideo.FieldOrder`,
+    `YuvFrame.Interlaced` and `TopFieldFirst`, `Deinterlace` with FastYuv's `Yadif` on frames from the caller) and
+    [ManagedCodecs#225](https://github.com/bisforboman/ManagedCodecs/issues/225) (each frame's interlacing and the field
+    order as FFmpeg reports them, and whether a frame was two field pictures); then here: `Mp4Input` describes the field
+    order (NativeCheck against ffprobe's `field_order` and `-show_frames`' `interlaced_frame,top_field_first`), a
+    deinterlace option on the page (on one worker: ShotDetector's ranges refuse `Deinterlace`), the runs with it in
+    `tools/Shared/Runs.cs`. Field pictures with a sample muxed one frame a sample (JM's, as ManagedCodecs', put one field
+    in each, which the constant-rate check refuses), or refused by ManagedCodecs#225's flag.
+  - Done when: the native, wasm and page checks pass byte for byte on the interlaced samples with deinterlacing on
+    `auto`, and the field order is checked against ffprobe.
+  - Not: no yadif or slice-header parsing here (CLAUDE.md: report it there, don't work around it).
+  - Status: Waiting on upstream (shotdetector#614 and ManagedCodecs#225, filed 2026-10-30)
+
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`, 3.14.0) takes 8-bit 4:2:0 of an even
@@ -136,12 +153,6 @@ file out of `samples/reject/`, and passes the native check.
     row.
   - Status: In progress (2026-10-30; decision [2026-10-30-mjpeg-avi.md](decisions/2026-10-30-mjpeg-avi.md))
 
-- Interlaced H.264
-  - Why: broadcast material. ManagedCodecs decodes fields and MBAFF; ShotDetector.FastYuv has the row-wise `Yadif`
-    the FFmpeg path uses in-process.
-  - Where: first upstream: the frame-source API accepting `Yadif` (today an `ArgumentException`); then here, the
-    `FrameMbsOnly` check in `Mp4Input` goes, a sample with `-flags +ilme+ildct`.
-  - Status: Maybe (needs ShotDetector)
 
 - 10-bit 4:2:0 and 8-bit 4:2:2
   - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
