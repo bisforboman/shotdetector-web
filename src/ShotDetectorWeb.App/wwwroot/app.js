@@ -3,7 +3,9 @@
 // keeps the page's states (idle, opening, detecting, paused, stopping, done, stopped, lost, error), the landing that
 // folds into a toolbar once a file is picked, the one-line status, the options, the estimate, pause and resume, stop,
 // the demo and the shot playing under the video (decision 2026-10-26-new-ui.md), a long video split across workers
-// and the sound's own worker (decision 2026-10-26-workers.md); what else is shown of a file or a run is in the panels
+// and the sound's own worker (decision 2026-10-26-workers.md), a one-worker run's decoder on several threads (decision
+// 2026-10-30-threads.md, threads.js) and the service worker that makes that possible and keeps the page for offline use
+// (sw.js); what else is shown of a file or a run is in the panels
 // (panels/<name>.js, listed in index.html), each a lane of the timeline (timeline.js) or a card. A panel imports from
 // here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
@@ -37,6 +39,7 @@
 //                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
 //                       title (MARKS), markTitle how they are checked, the chip's tooltip; a row of another kind says
 //                       so in its own tooltip.
+import { ThreadedRunner, threadsUsable } from './threads.js';
 import { secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
@@ -62,6 +65,17 @@ const NOT_MERGED = 'The ranges didn\'t merge: ';
 // How many times as fast a run goes split across 2, 3 and 4 workers as on one, for the estimate: measured on a
 // two-hour film on a 4-core machine (README "Long videos across workers").
 const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
+
+// A run on one worker decodes on several threads where the page is cross-origin isolated (decision
+// 2026-10-30-threads.md): the threaded runtime on the page's own thread (threads.js) with as many decoder threads as the
+// machine has cores, at most MOST_THREADS (6 did no better than 4 on 4 cores). The page's address can say how many
+// (?threads=N; 0 or 1: the page's worker, as where the page isn't isolated). How many times as fast as the page's
+// worker, for the estimate: measured on Sintel's trailer at 854x480 and 1280x720 on a 4-core machine (2 and 4; 3 in
+// between, not measured).
+const MOST_THREADS = 4;
+const ASKED_THREADS = new URLSearchParams(location.search).has('threads')
+  ? Number(new URLSearchParams(location.search).get('threads')) || 1 : null;
+const THREADS_SPEEDUP = { 2: 1.9, 3: 2.3, 4: 2.6 };
 
 // ShotDetector's default threshold for each detector, prefilled when one is picked: the one a run without a threshold
 // compares against (scenedetect 0.7.2's, DetectionOptions.Compatibility's default; histogram and hash were 0.05 and
@@ -101,6 +115,9 @@ let framesDone = 0;     // frames the current run has done, as its last progress
 let framesExpected = 0; // and how many it expects (0 when unknown)
 let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
 let running = null;     // the current run's Detect call (a promise), while it goes
+let runner = null;      // what runs it, one worker: the page's worker, or the threaded runner (threads.js)
+let threaded = null;    // the threaded runner, once a run has needed it
+let threadedOpen = null; // the YuvVideo the threaded runner has open
 let split = null;       // a split run while it goes: { frames, done (each range's), stopped, stop() resolving it }
 let helpers = [];       // the workers of a split run's ranges after the first, ended with the run
 let listening = null;   // the worker measuring the opened file's sound, until it has
@@ -252,12 +269,12 @@ function pauseOrResume() {
   if (state === 'detecting') {
     pausedSince = performance.now();
     setState('paused');
-    for (const w of [worker, ...helpers]) w.postMessage({ type: 'pause' });
+    for (const w of [runner ?? worker, ...helpers]) w.postMessage({ type: 'pause' });
     sayPaused();
   } else if (state === 'paused') {
     pausedFor += performance.now() - pausedSince;
     setState('detecting');
-    for (const w of [worker, ...helpers]) w.postMessage({ type: 'resume' });
+    for (const w of [runner ?? worker, ...helpers]) w.postMessage({ type: 'resume' });
     say(`Resuming at frame ${count(framesDone)}…`);
   }
 }
@@ -306,11 +323,11 @@ function say(text, title = '') {
 async function choose(chosen) {
   if (!chosen || state === 'opening') return;
   if (running) {
-    const run = running;
+    const run = running, w = runner ?? worker;
     running = null;
-    worker.postMessage({ type: 'cancel' });
+    w.postMessage({ type: 'cancel' });
     endHelpers();
-    if (!await answered(run)) replaceWorker();
+    if (!await answered(run)) replaceRunner(w);
   }
   end(listening?.worker);
   listening = null;
@@ -371,14 +388,16 @@ async function go(run, plan, fallback = null) {
   clearShots();
   result.hidden = false;
   progress.removeAttribute('value');
-  const workers = plan?.ranges.length ?? 1;
-  estimate = estimateText(opened, workers);
-  estimated = estimateSeconds(opened, workers);
+  const workers = plan?.ranges.length ?? 1, threads = plan ? 1 : threadCount();
+  estimate = estimateText(opened, workers, threads);
+  estimated = estimateSeconds(opened, workers, threads);
   say(`${fallback ? `${fallback} Detecting again with one worker` : 'Detecting'} · about ${duration(estimated)} for ` +
-    `${count(opened.frameCount)} frames${workers > 1 ? ` with ${workers} workers` : ''}`, estimate);
+    `${count(opened.frameCount)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
+    `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
   pausedFor = 0;
-  const video = opened, detecting = running = plan ? splitRun(plan, run) : call('Detect', JSON.stringify(run));
+  runner = worker;
+  const video = opened, detecting = running = plan ? splitRun(plan, run) : oneRun(run, threads);
   let json;
   try {
     json = await detecting;
@@ -395,10 +414,68 @@ async function go(run, plan, fallback = null) {
   running = null;
   // The CSVs come of their own, not inside Detect's JSON (README "Large files"): the scenes CSV a string, the stats CSV
   // a Blob .NET wrote in parts (README "What the heap holds").
-  r.scenesCsv = await call('ScenesCsv');
-  r.statsCsv = await call('StatsCsv');
+  const by = runner ?? worker;
+  r.scenesCsv = await callOn(by, 'ScenesCsv');
+  r.statsCsv = await callOn(by, 'StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile
-  show(r, seconds, workers);
+  show(r, seconds, workers, by === threaded ? r.threads : 1);
+}
+
+// A run on one worker: Api's Detect's JSON, with threads (how many the decoder had). On threads where the page can
+// (threadCount), on the threaded runner (threads.js), which opens the file for itself first; on the page's worker if the
+// threaded runtime doesn't start.
+async function oneRun(run, threads) {
+  const json = JSON.stringify(run);
+  if (threads > 1) {
+    const r = await threadedRunner(threads);
+    if (r) {
+      runner = r;
+      const detecting = callOn(r, 'Detect', json);
+      // Stopped while the threaded runtime opened the file: the run stops at its first pause.
+      if (state === 'stopping') r.postMessage({ type: 'stop' });
+      return JSON.stringify({ ...JSON.parse(await detecting), threads });
+    }
+    // Paused while the threaded runtime didn't start: the page's worker holds the run instead.
+    if (state === 'paused') worker.postMessage({ type: 'pause' });
+  }
+  return call('Detect', json);
+}
+
+// How many threads a one-worker run's decoder has: ?threads=N, else the machine's cores, at most MOST_THREADS; 1 (the
+// page's worker) where the page isn't cross-origin isolated or the threaded runtime was given up on.
+function threadCount() {
+  const n = ASKED_THREADS ?? Math.min(navigator.hardwareConcurrency || 1, MOST_THREADS);
+  return n >= 2 && threadsUsable() ? n : 1;
+}
+
+// The threaded runner with the opened file open in it; null if the threaded runtime doesn't start (then threads are off
+// until a reload: threadsUsable).
+async function threadedRunner(threads) {
+  if (!threaded) {
+    const r = threaded = new ThreadedRunner(threads);
+    r.onmessage = ({ data }) => { if (!ended.has(r)) fromWorker[data.type]?.(data); };
+  }
+  if (threadedOpen !== opened) {
+    try {
+      await callOn(threaded, 'Open', file);
+      threadedOpen = opened;
+    } catch (e) {
+      if (threadsUsable()) throw e;
+      return null;
+    }
+  }
+  return threaded;
+}
+
+// Ends the runner that didn't answer: the page's worker is replaced; the threaded runner is abandoned, and runs go on
+// the page's worker until a reload (threads.js).
+function replaceRunner(w) {
+  if (w === threaded) {
+    end(threaded);
+    threaded = threadedOpen = null;
+  } else {
+    replaceWorker();
+  }
 }
 
 // How a run of the opened file is split (decision 2026-10-26-workers.md): above SPLIT_SECONDS of video, into as many
@@ -530,19 +607,30 @@ async function listen() {
 }
 
 // How long the run will take, from the frame count and picture size: this browser's own rate from its last run on one
-// worker, or the reference rate (REFERENCE_FPS) until it has one; split across workers, SPLIT_SPEEDUP times as fast.
-function estimateText(video, workers) {
+// worker (on as many threads), or the reference rate (REFERENCE_FPS) until it has one; split across workers,
+// SPLIT_SPEEDUP times as fast, on threads THREADS_SPEEDUP times (unless it has a rate of its own on them).
+function estimateText(video, workers, threads = 1) {
   const { width, height, frameCount } = video;
-  const own = storedRate();
-  const rate = (own ?? REFERENCE_PIXELS_PER_SECOND) * (SPLIT_SPEEDUP[workers] ?? 1);
+  const { rate, own } = rateFor(workers, threads);
   const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
-  return `Estimate: about ${duration(estimateSeconds(video, workers))} for ${frameCount} frames at ${width}x${height} ` +
-    `(${(rate / (width * height)).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}, ` +
-    `from ${from}).`;
+  return `Estimate: about ${duration(estimateSeconds(video, workers, threads))} for ${frameCount} frames at ` +
+    `${width}x${height} (${(rate / (width * height)).toFixed(0)} frames per second` +
+    `${workers > 1 ? ` with ${workers} workers` : ''}${threads > 1 ? ` on ${threads} threads` : ''}, from ${from}).`;
 }
 
-function estimateSeconds({ width, height, frameCount }, workers = 1) {
-  return frameCount * width * height / (storedRate() ?? REFERENCE_PIXELS_PER_SECOND) / (SPLIT_SPEEDUP[workers] ?? 1);
+function estimateSeconds({ width, height, frameCount }, workers = 1, threads = 1) {
+  return frameCount * width * height / rateFor(workers, threads).rate;
+}
+
+// Pixels per second for a run, and whether it is this browser's own.
+function rateFor(workers, threads) {
+  const threadsOwn = threads > 1 ? storedRate(threads) : null;
+  if (threadsOwn) return { rate: threadsOwn, own: true };
+  const own = storedRate(1);
+  return {
+    rate: (own ?? REFERENCE_PIXELS_PER_SECOND) * (SPLIT_SPEEDUP[workers] ?? 1) * (THREADS_SPEEDUP[threads] ?? 1),
+    own: own !== null,
+  };
 }
 
 // The time a run has left: at its own rate once it has gone LEFT_AFTER seconds (before, start-up weighs on the rate
@@ -552,18 +640,20 @@ function left(done, expected, seconds, fps) {
   return seconds >= LEFT_AFTER && fps > 0 ? (expected - done) / fps : Math.max(estimated - seconds, 0);
 }
 
-// The pixels per second of this browser's last finished run, if it kept one (storage can be off or throw).
-function storedRate() {
+// The pixels per second of this browser's last finished run on one worker on as many threads, if it kept one (storage
+// can be off or throw).
+const rateKey = threads => threads > 1 ? `${RATE_KEY}On${threads}Threads` : RATE_KEY;
+function storedRate(threads = 1) {
   try {
-    const rate = Number(localStorage.getItem(RATE_KEY));
+    const rate = Number(localStorage.getItem(rateKey(threads)));
     return rate > 0 ? rate : null;
   } catch {
     return null;
   }
 }
 
-function storeRate(rate) {
-  try { localStorage.setItem(RATE_KEY, String(rate)); } catch { /* the reference rate stays */ }
+function storeRate(rate, threads = 1) {
+  try { localStorage.setItem(rateKey(threads), String(rate)); } catch { /* the reference rate stays */ }
 }
 
 function duration(seconds) {
@@ -613,19 +703,22 @@ async function stop() {
     return;
   }
   say(`Stopping at frame ${count(framesDone)}…`);
-  const run = running, video = opened;
-  worker.postMessage({ type: 'stop' });
+  const run = running, video = opened, w = runner ?? worker;
+  w.postMessage({ type: 'stop' });
   if (await answered(run) || running !== run) return;
   running = null;
-  replaceWorker();
-  lost(video);
+  const onThreads = w === threaded;
+  replaceRunner(w);
+  lost(video, onThreads);
 }
 
-// The run is gone with the page's worker, which didn't answer a stop and was replaced.
-function lost(video) {
+// The run is gone with the page's worker, which didn't answer a stop and was replaced; or with the threaded runner,
+// which was given up on (threads stay off until a reload).
+function lost(video, onThreads = false) {
   setState('lost');
-  say(`Lost at frame ${count(framesDone)}: the worker didn't answer the stop, so it was restarted, and the run's ` +
-    'result went with it.');
+  say(`Lost at frame ${count(framesDone)}: ${onThreads
+    ? 'the threaded run didn\'t answer the stop, so it was abandoned (the next runs go on one thread), and its'
+    : 'the worker didn\'t answer the stop, so it was restarted, and the run\'s'} result went with it.`);
   emit('cancelled', { video, done: framesDone, expected: framesExpected });
   follow();
 }
@@ -636,9 +729,10 @@ function fail(message) {
   error.textContent = message;
 }
 
-function show(r, seconds, workers) {
+function show(r, seconds, workers, threads) {
   setState(r.stopped ? 'stopped' : 'done');
-  const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}`;
+  const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}` +
+    `${threads > 1 ? ` on ${threads} threads` : ''}`;
   const read = r.frameCount * r.frameRate.den / r.frameRate.num;
   shown = {
     text: r.stopped
@@ -650,7 +744,7 @@ function show(r, seconds, workers) {
   say(listening ? `${shown.text} · measuring the sound…` : shown.text, shown.title);
   // A run of a few seconds is mostly start-up: too short to measure this browser's speed by; a split run's speed is
   // its workers', not this browser's on one.
-  if (seconds >= 5 && workers === 1) storeRate(r.frameCount * opened.width * opened.height / seconds);
+  if (seconds >= 5 && workers === 1) storeRate(r.frameCount * opened.width * opened.height / seconds, threads);
   emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, '') });
   clearShots();
   for (const shot of r.shots) addShot(shot);
@@ -748,5 +842,30 @@ document.addEventListener('drop', e => {
   document.body.classList.remove('dragging');
   choose(e.dataTransfer.files[0]);
 });
+
+// The service worker (sw.js): isolation for the threads, and the page offline. A first visit isn't controlled by it, so
+// not isolated: once it takes over, the page reloads, once a session, if nothing has been picked yet (else threads come
+// with the next visit). Without service workers (some private modes, file:) the page works as before, on one thread.
+async function serve() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('sw.js');
+  } catch {
+    return;
+  }
+  if (globalThis.crossOriginIsolated || navigator.serviceWorker.controller) return;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (globalThis.crossOriginIsolated || file || state !== 'idle') return;
+    try {
+      if (sessionStorage.getItem('isolating')) return;
+      sessionStorage.setItem('isolating', '1');
+    } catch {
+      return; // no way to know it reloaded already: not at all, rather than over and over
+    }
+    location.reload();
+  });
+}
+
+serve();
 replaceWorker();
 setState('idle');
