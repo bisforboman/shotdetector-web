@@ -365,7 +365,8 @@ public sealed partial class Mp4Input
         finally
         {
             // Frames that end early (a stop, a cancel, a range's end, an error) leave pictures being decoded on the
-            // decoder's threads, which aren't disposable (ManagedCodecs 0.1.0): flushed, they finish and go idle.
+            // decoder's threads. The decoder has no Dispose (ManagedCodecs 0.2.3): flushed, the pictures finish and
+            // the threads end now, not after their idle timeout.
             if (!flushed && threads > 1)
                 Drain(decoder);
         }

@@ -39,7 +39,7 @@
 //                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
 //                       title (MARKS), markTitle how they are checked, the chip's tooltip; a row of another kind says
 //                       so in its own tooltip.
-import { ThreadedRunner, threadsUsable } from './threads.js';
+import { RESULTS, ThreadedRunner, threadsUsable } from './threads.js';
 import { secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
@@ -119,6 +119,7 @@ let running = null;     // the current run's Detect call (a promise), while it g
 let runner = null;      // what runs it, one worker: the page's worker, or the threaded runner (threads.js)
 let threaded = null;    // the threaded runner, once a run has needed it
 let threadedOpen = null; // the YuvVideo the threaded runner has open
+let resultOn = null;    // the worker or runner holding the last run's result, which call() asks for it (RESULTS)
 let split = null;       // a split run while it goes: { frames, done (each range's), stopped, stop() resolving it }
 let helpers = [];       // the workers of a split run's ranges after the first, ended with the run
 let listening = null;   // the worker measuring the opened file's sound, until it has
@@ -162,7 +163,7 @@ let worker, lastId = 0;
 const calls = new Map(), ended = new WeakSet();
 
 export function call(name, ...args) {
-  return callOn(worker, name, ...args);
+  return callOn(RESULTS.has(name) && resultOn ? resultOn : worker, name, ...args);
 }
 
 function callOn(w, name, ...args) {
@@ -201,6 +202,7 @@ function end(w, error = new DOMException('The worker was replaced.', 'AbortError
   if (!w || ended.has(w)) return;
   w.terminate();
   ended.add(w);
+  if (resultOn === w) resultOn = null;
   for (const [id, c] of calls) {
     if (c.worker !== w) continue;
     calls.delete(id);
@@ -415,7 +417,7 @@ async function go(run, plan, fallback = null) {
   running = null;
   // The CSVs come of their own, not inside Detect's JSON (README "Large files"): the scenes CSV a string, the stats CSV
   // a Blob .NET wrote in parts (README "What the heap holds").
-  const by = runner ?? worker;
+  const by = resultOn = runner ?? worker;
   r.scenesCsv = await callOn(by, 'ScenesCsv');
   r.statsCsv = await callOn(by, 'StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile
