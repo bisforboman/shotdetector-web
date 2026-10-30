@@ -253,7 +253,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   then asserts on thread ids), refuses to start without `SharedArrayBuffer`, and doesn't run under Node; on the main
   thread it refuses synchronous exports (`jsThreadBlockingMode` `PreventSynchronousJSExport`), runs `[JSImport]`s on
   the main thread (no `FileReaderSync` there), and refuses a synchronous one from inside a synchronous export (seen
-  2026-10-30). Hence `Host.cs`. ManagedCodecs' `H264Decoder` has no Dispose (its threads end after an idle timeout):
+  2026-10-30). Hence `Host.cs`. A `[JSImport]`'s `ArraySegment` there (a `MemoryView` pinned behind a GC handle)
+  ended the runtime when the collector released it on another thread: a `Span` view, valid for the call only. ManagedCodecs' `H264Decoder` has no Dispose (its threads end after an idle timeout):
   frames that end early flush it.
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames (its window
   after them) is `None`, a cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold

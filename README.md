@@ -192,9 +192,12 @@ minutes the page keeps one worker anyway, for its live shots (the decision's "As
 A run on one worker (a video up to 2 minutes, or `?workers=1`) decodes on several threads where the browser allows it
 (decision [2026-10-30-threads.md](docs/decisions/2026-10-30-threads.md)): ManagedCodecs' frame threading
 (`H264Decoder.Threads`, through `Mp4Input.DecoderThreads`), which gives the same frames, so the same CSVs (the native
-check's `ThreadsCheck.cs` and the page check prove it). Measured on a 4-core cloud VM, AOT, headless Chromium,
-interleaved rounds: Sintel's trailer went from 17.9 s to 7.0 s on 4 threads (2.6 times as fast), and the same at
-1280x720 from 23.4 s to 9.0 s.
+check's `ThreadsCheck.cs` and the page check prove it). Measured on the page itself, AOT, headless Chromium on a 4-core
+cloud VM, ManagedCodecs 0.2.3, the median of interleaved rounds (2026-10-30): Sintel's trailer took 13.7 s on the page's
+worker, 9.6 s on 2 threads and 8.5 s on 4 (1.6 times as fast; five rounds), and the same at 1280x720 19.1 s and 10.3 s
+on 4 (1.85 times; four rounds). The decoder is only part of a run (FastYuv's conversion, the detectors and the picture's
+measures stay on one thread), so the larger the picture, the more threads give. With ManagedCodecs 0.1.0's slower
+decoder the same trailer went 2.6 times as fast (the decision's first measurement).
 
 .NET's threaded runtime (`-p:WasmEnableThreads=true`) starts only on a page's own thread, not in a Web Worker, needs
 `SharedArrayBuffer` (so a cross-origin isolated page: COOP and COEP headers), and doesn't run under Node. So the page
@@ -371,9 +374,10 @@ ShotDetector), the AOT bundle would be 620 KB smaller compressed (5.76 to 5.14 M
 ETag, so a visit within ten minutes reads the cache and a later one revalidates.
 
 The threaded bundle (`threads/_framework/`, 2026-10-30: Threads, above) is a second copy of the runtime and every
-assembly, built with `WasmEnableThreads`: AOT, 19.82 MB raw and 5.93 MB through `gzip -6` (today's: 19.24 and 5.78),
-interpreted 7.34 and 2.82 MB (7.12 and 2.75). A visit loads it only for a run on threads, after the page's own bundle,
-so a first visit that runs a short video downloads about 11.7 MB compressed where it was 5.8; the site holds both.
+assembly, built with `WasmEnableThreads`: AOT, 20.56 MB raw and 6.16 MB through `gzip -6`, against the page's own
+bundle's 19.86 and 5.97 (ManagedCodecs 0.2.3, ShotDetector 3.21.0). A visit loads it only for a run on threads, after
+the page's own bundle, so a first visit that runs a short video downloads about 12.1 MB compressed where it was 6.0;
+the site holds both.
 
 The sound (`Api.Audio`, 2026-10-26) brought ManagedCodecs' AAC decoder into the trimmed bundle. The AOT publish's
 `_framework/` against `main` before it, files through `gzip -6`: 17.03 to 17.92 MB raw (+889 KB, 5.2%), 5.08 to 5.34 MB

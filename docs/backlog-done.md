@@ -761,9 +761,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     (it reads once, in order), so only decoding would speed up.
   - Status: Done (2026-10-30, decision `2026-10-30-threads.md`, the owner's choice: built for one-worker runs. .NET's
     threaded runtime starts only on the page's own thread, so `threads.js` runs it there, beside the page's worker,
-    the run on .NET's thread pool (`Host.cs`); `sw.js` isolates the page. Sintel's trailer on 4 threads in 7.0 s instead
-    of 17.9 s, 2.6 times as fast (interleaved rounds, AOT, 4-core VM); `ThreadsCheck.cs` and the page check: the same
-    CSVs byte for byte)
+    the run on .NET's thread pool (`Host.cs`); `sw.js` isolates the page. On the page with ManagedCodecs 0.2.3, Sintel's
+    trailer on 4 threads in 8.5 s instead of 13.7 s, 1.6 times as fast, 1.85 at 1280x720 (interleaved rounds, AOT,
+    4-core VM; 2.6 with 0.1.0's decoder); `ThreadsCheck.cs` and the page check: the same CSVs byte for byte)
 
 - Offline (a service worker caching the bundle)
   - Why: once a service worker exists for threads, caching the bundle is a few lines and the page works on a plane.
