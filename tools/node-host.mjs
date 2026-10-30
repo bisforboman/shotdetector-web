@@ -1,5 +1,6 @@
 // The page's worker's host for the App's runtime, under Node (tools/app-check.mjs, tools/replace-check.mjs): the published
 // blob-read.js as the 'read' .NET's BlobStream imports, and a FileReaderSync for it, which Node lacks; the published
+// blob-write.js as the 'parts', 'append' and 'blob' .NET's BlobWriter imports (the stats CSV's Blob); the published
 // pause.js as the 'pause' Api's Detect awaits between frames.
 //
 // Node has no synchronous way to read a Blob, so this FileReaderSync hands each slice to a worker thread, which reads
@@ -40,8 +41,9 @@ class FileReaderSync {
 export async function host(wwwroot) {
   globalThis.FileReaderSync ??= FileReaderSync;
   const { read } = await import(pathToFileURL(resolve(wwwroot, 'blob-read.js')).href);
+  const { parts, append, blob } = await import(pathToFileURL(resolve(wwwroot, 'blob-write.js')).href);
   const { pause, hold, release } = await import(pathToFileURL(resolve(wwwroot, 'pause.js')).href);
-  return { read, pause, hold, release };
+  return { read, parts, append, blob, pause, hold, release };
 }
 
 // A file as the page gets one: a Blob (a File is one) of its bytes.

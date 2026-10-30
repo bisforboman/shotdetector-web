@@ -4,9 +4,9 @@
 // second or more, the lane marks a still picture, as the page's reading (ShotDetector says nothing of stills). Nothing
 // here decides a cut: the cuts are the run's, and a new threshold is a new run.
 //
-// A two-hour film's stats CSV is about 20 million characters (README "What the heap holds"): it is read once, when the
-// run is done, into a typed array of times and one of scores (and the still spans), and each draw takes, for every
-// column of the canvas's pixels, the frames' first, lowest, highest and last score there.
+// A two-hour film's stats CSV is about 20 million characters (README "What the heap holds"), a Blob from the worker: its
+// text is read once, when the run is done, into a typed array of times and one of scores (and the still spans), and
+// each draw takes, for every column of the canvas's pixels, the frames' first, lowest, highest and last score there.
 import { on } from '../app.js';
 import { lane, secondsOf, timecode, x } from '../timeline.js';
 
@@ -54,14 +54,18 @@ scoresLane.label.classList.add('scores');
 scoresLane.show(false);
 
 let run = null;  // what the current run compares (runOf), from its options
+let cleared = 0; // how many times the lane was cleared: a 'done' whose CSV is read after a clear draws nothing
 
 on('chose', clear);
 on('run', ({ options }) => {
   clear();
   run = runOf(options);
 });
-on('done', ({ result }) => {
-  const data = read(result.statsCsv, run);
+on('done', async ({ result }) => {
+  const asked = cleared;
+  const csv = await result.statsCsv.text();
+  if (cleared !== asked) return; // a new run or file meanwhile
+  const data = read(csv, run);
   if (typeof data === 'string') note = data;
   else graph = { ...run, ...data, cuts: result.shots.filter(s => s.shot > 1).map(s => secondsOf(s.startTimecode)) };
   scoresLane.show(true);
@@ -71,6 +75,7 @@ on('done', ({ result }) => {
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => scoresLane.draw());
 
 function clear() {
+  cleared++;
   graph = null;
   note = null;
   scoresLane.show(false);
