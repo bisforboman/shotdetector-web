@@ -417,8 +417,8 @@ async function detect(resumed = null) {
 // The run itself: on one worker (Api's Detect) or split (plan: splitRun). A split run whose ranges don't merge, or one of
 // whose workers fails, is detected again with one worker, saying why (fallback).
 // A resumed run (resumed: the kept record) goes on from its kept scores (Api's Resume, or Merge with them); kept scores
-// that don't resume (another version's, say) are forgotten and the run detected from the start, saying why.
-async function go(run, plan, fallback = null, resumed = null) {
+// that don't resume (another version's, say) are forgotten and the run detected from the start, saying why (restarted).
+async function go(run, plan, fallback = null, resumed = null, restarted = null) {
   const from = resumeFrom = resumed?.from ?? 0;
   framesDone = from;
   framesExpected = 0;
@@ -439,7 +439,7 @@ async function go(run, plan, fallback = null, resumed = null) {
   estimate = estimateText(opened, workers, threads, frames);
   estimated = estimateSeconds(opened, workers, threads, frames);
   const doing = fallback ? `${fallback} ${resumed ? 'Resuming' : 'Detecting again'} with one worker`
-    : resumed ? `Resuming from frame ${count(from)}` : 'Detecting';
+    : resumed ? `Resuming from frame ${count(from)}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
   say(`${doing} · about ${duration(estimated)} for ${count(frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
@@ -456,7 +456,7 @@ async function go(run, plan, fallback = null, resumed = null) {
     if (resumed && e.message?.startsWith(NOT_RESUMED) && state !== 'stopping') {
       running = null;
       forget();
-      return go(run, await ranges(opened), `${e.message} Detecting from the start:`);
+      return go(run, await ranges(opened), null, null, e.message);
     }
     if (!plan || state === 'stopping' || e.name === 'AbortError') throw e;
     running = null;
