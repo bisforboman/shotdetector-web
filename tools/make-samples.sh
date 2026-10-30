@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Generates the sample MP4s the checks run on (samples/, ignored by git): H.264 from libx264 with hard cuts and fades,
-# each isolating something the YuvVideo description must get right, and a few the library must refuse.
+# Generates the samples the checks run on (samples/, ignored by git): H.264 in MP4 from libx264 with hard cuts and fades,
+# and MJPEG in AVI, each isolating something the YuvVideo description must get right, and a few the library must refuse.
 #
 # Usage: tools/make-samples.sh
 #   FFMPEG: the ffmpeg to use (default: ffmpeg on PATH); it needs libx264. Python 3 for the edit list rewrite.
@@ -100,6 +100,29 @@ for f in tff:0:1:0:tt:1,1 bff:0:1:0:bb:1,0 fake:0:0:0:progressive:0,0; do
   [[ $got == "$want" ]] || { echo "$s: frame_mbs_only, MBAFF, field_pic, rate, field order, frame flags are '$got', not '$want'." >&2; exit 1; }
 done
 
+# MJPEG in AVI (decision 2026-10-30-mjpeg-avi.md): 4:2:0, which FFmpeg's decoder gives as yuvj420p (a JPEG is full range,
+# tagged BT.601), every frame a keyframe. One without audio; one at 29.97 fps with PCM audio longer than the video, which
+# doesn't count for FFmpeg's format duration (a PCM stream in AVI has none); one with MP3 longer than the video, which
+# does (VBR audio: its header's length). -avoid_negative_ts disabled: else the muxer, shifting the MP3's priming, writes
+# an empty video chunk after the first frame (a dropped frame, refused below).
+enc -filter_complex "$(three 320x240 25 1.5),format=yuvj420p" -c:v mjpeg -q:v 3 "$out/mjpeg-320x240-25.avi"
+enc -filter_complex "$(three 640x360 30000/1001 1.5),format=yuvj420p" -f lavfi -i sine=d=5 -c:v mjpeg -q:v 4 -c:a pcm_s16le \
+  "$out/mjpeg-pcm-640x360-2997.avi"
+enc -filter_complex "$(three 320x240 25 1),format=yuvj420p" -f lavfi -i sine=d=3.6 -c:v mjpeg -q:v 3 -c:a libmp3lame \
+  -avoid_negative_ts disabled "$out/mjpeg-mp3-320x240-25.avi"
+# What they must be: MJPEG at yuvj420p, every packet a keyframe and as many as nb_frames (no empty chunk), the rate, and
+# the format's duration: the video's for the first two (114 frames at 25, 135 of 1001/30000 s), the MP3's for the last.
+got=
+for s in "$out/mjpeg-320x240-25.avi" "$out/mjpeg-pcm-640x360-2997.avi" "$out/mjpeg-mp3-320x240-25.avi"; do
+  got+="$("$fp" -v error -select_streams v:0 -count_packets -show_entries stream=codec_name,pix_fmt,avg_frame_rate,nb_frames,nb_read_packets -of csv=p=0 "$s"),"
+  got+="$("$fp" -v error -select_streams v:0 -show_entries packet=flags -of csv=p=0 "$s" | sort -u | tr -d '\n'),"
+  got+="$("$fp" -v error -show_entries format=duration -of csv=p=0 "$s") "
+done
+want="mjpeg,yuvj420p,25/1,114,114,K__,4.560000 mjpeg,yuvj420p,30000/1001,135,135,K__,4.504500 mjpeg,yuvj420p,25/1,75,75,K__,3.631020 "
+[[ $got == "$want" ]] || { echo "MJPEG samples: codec, pix_fmt, rate, nb_frames, packets, flags, duration are $got" >&2; exit 1; }
+[[ $("$fp" -v error -select_streams a -show_entries stream=codec_name,duration -of csv=p=0 "$out/mjpeg-pcm-640x360-2997.avi") == pcm_s16le,N/A ]] \
+  || { echo "mjpeg-pcm: the audio isn't PCM without a duration." >&2; exit 1; }
+
 # Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
 # 0.1), 3 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 15 s of video. The
 # gap is 3 s, not 2, because FFmpeg's AAC encoder spreads the tone's edges into it by a few milliseconds: a 2 s gap
@@ -168,12 +191,21 @@ $got")
   echo "$s: $(probe v:0 stream=nb_frames | cut -d= -f2) frames at 24 fps, 854x480, $size bytes."
 fi
 
-# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2, a variable frame rate, an AVI, rotation.
+# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2, a variable frame rate, rotation.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/reject/yuv422p.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p10le "$out/reject/yuv420p10.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=2 -vf "setpts='if(lt(N,25),N,25+(N-25)*2)/25/TB'" -fps_mode vfr -c:v libx264 -pix_fmt yuv420p "$out/reject/vfr.mp4"
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mjpeg "$out/reject/mjpeg.avi"
+# MJPEG that isn't 4:2:0: 4:4:4 and 4:2:2 (most cameras'), which ShotDetector's frame source doesn't take yet; an AVI
+# with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
+# which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj444p -c:v mjpeg "$out/reject/mjpeg-444.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj422p -c:v mjpeg "$out/reject/mjpeg-422.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=2,format=yuvj420p -f lavfi -i sine=d=3 -c:v mjpeg -c:a libmp3lame "$out/reject/mjpeg-dropped-frame.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/h264.avi"
+got=$(for f in mjpeg-444 mjpeg-422; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
+got+=$("$fp" -v error -select_streams v -count_packets -show_entries stream=nb_frames,nb_read_packets -of csv=p=0 "$out/reject/mjpeg-dropped-frame.avi")
+[[ $got == 'yuvj444p yuvj422p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/unrotated.tmp.mp4"
 enc -display_rotation 90 -i "$out/reject/unrotated.tmp.mp4" -c copy "$out/reject/rotated.mp4"
 rm "$out/reject/unrotated.tmp.mp4"
@@ -212,4 +244,4 @@ for f in mp3:mp3 opus:opus aac-main:aac/Main; do
   got=$("$fp" -v error -select_streams a -show_entries stream=codec_name,profile -of csv=p=0 "$out/no-aac/${f%%:*}.mp4" | tr , /)
   [[ $got == "${f#*:}"* ]] || { echo "$out/no-aac/${f%%:*}.mp4: the audio is $got, not ${f#*:}." >&2; exit 1; }
 done
-echo "Samples in $out/: $(ls "$out"/*.mp4 | wc -l) to compare, $(ls "$out"/reject | wc -l) to refuse, $(ls "$out"/no-aac | wc -l) without AAC to measure."
+echo "Samples in $out/: $(ls "$out"/*.mp4 "$out"/*.avi | wc -l) to compare, $(ls "$out"/reject | wc -l) to refuse, $(ls "$out"/no-aac | wc -l) without AAC to measure."

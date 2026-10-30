@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 namespace ShotDetectorWeb.App;
 
 /// <summary>
-/// The video's packets (backlog "Bitrate and keyframes"): what <see cref="Mp4Input.Packets"/> kept while
+/// The video's packets (backlog "Bitrate and keyframes"): what <see cref="VideoInput.Packets"/> kept while
 /// <see cref="Open"/> walked the file, for the bitrate over time and the encoder's keyframes, without decoding.
 /// </summary>
 [SupportedOSPlatform("browser")]

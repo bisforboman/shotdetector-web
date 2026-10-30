@@ -1,6 +1,6 @@
 # shotdetector-web
 
-Shot detection entirely in the browser: ManagedCodecs (from nuget.org since 2026-10-28) decodes H.264 in MP4,
+Shot detection entirely in the browser: ManagedCodecs (from nuget.org since 2026-10-28) decodes H.264 in MP4 and MJPEG in AVI,
 ShotDetector.FastYuv converts, ShotDetector detects through `ShotDetection.Detect(YuvVideo, IEnumerable<YuvFrame>, ...)`.
 Repo: `github.com/bisforboman/shotdetector-web`, MIT. README.md has the layout, status and how to run the checks; the
 owner's decisions are in shotdetector's docs/decisions/2026-10-24-managedcodecs-showcase.md.
@@ -10,18 +10,22 @@ owner's decisions are in shotdetector's docs/decisions/2026-10-24-managedcodecs-
 Exactness first: the scene and stats CSVs (and the shots as JSON and HTML) must equal ShotDetector's FFmpeg path's (`Detect(path)`, FFmpeg in-process,
 same FastYuv converter) byte for byte, natively and on browser-wasm, before anything else. That rests on `YuvVideo`
 saying what FFmpeg says about the file (average frame rate, nb_frames, time base, start pts, colour tags, duration):
-ManagedCodecs doesn't expose all of it, so `Mp4Header`/`SpsInfo` read it, and NativeCheck compares every field with
+ManagedCodecs doesn't expose all of it, so `Mp4Header`/`SpsInfo` (and `AviHeader` for an AVI) read it, and NativeCheck compares every field with
 FFmpeg's before it compares results. Where the core differs from the FFmpeg path, find out whether it's the
 description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it there, don't work around it).
 
 ## Layout
 
-- `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
+- `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `VideoInput` (abstract: `VideoInput.Open` picks the container by
+  the first bytes; what never looks at the container, below, is its; decision `2026-10-30-mjpeg-avi.md`) with
+  `Mp4Input` and `AviInput` (MJPEG in AVI: `AviDemuxer`, `MjpegDecoder`, `AviHeader` for each stream's 'strh'/'strf':
+  the audio's codec, rate, channels and VBR length; refuses 4:2:2/4:4:4 JPEG and a file with fewer chunks than its
+  header's dwLength) each describing its file and decoding its frames. `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
   `DetectAsync`: the frames as an asynchronous source that awaits the caller every N frames and ends early when told;
-  `Audio`, the audio track as ffprobe describes it; `Mp4Input.Ranges.cs`: `Ranges(count)`, the video split at keyframes
+  `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(count)`, the video split at keyframes
   from `Packets` into `FrameRange`s about equal in frames, `ScoreRangeAsync` (one range decoded from its keyframe, the
   packets before it not read, for ShotDetector's `ScoreRangeAsync`), `Merge` and `FromStart` (the ranges that follow
-  each other from the start), `ShownFrames`), `Mp4Input.DecoderThreads`
+  each other from the start), `ShownFrames`), `VideoInput.DecoderThreads`
   (ManagedCodecs' `H264Decoder.Threads`, frame threading: the same frames; a run that ends early drains the decoder),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
   expose, the audio codec's FFmpeg name among them), `SpsInfo` (the SPS's format and VUI colour
@@ -36,11 +40,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   (`PictureJson`), which NativeCheck also writes.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
-  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`Mp4Input.ShownFrames`, the page's
+  picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
   count: `frameCount` is FFmpeg's nb_frames, null when fragmented) and `audio`: `{ codec, sampleRate,
-  channels }` from `Mp4Input.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
+  channels }` from `VideoInput.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
   frameWindow, minContentVal }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
-  rate, duration, `stopped` and `warnings` as JSON; `Mp4Input.DetectAsync`, pausing every 8 frames, `PauseEvery`),
+  rate, duration, `stopped` and `warnings` as JSON; `VideoInput.DetectAsync`, pausing every 8 frames, `PauseEvery`),
   `Stop()` (the run's frames end at its next pause: the result for the frames read, `stopped` true) and `Cancel()` (the
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
@@ -61,7 +65,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   waveform, one unless split, of audiowaveform's 16-bit values, full scale 32767; or null), `referenceTone` (`[{ start,
   end, level }]`), `silences` (`[{ start, end }]`), `peaks` (`[{ sample, true, fullScale }]` per channel, dBFS and
   dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
-  null); `Api.Packets.cs` `Packets()`: `Mp4Input.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
+  null); `Api.Packets.cs` `Packets()`: `VideoInput.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
   discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes);
   `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `points` { `framesPerPoint`,
   `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
@@ -130,8 +134,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     result (as `ShotsJson`, `Picture`) also needs its task twin in `Api.Threads.cs` and its name in `threads.js`'s
     `THREADED` and `RESULTS`: after a run on threads, `call()` asks the threaded runner for it. `app.js` changes
     only for a new event of the page's.
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `Mp4Input.Packets` vs
-  `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `Mp4Input.Audio`
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `VideoInput.Packets` vs
+  `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `VideoInput.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
   stopped half-way, vs one thread; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
@@ -178,7 +182,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline;
   `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg;
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
-  `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first); `docs/mockups/`: static HTML
+  `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
+  `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
@@ -190,8 +195,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
 - Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant frame rate, not rotated, progressive or interlaced
-  as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); anything else
-  is refused in `Mp4Input`'s constructor with a message saying what. Widening it means a sample for it in
+  as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); 4:2:0 MJPEG in AVI
+  (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
+  constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it.
 - A new sample isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg tags its
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
@@ -201,7 +207,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.22.0, FrameReader 2.16.0 and ManagedCodecs 0.2.4 (Containers, H264, Aac, each
+- Packages: ShotDetector/FastYuv 3.22.0, FrameReader 2.16.0 and ManagedCodecs 0.2.4 (Containers, H264, Mjpeg, Aac, each
   pinning Core) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
@@ -251,7 +257,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   the promise JavaScript holds (.NET 10, seen 2026-10-26): `Api.Detect` turns its token's cancellation into a
   `RunCancelledException`, which rejects it.
 - A split run's Stop stops every worker at its next pause, each range ending where it got to (ShotDetector: "the range
-  ends where the frames stop"), and `Mp4Input.FromStart` keeps the ranges while each reaches into the next one's first
+  ends where the frames stop"), and `VideoInput.FromStart` keeps the ranges while each reaches into the next one's first
   frame: the first range stopped short ends the merge, as a one-worker run stopped there. With ranges about equal,
   waiting for "finished" ranges only would keep nothing until the last minutes of a run.
 - .NET's threaded wasm runtime (10.0.14) doesn't start in a Web Worker (it takes the worker for one of its pthreads,

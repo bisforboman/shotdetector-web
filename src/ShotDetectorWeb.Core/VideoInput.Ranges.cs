@@ -5,16 +5,16 @@ namespace ShotDetectorWeb;
 
 /// <summary>
 /// A range of the video's frames, scored on a runtime of its own (a browser Web Worker) by
-/// <see cref="Mp4Input.ScoreRangeAsync"/>, its scores merged with the others' by <see cref="Mp4Input.Merge"/>
+/// <see cref="VideoInput.ScoreRangeAsync"/>, its scores merged with the others' by <see cref="VideoInput.Merge"/>
 /// (docs/decisions/2026-10-26-workers.md). <see cref="FirstFrame"/> is ShotDetector's <c>firstFrame</c>: 0 for the first
 /// range, else one past a keyframe, which the range decodes from and gives as the frame before its first.
 /// </summary>
 /// <param name="FirstFrame">The range's first frame (0-based, display order).</param>
 /// <param name="EndFrame">The frame after its last: the next range's first, or the video's frame count.</param>
-/// <param name="Keyframe">The video packet (decode order, an index of <see cref="Mp4Input.Packets"/>) it decodes from.</param>
+/// <param name="Keyframe">The video packet (decode order, an index of <see cref="VideoInput.Packets"/>) it decodes from.</param>
 public sealed record FrameRange(int FirstFrame, int EndFrame, int Keyframe);
 
-public sealed partial class Mp4Input
+public abstract partial class VideoInput
 {
     /// <summary>
     /// The frames the video shows: its packets but the discarded ones (an edit list's, decoded but not shown), which a

@@ -24,7 +24,7 @@ const facts = document.createElement('div'), cuts = document.createElement('p'),
 note.className = 'note';
 const command = document.createElement('code');
 command.textContent = 'ffprobe -show_packets';
-note.append('From the MP4\'s video packets, without decoding: their sizes and keyframe flags are the file\'s, checked ' +
+note.append('From the file\'s video packets, without decoding: their sizes and keyframe flags are the file\'s, checked ' +
   'against ', command, '.');
 section.append(facts, cuts, note);
 

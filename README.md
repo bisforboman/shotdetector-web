@@ -4,8 +4,8 @@ Shot detection entirely in the browser: a video file is decoded, converted and a
 leaves the machine. It gives the same shots as [scenedetect](https://www.scenedetect.com/) through
 [ShotDetector](https://github.com/bisforboman/shotdetector), byte for byte, without FFmpeg:
 
-- **[ManagedCodecs](https://github.com/bisforboman/ManagedCodecs)** demuxes the MP4 and decodes the H.264 (pure managed
-  C#, bit-exact with FFmpeg's decoder);
+- **[ManagedCodecs](https://github.com/bisforboman/ManagedCodecs)** demuxes the MP4 or the AVI and decodes the H.264 or
+  the MJPEG (pure managed C#, bit-exact with FFmpeg's decoders);
 - **ShotDetector.FastYuv**'s `SwscaleYuv420` converts the frames to BGR (a bit-exact port of FFmpeg's libswscale
   conversion);
 - **ShotDetector** detects, through `ShotDetection.Detect(YuvVideo, IEnumerable<YuvFrame>, DetectionOptions)`, its API
@@ -20,17 +20,20 @@ scope) are in shotdetector's
 The page is live at **https://bisforboman.github.io/shotdetector-web/**, compiled ahead of time and deployed by
 `.github/workflows/pages.yml` on each push to `main` once the checks pass on it (Checks; it runs locally too: "Running
 the page").
-`src/ShotDetectorWeb.Core` opens an MP4 and detects; the checks show that its scene and stats CSVs equal ShotDetector's
+`src/ShotDetectorWeb.Core` opens an MP4 or an AVI and detects; the checks show that its scene and stats CSVs equal ShotDetector's
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
 Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive,
 or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
-pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`).
-Anything else is refused when the file is opened, with an `UnsupportedVideoException` saying what (not MP4, another
-codec, 4:2:2/4:4:4 or 10-bit, rotated, variable frame rate; rotation and a variable rate wait on ShotDetector,
-decision `docs/decisions/2026-10-30-scope-widening.md`). Damaged files throw ManagedCodecs'
+pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
+in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
+`docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
+`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, rotated, variable
+frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; rotation, a variable rate and 4:2:2 wait on
+ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
+can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
 The page's "Try the demo" runs Sintel's trailer, re-encoded at deploy time by the recipe CI's checks run on
@@ -97,14 +100,14 @@ page says how long it will take, an estimate from the frame count and picture si
 run, else `REFERENCE_FPS` at the top of `app.js`); Stop ends the run where it has got to and shows the result for the
 part read, its shots and both CSVs, as a finished run's, labelled "stopped at", and a run with other options then
 starts at once on the opened file (Stopping a run, below). A long video is split across several workers, its shots
-shown once their ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not an MP4 this
+shown once their ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not a video this
 page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
 `pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
 `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
 
 ## Stopping a run
 
-`Api.Detect` runs ShotDetector's `DetectAsync` over `Mp4Input.FramesAsync`, which every 8 frames (`PauseEvery` in
+`Api.Detect` runs ShotDetector's `DetectAsync` over `VideoInput.FramesAsync`, which every 8 frames (`PauseEvery` in
 `Api.cs`) awaits the worker's next task (`[JSImport] pause`, `wwwroot/pause.js`: a `MessageChannel` message). Between
 two pauses the worker handles the page's `stop`, which makes the frames end there as if the file did, so `Detect`
 answers with the result for the frames read: the frame count read, its shots (the last one ending where the run
@@ -150,7 +153,7 @@ issue [#19](https://github.com/bisforboman/shotdetector-web/issues/19)). The pag
 `navigator.hardwareConcurrency` says the machine has cores, but one, and at most 4 (`SPLIT_SECONDS` and `MOST_WORKERS`
 at the top of `app.js`; `?workers=N` in the page's address forces N, 1 never splitting). `Api.Ranges` plans the ranges
 from the packet list: about equal in frames, each after the first starting one frame past the keyframe nearest an
-equal split's start (`Mp4Input.Ranges`). The page's own worker scores the first range; each other range gets a worker
+equal split's start (`VideoInput.Ranges`). The page's own worker scores the first range; each other range gets a worker
 of its own, which opens the same `File` and scores its range (`Api.ScoreRange`): it decodes from the range's keyframe,
 the packets before it walked with their data skipped as opening does, and gives ShotDetector the keyframe's frame
 (the frame before the range's first), the range's own frames and the next range's first (the overlap frame, which the
@@ -195,7 +198,7 @@ minutes the page keeps one worker anyway, for its live shots (the decision's "As
 
 A run on one worker (a video up to 2 minutes, or `?workers=1`) decodes on several threads where the browser allows it
 (decision [2026-10-30-threads.md](docs/decisions/2026-10-30-threads.md)): ManagedCodecs' frame threading
-(`H264Decoder.Threads`, through `Mp4Input.DecoderThreads`), which gives the same frames, so the same CSVs (the native
+(`H264Decoder.Threads`, through `VideoInput.DecoderThreads`), which gives the same frames, so the same CSVs (the native
 check's `ThreadsCheck.cs` and the page check prove it). Measured on the page itself, AOT, headless Chromium on a 4-core
 cloud VM, ManagedCodecs 0.2.3, the median of interleaved rounds (2026-10-30): Sintel's trailer took 13.7 s on the page's
 worker, 9.6 s on 2 threads and 8.5 s on 4 (1.6 times as fast; five rounds), and the same at 1280x720 19.1 s and 10.3 s
@@ -360,7 +363,7 @@ this change, side by side on one 4-core cloud VM, each once.
 The CSV is the same 19,958,285 characters (the same SHA-256), and the heap now ends where the run leaves it: a
 two-hour film's peak is the run's, 115 MB on this file.
 
-An open file also holds its video packet list (`Mp4Input.Packets`, below; in the numbers above): 13 bytes a frame,
+An open file also holds its video packet list (`VideoInput.Packets`, below; in the numbers above): 13 bytes a frame,
 2.25 MB on a two-hour film.
 
 ## Size
@@ -402,14 +405,16 @@ in `dotnet.native.wasm` (+639 KB, +195 KB compressed), then the core's and the A
 using ShotDetector;
 using ShotDetectorWeb;
 
-var input = Mp4Input.Open("trailer.mp4");          // or Open(bytes), or Open(() => a new seekable stream)
+var input = VideoInput.Open("trailer.mp4");        // an MP4 or an AVI; or Open(bytes), or Open(() => a new seekable stream)
 var result = input.Detect(new DetectionOptions { Detector = DetectorKind.Content, CollectStats = true });
 string scenes = Shots.Csv(result.Shots, cuts: result.Cuts);   // scenedetect list-scenes' CSV
 string stats = result.Stats!.Csv(result.Video.Position);       // scenedetect -s's CSV
 ```
 
-`Mp4Input.Video` is the `YuvVideo` handed to ShotDetector: what FFmpeg reports for the file, which is what makes the
-result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the library reads it itself:
+`VideoInput.Open` picks the container by the file's first bytes: `AviInput` for an AVI, `Mp4Input` otherwise (each also
+has its own `Open`). Both share detection, pausing, the ranges and the packets (`VideoInput`). `VideoInput.Video` is the
+`YuvVideo` handed to ShotDetector: what FFmpeg reports for the file, which is what makes the result equal the FFmpeg
+path's. ManagedCodecs doesn't expose all of it, so the library reads it itself. In an MP4:
 
 | YuvVideo | From |
 | --- | --- |
@@ -421,7 +426,18 @@ result equal the FFmpeg path's. ManagedCodecs doesn't expose all of it, so the l
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); full range is yuvj420p |
 | Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
-`Mp4Input.Packets` lists the video track's packets as FFmpeg's demuxer gives them, in decode order, edit list applied
+In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which ManagedCodecs' `AviDemuxer` doesn't expose):
+
+| YuvVideo | From |
+| --- | --- |
+| Width, Height | the first decoded frame (the JPEG's SOF) |
+| FrameRate, TimeBase | the video 'strh''s dwRate/dwScale, reduced (FFmpeg's avg_frame_rate is the time base's inverse) |
+| FrameCount | the video 'strh''s dwLength (FFmpeg's nb_frames); a file with fewer chunks is refused |
+| StartPts | the first packet's pts |
+| ColorSpace, FullRange, PixelFormat | bt470bg, full range, yuvj420p: FFmpeg's MJPEG decoder for every 4:2:0 JPEG |
+| Duration | the longest stream's: the video's dwLength, and a VBR audio stream's (dwSampleSize 0: MP3, AAC); a PCM or ADPCM stream has none for FFmpeg |
+
+`VideoInput.Packets` lists the video track's packets as FFmpeg's demuxer gives them, in decode order, edit list applied
 and discarded packets included (what `ffprobe -show_packets -select_streams v:0` prints): each one's pts (`Pts`, in
 `TimeBase`; `Seconds(i)` as ffprobe's pts_time), size in bytes (`Sizes`) and keyframe and discard flags (`Flags`), the
 bitrate over time and the encoder's keyframes without decoding. Opening the file already walks every packet for the
@@ -440,10 +456,12 @@ interpreted) and `JSON.parse` 7 to 11 ms; in headless Chromium on the AOT bundle
 49 ms and the parse 6 to 7 ms, and the lane and card show 0.17 s after the file is opened. On Sintel's trailer
 (1,253 packets) the JSON is 14,742 characters, and 5 of the 7 adaptive cuts fall on one of its 17 keyframes.
 
-`Mp4Input.Audio` is the first audio track as ffprobe describes it (`AudioStream`: `codec_name`, `sample_rate`,
-`channels`; null without one), nothing decoded: the rate and channels from ManagedCodecs' demuxer (an AAC track's from
-its AudioSpecificConfig), the codec's FFmpeg name from the headers, its sample entry and, for 'mp4a', the 'esds' object
-type (ManagedCodecs names an MP3 in 'mp4a' 'mp4a'; FFmpeg says mp3).
+`VideoInput.Audio` is the first audio track as ffprobe describes it (`AudioStream`: `codec_name`, `sample_rate`,
+`channels`; null without one), nothing decoded: in an MP4 the rate and channels from ManagedCodecs' demuxer (an AAC
+track's from its AudioSpecificConfig), the codec's FFmpeg name from the headers, its sample entry and, for 'mp4a', the
+'esds' object type (ManagedCodecs names an MP3 in 'mp4a' 'mp4a'; FFmpeg says mp3); in an AVI the 'strf''s
+WAVEFORMATEX, its wFormatTag named as libavformat's WAV tags (PCM by its bits per sample). An AVI's audio isn't measured
+(`Mp4Audio` says so: ManagedCodecs' AVI demuxer gives no audio).
 
 ### The sound
 
@@ -509,14 +527,14 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV and the shots as JSON and HTML
   (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) must be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
-  `Mp4Input.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
+  `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's run with all five detectors split
-  into ranges at keyframes as the page splits a long video (`Mp4Input.Ranges`, at most 4: 2 to 4 on the samples), each
+  into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
-  the same run decoded on four threads (`Mp4Input.DecoderThreads`, as the page's threaded runtime decodes), whole, in
+  the same run decoded on four threads (`VideoInput.DecoderThreads`, as the page's threaded runtime decodes), whole, in
   ranges, and stopped half-way against the same run stopped on one thread, byte for byte (`ThreadsCheck.cs`);
-  each sample's and each `samples/no-aac/` file's `Mp4Input.Audio` against FrameReader's probe of its first audio
+  each sample's and each `samples/no-aac/` file's `VideoInput.Audio` against FrameReader's probe of its first audio
   stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`); and the page's
   defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
   every sample the cuts of the run without it, as the page sends a default as none (`DefaultsCheck.cs`; Sintel's
@@ -647,7 +665,8 @@ The samples (tools/make-samples.sh) each isolate something the description must 
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
-measures; six files to refuse; and three whose audio isn't measured.
+measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does); nine files
+to refuse (four of them AVIs: 4:2:2 and 4:4:4 JPEG, a dropped frame, H.264); and three whose audio isn't measured.
 
 ## WebCodecs
 
@@ -692,7 +711,7 @@ its position and how far apart the values are: "identical" is a comparison that 
 ## Packages
 
 ShotDetector and ShotDetector.FastYuv (3.22.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
-ManagedCodecs (0.2.4: the `ManagedCodecs.Containers`, `ManagedCodecs.H264` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.2.4: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version; on nuget.org since 0.1.0, 2026-10-28, until then a git submodule
 referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3)
 and what they depend on come from nuget.org.

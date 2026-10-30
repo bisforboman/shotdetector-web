@@ -40,6 +40,7 @@ sealed record VersionsResponse(string Runtime, Dictionary<string, string> Packag
             typeof(ManagedCodecs.VideoFrame).Assembly,
             typeof(ManagedCodecs.Containers.Mp4Demuxer).Assembly,
             typeof(ManagedCodecs.H264.H264Decoder).Assembly,
+            typeof(ManagedCodecs.Mjpeg.MjpegDecoder).Assembly,
             typeof(ManagedCodecs.Aac.AacDecoder).Assembly,
         ];
         var packages = new Dictionary<string, string>();

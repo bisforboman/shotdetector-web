@@ -57,7 +57,7 @@ static class PictureCheck
 
     static void Check(string sample, string libs, string outDir, List<string> problems, List<string> cells)
     {
-        var input = Mp4Input.Open(sample);
+        var input = VideoInput.Open(sample);
         var meter = new PictureMeter(input.Video);
         var watch = Stopwatch.StartNew();
         var result = input.Detect(new DetectionOptions(), picture: meter);
@@ -139,7 +139,7 @@ static class PictureCheck
         bool three = name.StartsWith("cuts-", StringComparison.Ordinal) || name.StartsWith("baseline-", StringComparison.Ordinal) ||
             name.StartsWith("full-range-", StringComparison.Ordinal) || name.StartsWith("start-offset-", StringComparison.Ordinal) ||
             name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
-            name.StartsWith("interlaced-", StringComparison.Ordinal);
+            name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal);
         if (three)
         {
             int last = result.Cuts.Count > 0 ? (int)result.Cuts[^1].FrameNum : -1;
@@ -164,7 +164,7 @@ static class PictureCheck
     }
 
     /// <summary>The run split into ranges, each measured while it is scored, joined: the whole run's measures.</summary>
-    static string Ranges(Mp4Input input, PictureMeasures whole, List<string> problems)
+    static string Ranges(VideoInput input, PictureMeasures whole, List<string> problems)
     {
         var ranges = input.Ranges(MostRanges);
         var parts = new List<PictureMeasures>();

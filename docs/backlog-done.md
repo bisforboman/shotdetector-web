@@ -838,3 +838,11 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     on the frames as decoded with deinterlacing off (ShotDetector's default), byte for byte natively and on wasm on
     three samples checked with `trace_headers` and ffprobe; deinterlacing and the field order wait on shotdetector#614
     and ManagedCodecs#225, the "Deinterlacing interlaced H.264" row; decision 2026-10-30-interlaced.md)
+
+- MJPEG in AVI
+  - Why: ManagedCodecs' MJPEG decoder is bit-exact with FFmpeg and its Containers package demuxes AVI. Cameras and old
+    footage.
+  - Status: Done (2026-10-30; decision [2026-10-30-mjpeg-avi.md](decisions/2026-10-30-mjpeg-avi.md): `VideoInput` with
+    `Mp4Input` and `AviInput`, `AviHeader` for the audio streams' description and VBR length; three AVI samples, every
+    description field, CSV, JSON and HTML byte for byte, natively and on wasm, interpreted and AOT; 4:2:2 MJPEG waits
+    for the 4:2:2 row; a dropped frame refused, ManagedCodecs#226; the page's picture of an AVI a row of its own)
