@@ -43,9 +43,8 @@ FILES=(
   "elephantsdream-480-h264-st-aac.mov|$blender/ED/elephantsdream-480-h264-st-aac.mov|a7dbacae5fa2bc345dbd7b10588575f3e2bba36012e9a93df5346467053b0634||refused|"
   # Made from those by the pinned FFmpeg. Caminandes as a fragmented MP4, the streams copied (a fragment a keyframe).
   "caminandes-fragmented.mp4|caminandes_gran_dillama.mp4||@ -c copy -movflags frag_keyframe+empty_moov+default_base_moof|same|"
-  # Sintel's 720p trailer turned a quarter (a phone's portrait video: the track matrix, the streams copied); refused
-  # until the rotation row (backlog, Waiting) lands.
-  "sintel_trailer-720p-rotated.mp4|sintel_trailer-720p.mp4||-display_rotation:v:0 90 @ -c copy|refused|"
+  # Sintel's 720p trailer turned a quarter (a phone's portrait video: the track matrix, the streams copied).
+  "sintel_trailer-720p-rotated.mp4|sintel_trailer-720p.mp4||-display_rotation:v:0 90 @ -c copy|same|"
   # The first minute of Caminandes as broadcast-like 1080i25: top field first, MBAFF (x264's interlaced coding), 8 Mb/s,
   # AAC 192 kb/s.
   "caminandes-1080i25.mp4|caminandes_gran_dillama.mp4||@ -t 60 -vf fps=50,interlace=scan=tff,setfield=tff -c:v libx264 -preset fast -flags +ildct+ilme -x264-params tff=1 -b:v 8M -r 25 -c:a aac -b:a 192k|same|"

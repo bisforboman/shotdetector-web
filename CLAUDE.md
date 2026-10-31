@@ -237,7 +237,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
   constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it, and its real-world file in `tools/realworld.sh` moved from "refused"
-  to "same" (Elephants Dream for a variable rate, Sintel's rotated trailer for rotation).
+  to "same" (Elephants Dream for a variable rate).
 - A new sample isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg tags its
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - Before pushing: run what the change could break, not everything: CI picks the checks from the pull request's files
