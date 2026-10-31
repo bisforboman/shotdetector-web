@@ -44,7 +44,8 @@
 //                        'playing'  { shot, paused }             whenever the playhead moves or the shots change: the
 //                                                                shot it is in (null outside the shots known), and
 //                                                                whether the video is paused
-//   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns
+//   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns (a call made before
+//                       the worker has started, as the footer's Versions, waits for it: startWorker)
 //   frameSeconds(video, frames) where frame number `frames` (counted from 0 as decoded: a range's, a span's) starts,
 //                       in seconds from the video's start: frames over the rate, or at a variable rate the frame's own
 //                       pts (Open's frameTimestamps), past the last frame on at the average rate
@@ -185,7 +186,20 @@ export function card(title, { place = 'details', mark, markTitle = '' } = {}) {
 let worker, lastId = 0;
 const calls = new Map(), ended = new WeakSet();
 
-export function call(name, ...args) {
+// The page's worker starts once the page won't reload to become isolated (serve), or at once when a file is picked: a
+// runtime started in a document about to reload is aborted half-loaded, its bundle fetched again by the next one
+// (backlog-done "A first visit downloads the .NET bundle once, not twice"). Calls made before then wait for it.
+let workerStarted;
+const workerStarts = new Promise(resolve => { workerStarted = resolve; });
+
+function startWorker() {
+  if (worker) return;
+  replaceWorker();
+  workerStarted();
+}
+
+export async function call(name, ...args) {
+  if (!worker) await workerStarts;
   return callOn(RESULTS.has(name) && resultOn ? resultOn : worker, name, ...args);
 }
 
@@ -352,6 +366,8 @@ function say(text, title = '') {
 // sound's are ended.
 async function choose(chosen) {
   if (!chosen || state === 'opening') return;
+  // A file picked before the service worker took over: the page won't reload (serve), its worker starts now.
+  startWorker();
   if (running) {
     const run = running, w = runner ?? worker;
     running = null;
@@ -1186,26 +1202,39 @@ document.addEventListener('drop', e => {
 // The service worker (sw.js): isolation for the threads, and the page offline. A first visit isn't controlled by it, so
 // not isolated: once it takes over, the page reloads, once a session, if nothing has been picked yet (else threads come
 // with the next visit). Without service workers (some private modes, file:) the page works as before, on one thread.
+// Settles once the page won't reload: then the page's worker starts (a document that reloads never starts one). A
+// controlled page doesn't wait for the registration (its update check fetches sw.js).
 async function serve() {
   if (!('serviceWorker' in navigator)) return;
-  try {
-    await navigator.serviceWorker.register('sw.js');
-  } catch {
+  const sw = navigator.serviceWorker, registering = sw.register('sw.js');
+  if (globalThis.crossOriginIsolated || sw.controller) {
+    registering.catch(() => {});
     return;
   }
-  if (globalThis.crossOriginIsolated || navigator.serviceWorker.controller) return;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (globalThis.crossOriginIsolated || file || state !== 'idle') return;
-    try {
-      if (sessionStorage.getItem('isolating')) return;
-      sessionStorage.setItem('isolating', '1');
-    } catch {
-      return; // no way to know it reloaded already: not at all, rather than over and over
-    }
-    location.reload();
+  let registration;
+  try {
+    registration = await registering;
+    if (sessionStorage.getItem('isolating')) return; // reloaded once this session already
+  } catch {
+    return; // no service worker, or no way to know it reloaded already: not at all, rather than over and over
+  }
+  if (sw.controller) return; // taken over while registering: the controllerchange below would never come
+  await new Promise(resolve => {
+    sw.addEventListener('controllerchange', () => {
+      if (globalThis.crossOriginIsolated || file || state !== 'idle') return resolve();
+      try {
+        sessionStorage.setItem('isolating', '1');
+      } catch {
+        return resolve();
+      }
+      location.reload();
+    });
+    // A service worker that fails to install never takes over: no reload.
+    const installing = registration.installing ?? registration.waiting;
+    if (!installing) return resolve();
+    installing.addEventListener('statechange', () => { if (installing.state === 'redundant') resolve(); });
   });
 }
 
-serve();
-replaceWorker();
+serve().then(startWorker, startWorker);
 setState('idle');
