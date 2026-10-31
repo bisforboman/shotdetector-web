@@ -152,3 +152,5 @@ Put to the owner with AskUserQuestion on 2026-10-30; the answers below once give
    (crop and colour bars in the upright picture's coordinates; `PictureCheck` against `ffmpeg` as it runs today).
 4. **A split run of a variable-rate video:** the VFR issue asks for ranges identified by their pts, so such a video
    splits across workers as any other; ranges refused upstream would be a new question.
+   Shipped that way (ShotDetector 3.23.0's `YuvVideo.FrameTimestamps`, which ranges check each frame against): the
+   backlog row, done 2026-10-31.

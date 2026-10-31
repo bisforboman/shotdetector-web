@@ -1052,3 +1052,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Not: YouTube chapters, marker lists or the public launch (parked in the note); no path field (the editor relinks).
   - Status: Done (2026-10-31: the six files identical to the FFmpeg path's on every sample and run natively, 1330 of
     1330 files on wasm interpreted, and the page's 60 downloads the native run's; AOT in CI)
+
+- Variable frame rate
+  - Why: screen recordings and phones; the FFmpeg path takes it at the frames' own timestamps.
+  - Where: first upstream, [shotdetector#609](https://github.com/bisforboman/shotdetector/issues/609) (no grid check,
+    ranges by pts, `StartTime` from timestamps); then `Mp4Input.CheckConstantRate` goes, a VFR sample, split runs as
+    any other (the owner's choice).
+  - Done when: the native, wasm (whole and split) and page checks pass on the VFR sample byte for byte.
+  - Status: Done (2026-10-31: ShotDetector 3.23.0's `YuvVideo.FrameTimestamps` (shotdetector#609, #618); `Mp4Input` no
+    longer refuses a varying 'stts' or 'trun' and gives every shown frame's pts, sorted, where the frames leave the
+    average rate's grid by more than half a frame (ShotDetector's own check without them), nothing otherwise; the
+    format duration's video end from the samples' total as mov.c (at a variable rate the last packet's decode-order
+    delta overshoots it: 9.56 s for FFmpeg's 9.48); two samples, `vfr-320x240.mp4` and a fragmented copy, frames after
+    60 lasting twice as long, their packet durations, frame steps, average rate 1250/79 and nb_frames checked with
+    ffprobe, `samples/reject/vfr.mp4` gone; the native check's frame timestamps against FFmpeg's packets, every run, the
+    ranges, threads, resume and the picture the FFmpeg path's; app-check's stopped runs take the stats rows by place, as
+    the Frame Number column is the time's at the average rate; the page puts frames at their own times
+    (`frameSeconds`: the ranges, picture and frame types lanes, the status), says "on average" of the rate, and the
+    page check picks the sample on threads and on two workers, the second range's band at its frame's pts)

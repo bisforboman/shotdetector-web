@@ -125,8 +125,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
   page's worker; `serve()` registers `sw.js` and reloads a first visit once), the sound's worker, and a stopped run kept
   in IndexedDB (`KEPT`, one record: the file by name, size and modified time, the options, `Kept()`'s Blob; shown again
-  at once when its file is picked, Resume and Forget beside Detect, a rest over `SPLIT_SECONDS` split); the events panels listen to, `call(name, ...args)` and `card(title, {
-  place, mark, markTitle })`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label,
+  at once when its file is picked, Resume and Forget beside Detect, a rest over `SPLIT_SECONDS` split); the events panels listen to, `call(name, ...args)`, `card(title, {
+  place, mark, markTitle })` and `frameSeconds(video, frames)` (where a frame starts: its number over the rate, or a
+  variable rate's frame's own pts from Open's `frameTimestamps`; what a lane places frames by)), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label,
   draw)`, `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `ranges.js` (a lane: a split run's range per worker,
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
@@ -152,7 +153,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     `'measured'` (the core's measures, checked against FFmpeg within a tolerance), `'core'` (the core's description,
     checked field by field) or `'page'` (worked out on the page), with `markTitle` saying how they are checked; a row of
     another kind says so in its tooltip, never a dotted underline. A panel is a module of its own, `wwwroot/panels/<name>.js`, that imports `on`,
-    `call` and `card` from `../app.js` and `lane`, `x`, `seek` from `../timeline.js`, plus one `<script
+    `call`, `card` (and `frameSeconds` to place frames) from `../app.js` and `lane`, `x`, `seek` from `../timeline.js`, plus one `<script
     type="module">` line in `index.html` (the order of those lines is the order of the lanes, and of the cards in each
     place) and its rules
     in `style.css`. A new export is `Api.<Feature>.cs`, a partial file of its own with its own `JsonSerializerContext`
@@ -233,7 +234,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant frame rate, upright or a quarter turn (`YuvVideo.Rotation`, the
+- Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
+  shown packets' pts sorted, given where the frames leave the average rate's grid), upright or a quarter turn (`YuvVideo.Rotation`, the
   display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
   as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); 4:2:0 MJPEG in AVI
   (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s

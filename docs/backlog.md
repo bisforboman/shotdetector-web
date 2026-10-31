@@ -69,16 +69,9 @@ ManagedCodecs#138's optional part too, in ManagedCodecs 0.4.0 (#211, 2026-10-30)
 are in Next again. [#608](https://github.com/bisforboman/shotdetector/issues/608),
 [#609](https://github.com/bisforboman/shotdetector/issues/609) and
 [#614](https://github.com/bisforboman/shotdetector/issues/614) shipped in ShotDetector 3.23.0 (2026-10-31), and
-ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the three rows below, worked by one session one after
-another, a pull request each (the owner's choice, 2026-10-31).
-
-- Variable frame rate
-  - Why: screen recordings and phones; the FFmpeg path takes it at the frames' own timestamps.
-  - Where: first upstream, [shotdetector#609](https://github.com/bisforboman/shotdetector/issues/609) (no grid check,
-    ranges by pts, `StartTime` from timestamps); then `Mp4Input.CheckConstantRate` goes, a VFR sample, split runs as
-    any other (the owner's choice).
-  - Done when: the native, wasm (whole and split) and page checks pass on the VFR sample byte for byte.
-  - Status: Waiting on upstream (shotdetector#609, filed 2026-10-30)
+ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the rows they waited on, worked by one session one after
+another, a pull request each (the owner's choice, 2026-10-31); rotation and the variable frame rate are done, the row
+below is left.
 
 - Deinterlacing interlaced H.264
   - Why: broadcast material is interlaced; MBAFF video is detected on its woven frames since the "Interlaced H.264"
