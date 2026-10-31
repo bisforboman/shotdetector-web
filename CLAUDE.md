@@ -30,9 +30,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   split) and `ScoreRangeAsync(earlier, ...)` (the rest, telling its shots)), `VideoInput.DecoderThreads`
   (ManagedCodecs' `H264Decoder.Threads`, frame threading: the same frames; a run that ends early drains the decoder),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
-  expose, the audio codec's FFmpeg name among them), `SpsInfo` (the SPS's format and VUI colour
-  fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by `Mp4Input`'s
-  walk when it opens a file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
+  expose, the audio codec's FFmpeg name and the display rotation among them), `SpsInfo` (the SPS's format and VUI colour
+  fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by the input's
+  walk when it opens a file; an AVI's `Offsets` too, where each chunk's data, a JPEG, starts in the file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
   `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
   `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
   decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
@@ -70,7 +70,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   end, level }]`), `silences` (`[{ start, end }]`), `peaks` (`[{ sample, true, fullScale }]` per channel, dBFS and
   dBTP, minus infinity as null), `loudness` (`{ integrated, range, truePeak }`, integrated null below the gate; or
   null); `Api.Packets.cs` `Packets()`: `VideoInput.Packets` as JSON by column, `{ timeBase, pts, sizes, keyframes,
-  discarded }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets' indexes);
+  discarded, offsets }` (pts in the time base, sizes in bytes, decode order; the keyframes' and discarded packets'
+  indexes; an AVI's packets' offsets in the file, null for an MP4);
   `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `points` { `framesPerPoint`,
   `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
   `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
@@ -112,7 +113,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   states, idle, opening, detecting, paused, stopping, done, stopped, lost and error, as `body[data-state]`, `body.picked` once a
   file is picked; the options, the one-line status, the estimate, pause and resume (`runMs()`: the run's time, pauses
   left out), stop (`terminate()` only for a worker that doesn't
-  answer), the demo, the shot playing as the caption under the video (told as the `playing` event), a long video split
+  answer), the demo, the shot playing as the caption under the video (told as the `playing` event), an AVI's picture (no browser
+  plays MJPEG: an `<img>` of the file's own JPEG at the playhead, cut with `File.slice` where `Packets()`' `offsets`
+  say, the playhead `timeline.js`'s own, `held`; `frameAt(t)`, which `shots.js`' stills use too), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
   range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
   page's worker; `serve()` registers `sw.js` and reloads a first visit once), the sound's worker, and a stopped run kept
@@ -153,8 +156,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `VideoInput.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
-  types a run keeps vs `ffprobe -show_frames`' `pict_type` (its first field only: its csv adds x264's SEI to the first
-  frame), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
+  types a run keeps vs ffprobe's `frame=pict_type` (its first field only: its csv adds x264's SEI to the first
+  frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
   app-check.mjs compares `FrameTypes()` with); `AudioStreamCheck.cs`: `VideoInput.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
@@ -179,7 +182,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
-  (`?threads=0`) and on two workers, the demo on threads paused and resumed, then stopped while paused, then run again
+  (`?threads=0`) and on two workers, `mjpeg-320x240-25.avi` picked (the player the file's JPEG at the playhead after
+  clicks on the timeline and a shot's row, a still per shot), a rotated one on threads and on two workers, the demo on
+  threads paused and resumed, then stopped while paused, then run again
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
   reloaded and resumed, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
@@ -221,7 +226,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant frame rate, not rotated, progressive or interlaced
+- Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant frame rate, upright or a quarter turn (`YuvVideo.Rotation`, the
+  display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
   as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); 4:2:0 MJPEG in AVI
   (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
   constructor with a message saying what. Widening it means a sample for it in

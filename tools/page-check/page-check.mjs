@@ -21,18 +21,24 @@
 //      (cached when it was fetched) runs on threads to the same downloads;
 //   7. the demo split across two workers (?workers=2), stopped half-way and resumed in the same visit: the rest split
 //      again, merged with the kept scores to the whole run's downloads;
-//   8. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
+//   8. an AVI (MJPEG, which no browser plays) picked on threads: the player the file's own JPEG at the playhead (an
+//      <img> in the video's place), the frame the playhead is in after a click on the timeline and on a shot's row,
+//      decoded; a still per shot from the same JPEGs; the downloads the native run's (backlog "The picture of an AVI on
+//      the page");
+//   9. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
+//  10. each more sample (a rotated video, ...: what the first sample doesn't have) picked on threads and split across
+//      two workers, after 2: the same downloads, picture and frame types as 1 and 2.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
-// After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
+// After each whole run (1 to 3, 10), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there; the frame types' card (panels/frametypes.js) the counts of ffprobe's pict_type
 // as the native check wrote them, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
-// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>
+// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -42,12 +48,16 @@ import { basename, extname, join, normalize, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
 const at = args.indexOf('--native');
-if (at < 0 || args.length !== 6) {
-  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>');
+if (at < 0 || args.length < 7) {
+  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
-const [root, outDir, sample, demo] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
+const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
+// The file each run's name (as the page saw it) is, for the native check's files of it.
+const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
+  ...Object.fromEntries(more.map(m => [basename(m), m])) };
+const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
 let playwright;
@@ -345,13 +355,13 @@ async function compare(page, what, name, run, stoppedAt = null) {
       continue;
     }
     const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
-    const expectedName = `${basename(name, '.mp4')}.${kind}.${ext}`;
+    const expectedName = `${stem(name)}.${kind}.${ext}`;
     if (download.suggestedFilename() !== expectedName) {
       fail(`${what}: the ${label} downloads as ${download.suggestedFilename()}, not ${expectedName}`);
     }
     const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${kind}.${ext}`);
     await download.saveAs(saved);
-    const native = join(nativeDir, `${basename(name === 'sintel-trailer.mp4' ? demo : sample, '.mp4')}.${run}.${kind}.${ext}`);
+    const native = join(nativeDir, `${stem(FILES[name])}.${run}.${kind}.${ext}`);
     if (!existsSync(native)) {
       fail(`${what}: no native ${label} ${native} (tools/check.sh native first)`);
     } else if (stoppedAt !== null && kind === 'shots') {
@@ -430,7 +440,7 @@ async function paused(page, what, from) {
 // The picture's card after a whole run: its cropdetect line and its colour bars the native check's
 // (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown.
 async function picture(page, what, file) {
-  const native = join(nativeDir, `${basename(file, '.mp4')}.picture.json`);
+  const native = join(nativeDir, `${stem(file)}.picture.json`);
   if (!existsSync(native)) {
     fail(`${what}: no native ${native} (tools/check.sh native first)`);
     return;
@@ -454,7 +464,7 @@ async function picture(page, what, file) {
 // The frame types' card after a whole run: the counts of ffprobe's types (<sample>.frametypes.txt, which the native
 // check compared the core's with), and the lane shown.
 async function frameTypes(page, what, file) {
-  const native = join(nativeDir, `${basename(file, '.mp4')}.frametypes.txt`);
+  const native = join(nativeDir, `${stem(file)}.frametypes.txt`);
   if (!existsSync(native)) {
     fail(`${what}: no native ${native} (tools/check.sh native first)`);
     return;
@@ -479,9 +489,9 @@ function report(what, errors) {
   if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
 }
 
-async function picked(query, what) {
+async function picked(query, what, file = sample) {
   const { context, page, errors } = await open(query);
-  await page.setInputFiles('#file', sample);
+  await page.setInputFiles('#file', file);
   await page.click('#detect');
   const run = await page.inputValue('#detector');
   const status = await finished(page, what);
@@ -493,18 +503,97 @@ async function picked(query, what) {
       const bands = await page.locator('.range').count();
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
     }
-    await compare(page, what, basename(sample), run);
-    await picture(page, what, sample);
-    await frameTypes(page, what, sample);
+    await compare(page, what, basename(file), run);
+    await picture(page, what, file);
+    await frameTypes(page, what, file);
+  }
+  report(what, errors);
+  await context.close();
+}
+
+// An AVI picked (MJPEG, which no browser plays): the player the file's own JPEG at the playhead, in the <video>'s place,
+// following the timeline and the shots' rows; a still per shot from the same JPEGs; the downloads the native run's.
+async function pickedAvi() {
+  const what = `${basename(avi)}, picked`;
+  const { context, page, errors } = await open();
+  await page.setInputFiles('#file', avi);
+  await page.click('#detect');
+  const run = await page.inputValue('#detector');
+  const status = await finished(page, what);
+  if (status !== null) {
+    await compare(page, what, basename(avi), run);
+    await picture(page, what, avi);
+    await frameTypes(page, what, avi);
+    // The rate as Open describes the file (the about card's JSON).
+    const { frameRate: { num, den } } = JSON.parse(await page.textContent('#about pre'));
+    // The frame the page shows: the <img>'s, once decoded, and where the playhead is.
+    const shown = () => page.waitForFunction(() => {
+      const img = document.getElementById('frame');
+      return !img.hidden && img.complete && img.naturalWidth > 0 && img.dataset.frame !== undefined;
+    }, null, { timeout: 10000 }).then(() => page.evaluate(() => {
+      const img = document.getElementById('frame');
+      return { frame: Number(img.dataset.frame), width: img.naturalWidth, height: img.naturalHeight,
+        video: !document.getElementById('video').hidden,
+        at: Number(document.querySelector('#timeline .tracks').getAttribute('aria-valuenow')) };
+    })).catch(() => null);
+    const expectFrame = async (where, frame) => {
+      // The <img> follows a new frame as soon as its JPEG is cut and decoded.
+      await page.waitForFunction(f => document.getElementById('frame').dataset.frame === String(f), frame,
+        { timeout: 10000 }).catch(() => {});
+      const s = await shown();
+      if (s === null || s.video || s.frame !== frame || s.width !== 320 || s.height !== 240)
+        fail(`${what}: ${where}, the picture isn't frame ${frame}'s 320x240 JPEG in the video's place: ${JSON.stringify(s)}`);
+      else console.log(`${what}: ${where}, the picture is frame ${frame}, ${s.width}x${s.height}, the playhead at ${s.at} s`);
+    };
+    await expectFrame('at the start', 0);
+    // A click on the timeline at 60% of its width: the frame the playhead is in (the page's own times, frames over the
+    // rate as the axis has them).
+    const tracks = page.locator('#timeline .tracks');
+    await tracks.scrollIntoViewIfNeeded();
+    const box = await tracks.boundingBox();
+    await tracks.click({ position: { x: box.width * 0.6, y: box.height / 2 } });
+    const at = Number(await tracks.getAttribute('aria-valuenow'));
+    if (!(at > 0)) fail(`${what}: a click on the timeline left the playhead at ${at} s`);
+    await expectFrame(`clicked at ${at} s`, Math.floor(at * num / den + 1e-6));
+    // A shot's row (the third, else the last): its first frame, the scenes CSV's start frame (counted from 1).
+    const rows = await page.locator('#shots tbody tr').count();
+    const row = page.locator('#shots tbody tr').nth(Math.min(2, rows - 1));
+    const start = await row.locator('td').nth(2).textContent();
+    const scenes = lines(readFileSync(join(nativeDir, `${stem(avi)}.${run}.scenes.csv`), 'utf8'))
+      .filter(line => /^\d/.test(line)).map(line => line.split(','));
+    const shot = scenes.find(cells => cells[2] === start);
+    await row.click();
+    if (!shot) fail(`${what}: no shot in the scenes CSV starts at ${start}`);
+    else await expectFrame(`the shot from ${start}`, Number(shot[1]) - 1);
+    // A still per shot, every one drawn from the file's JPEGs (none "didn't show").
+    await page.waitForFunction(n => document.querySelectorAll('#shots td.still canvas').length >= n, rows,
+      { timeout: 30000 }).catch(() => {});
+    const stills = await page.$$eval('#shots td.still', cells => cells.map(c => {
+      const canvas = c.querySelector('canvas');
+      if (!canvas) return c.title || 'none';
+      const px = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let lit = 0;
+      for (let i = 0; i < px.length; i += 4) lit += px[i + 3] > 0 && px[i] + px[i + 1] + px[i + 2] > 0 ? 1 : 0;
+      return lit > 0 ? 'drawn' : 'blank';
+    }));
+    const missing = stills.flatMap((s, i) => s === 'drawn' ? [] : [`shot ${i + 1}: ${s}`]);
+    if (stills.length !== rows || missing.length > 0) fail(`${what}: ${rows} shots, stills: ${missing.join('; ')}`);
+    else console.log(`${what}: a still for each of the ${rows} shots, from the file's JPEGs`);
+    await looks(page, what, 'the-avi.done');
   }
   report(what, errors);
   await context.close();
 }
 
 try {
+  await pickedAvi();
   await picked('', `${basename(sample)}, picked`);
   await picked('?threads=0', `${basename(sample)}, the page's worker`);
   await picked('?workers=2', `${basename(sample)}, two workers`);
+  for (const m of more) {
+    await picked('', `${basename(m)}, picked`, m);
+    await picked('?workers=2', `${basename(m)}, two workers`, m);
+  }
 
   const what = 'the demo';
   const { context, page, errors } = await open();

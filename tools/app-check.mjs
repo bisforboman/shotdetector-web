@@ -39,6 +39,7 @@
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4|.avi>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { basename, extname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileBlob, host } from './node-host.mjs';
@@ -462,17 +463,18 @@ function checkTone(name, track, w, frame) {
 // Packets()'s JSON for one opened sample against ffprobe -show_packets -select_streams v:0 (the native check's
 // PacketCheck.cs, which compares VideoInput.Packets with the same lines): the same packets in the same order, each with
 // the same pts, pts_time (pts × num / den, as ffprobe prints it), size, and K and D flags; the keyframes and the
-// discarded packets as indexes, in order.
+// discarded packets as indexes, in order; an AVI's offsets (where the page cuts each JPEG from the file) each at bytes
+// that hash to ffprobe's data_hash of the packet, an MP4's null.
 function checkPackets(sample) {
   const name = basename(sample);
   const started = performance.now();
   const json = Packets();
   const p = JSON.parse(json);
   const seconds = (performance.now() - started) / 1000;
-  const keys = ['timeBase', 'pts', 'sizes', 'keyframes', 'discarded'];
+  const keys = ['timeBase', 'pts', 'sizes', 'keyframes', 'discarded', 'offsets'];
   if (JSON.stringify(Object.keys(p)) !== JSON.stringify(keys))
     return fail(`${name}: Packets() gives ${Object.keys(p).join(', ')}, not ${keys.join(', ')}`);
-  const { timeBase: { num, den }, pts, sizes, keyframes, discarded } = p;
+  const { timeBase: { num, den }, pts, sizes, keyframes, discarded, offsets } = p;
   const bytes = sizes.reduce((a, b) => a + b, 0);
   console.error(`${name}: ${pts.length} video packets, ${keyframes.length} keyframes, ${discarded.length} discarded, ` +
     `${bytes} bytes; Packets() ${json.length} characters, ${seconds.toFixed(3)} s`);
@@ -487,6 +489,10 @@ function checkPackets(sample) {
   const differences = [];
   if (pts.length !== theirs.length) differences.push(`${pts.length} packets vs ffprobe's ${theirs.length}`);
   if (sizes.length !== pts.length) differences.push(`${sizes.length} sizes for ${pts.length} packets`);
+  const avi = extname(sample).toLowerCase() === '.avi';
+  if (avi ? offsets?.length !== pts.length : offsets !== null)
+    differences.push(`offsets ${offsets === null ? 'null' : `for ${offsets.length} packets`} in ${avi ? 'an AVI' : 'an MP4'}`);
+  const file = offsets ? readFileSync(sample) : null;
   for (const indexes of [keyframes, discarded]) {
     if (indexes.some((i, j) => !Number.isInteger(i) || i < 0 || i >= pts.length || (j > 0 && i <= indexes[j - 1])))
       differences.push(`indexes not increasing within the packets: ${indexes.slice(0, 10).join(', ')}`);
@@ -499,6 +505,9 @@ function checkPackets(sample) {
     check('size', String(sizes[i]), t.size);
     check('K', isKey.has(i) ? 'K' : '_', t.flags[0]);
     check('D', isDiscarded.has(i) ? 'D' : '_', t.flags[1]);
+    if (offsets && i < offsets.length)
+      check('the bytes at its offset\'s data_hash',
+        `SHA256:${createHash('sha256').update(file.subarray(offsets[i], offsets[i] + sizes[i])).digest('hex')}`, t.data_hash);
   }
   if (differences.length > 0)
     fail(`${name}: Packets() differs from ffprobe's: ${differences.slice(0, 3).join('; ')}` +

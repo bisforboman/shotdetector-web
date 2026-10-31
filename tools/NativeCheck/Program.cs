@@ -93,6 +93,8 @@ foreach (string sample in samples)
             problems.Add($"duration {ours.Video.Duration} vs {file.Video.Duration}");
         if ((ours.Video.ProcessedWidth, ours.Video.ProcessedHeight) != (file.Video.ProcessedWidth, file.Video.ProcessedHeight))
             problems.Add("processed size");
+        if ((ours.Video.Width, ours.Video.Height, ours.Video.Rotation) != (file.Video.Width, file.Video.Height, file.Video.Rotation))
+            problems.Add($"size and rotation {ours.Video.Width}x{ours.Video.Height} {ours.Video.Rotation} vs {file.Video.Width}x{file.Video.Height} {file.Video.Rotation}");
         if (!ours.Cuts.SequenceEqual(file.Cuts))
             problems.Add("cuts");
         string scenesResult = scenes == fileScenes ? "same" : "DIFFERS";
@@ -172,6 +174,8 @@ static YuvVideo Oracle(string path)
         TimeBase = info.TimeBase,
         StartPts = info.StartPts ?? 0,
         FrameCount = info.FrameCount,
+        // As the file path takes the display matrix's angle (VideoReader): rounded, its remainder by 360.
+        Rotation = info.Rotation is { } r ? (int)Math.Round(r) % 360 : 0,
         // As the file path reads it: ffprobe's "duration" (the format's, printed with six decimals), to the nearest tick.
         Duration = probe.Duration is { } d
             ? TimeSpan.FromTicks((long)Math.Round(double.Parse((d.Ticks / 10 * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond))
@@ -199,6 +203,7 @@ static List<string> Differences(YuvVideo ours, YuvVideo ffmpeg)
     Check("start pts", ours.StartPts, ffmpeg.StartPts);
     Check("frame count", ours.FrameCount, ffmpeg.FrameCount);
     Check("duration", ours.Duration, ffmpeg.Duration);
+    Check("rotation", ours.Rotation, ffmpeg.Rotation);
     Check("codec", ours.Codec, ffmpeg.Codec);
     Check("container", ours.Container, ffmpeg.Container);
     return d;

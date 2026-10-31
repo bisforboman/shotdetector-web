@@ -5,7 +5,7 @@ namespace ShotDetectorWeb.Checks;
 /// <summary>
 /// The frame type check (README, "Checks"; backlog "Frame types (I, P, B) on the strip"): for each sample, every frame's
 /// picture type as the core keeps it (<see cref="PictureMeter"/>, ManagedCodecs' <c>VideoFrame.PictureType</c>) against
-/// <c>ffprobe -show_frames -show_entries frame=pict_type</c> (the ffprobe beside SHOTDETECTOR_FFMPEG_LIBS, else the one
+/// <c>ffprobe -show_entries frame=pict_type</c> (the ffprobe beside SHOTDETECTOR_FFMPEG_LIBS, else the one
 /// on PATH), frame by frame in display order, exactly; an MJPEG sample's all I. The same on four decoder threads, and
 /// the video split into ranges as the page splits it (at most 4), each measured on its own and joined. ffprobe's types,
 /// one character a frame, go to <c>&lt;sample&gt;.frametypes.txt</c> in the output folder, which the wasm check
@@ -126,7 +126,8 @@ internal static class FrameTypeCheck
 
     /// <summary>
     /// Each video frame's pict_type as ffprobe prints it, in output order (display order), one character a frame. Only
-    /// the line's first field: ffprobe's csv adds a frame's side data as more fields (x264's first frame's SEI).
+    /// the line's first field: ffprobe's csv can add a frame's side data as more fields (x264's first frame's SEI); and no
+    /// -show_frames, whose side data a rotated video's frames print over lines of their own (the display matrix).
     /// </summary>
     static string Probe(string ffprobe, string sample)
     {
@@ -136,7 +137,7 @@ internal static class FrameTypeCheck
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        foreach (string arg in (string[])["-v", "error", "-select_streams", "v:0", "-show_frames", "-show_entries", "frame=pict_type", "-of", "csv=p=0", sample])
+        foreach (string arg in (string[])["-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pict_type", "-of", "csv=p=0", sample])
             start.ArgumentList.Add(arg);
         using var process = Process.Start(start)!;
         var error = process.StandardError.ReadToEndAsync();
