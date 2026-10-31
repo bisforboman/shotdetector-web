@@ -32,7 +32,9 @@
 //      Firefox: a cloud session's).
 //  10. each more sample (a rotated video, a variable frame rate, ...: what the first sample doesn't have) picked on
 //      threads and split across two workers, after 2: the same downloads, picture and frame types as 1 and 2; a
-//      variable-rate video's second range drawn at its first frame's own time.
+//      variable-rate video's second range drawn at its first frame's own time. Then the --deinterlace sample with
+//      Deinterlace auto on threads, and asked for two workers: on one, the ranges lane saying why; the downloads the
+//      native check's deinterlace-auto run's.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -50,16 +52,18 @@ import { createRequire } from 'node:module';
 import { basename, extname, join, normalize, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
-const at = args.indexOf('--native');
-if (at < 0 || args.length < 7) {
-  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]');
+const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
+if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
+  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
+    '[--deinterlace <interlaced.mp4>] [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
-const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
+const interlaced = di >= 0 ? resolve(args[di + 1]) : null;
+const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => ![at, at + 1, di, di + 1].includes(i)).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
 const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
-  ...Object.fromEntries(more.map(m => [basename(m), m])) };
+  ...Object.fromEntries([...more, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
 const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
@@ -548,17 +552,25 @@ function report(what, errors) {
   if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
 }
 
-async function picked(query, what, file = sample) {
+// deinterlace: the Deinterlace option picked ('auto', 'on'), compared with the native check's deinterlace-<it> run; a
+// deinterlaced run asked to split goes on one worker, the ranges lane saying why.
+async function picked(query, what, file = sample, deinterlace = null) {
   const { context, page, errors } = await open(query);
   await page.setInputFiles('#file', file);
+  if (deinterlace) await page.selectOption('#deinterlace', deinterlace);
   await page.click('#detect');
-  const run = await page.inputValue('#detector');
+  const run = deinterlace ? `deinterlace-${deinterlace}` : await page.inputValue('#detector');
   const status = await finished(page, what);
   if (status !== null) {
     const split = query.includes('workers=');
-    if (split && !/with 2 workers/.test(status)) fail(`${what}: not split across 2 workers: ${status}`);
+    if (split && deinterlace) {
+      const line = await page.locator('.track.ranges').textContent() ?? '';
+      if (/with 2 workers/.test(status) || await page.locator('.range').count() !== 0 || !/Deinterlaced, so not split/.test(line))
+        fail(`${what}: deinterlaced, not on one worker saying why: "${status}", the ranges lane "${line}"`);
+      else console.log(`${what}: one worker, the ranges lane saying "${line}"`);
+    } else if (split && !/with 2 workers/.test(status)) fail(`${what}: not split across 2 workers: ${status}`);
     if (!split && THREADED.test(status) !== (query === '')) fail(`${what}: ${query ? 'on' : 'not on'} threads: ${status}`);
-    if (split) {
+    if (split && !deinterlace) {
       const bands = await page.locator('.range').count();
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
       else await rangesAtTheirTimes(page, what, file);
@@ -653,6 +665,10 @@ try {
   for (const m of more) {
     await picked('', `${basename(m)}, picked`, m);
     await picked('?workers=2', `${basename(m)}, two workers`, m);
+  }
+  if (interlaced) {
+    await picked('', `${basename(interlaced)}, deinterlaced, picked`, interlaced, 'auto');
+    await picked('?workers=2', `${basename(interlaced)}, deinterlaced, two workers asked`, interlaced, 'auto');
   }
 
   const what = 'the demo';

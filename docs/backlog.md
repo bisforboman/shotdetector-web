@@ -70,25 +70,22 @@ are in Next again. [#608](https://github.com/bisforboman/shotdetector/issues/608
 [#609](https://github.com/bisforboman/shotdetector/issues/609) and
 [#614](https://github.com/bisforboman/shotdetector/issues/614) shipped in ShotDetector 3.23.0 (2026-10-31), and
 ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the rows they waited on, worked by one session one after
-another, a pull request each (the owner's choice, 2026-10-31); rotation and the variable frame rate are done, the row
-below is left.
+another, a pull request each (the owner's choice, 2026-10-31): rotation, the variable frame rate and deinterlacing,
+all done.
 
-- Deinterlacing interlaced H.264
-  - Why: broadcast material is interlaced; MBAFF video is detected on its woven frames since the "Interlaced H.264"
-    row, as ShotDetector's default, but `--deinterlace auto` (yadif) is the setting for it, and FFmpeg's field order
-    belongs in the description (decision [2026-10-30-interlaced.md](decisions/2026-10-30-interlaced.md)).
-  - Where: first upstream, [shotdetector#614](https://github.com/bisforboman/shotdetector/issues/614) (`YuvVideo.FieldOrder`,
-    `YuvFrame.Interlaced` and `TopFieldFirst`, `Deinterlace` with FastYuv's `Yadif` on frames from the caller) and
-    [ManagedCodecs#225](https://github.com/bisforboman/ManagedCodecs/issues/225) (each frame's interlacing and the field
-    order as FFmpeg reports them, and whether a frame was two field pictures); then here: `Mp4Input` describes the field
-    order (NativeCheck against ffprobe's `field_order` and `-show_frames`' `interlaced_frame,top_field_first`), a
-    deinterlace option on the page (on one worker: ShotDetector's ranges refuse `Deinterlace`), the runs with it in
-    `tools/Shared/Runs.cs`. Field pictures with a sample muxed one frame a sample (JM's, as ManagedCodecs', put one field
-    in each, which the constant-rate check refuses), or refused by ManagedCodecs#225's flag.
-  - Done when: the native, wasm and page checks pass byte for byte on the interlaced samples with deinterlacing on
-    `auto`, and the field order is checked against ffprobe.
-  - Not: no yadif or slice-header parsing here (CLAUDE.md: report it there, don't work around it).
-  - Status: Waiting on upstream (shotdetector#614 and ManagedCodecs#225, filed 2026-10-30)
+- Deinterlaced runs split and resumed
+  - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,
+    since ShotDetector's ranges refuse yadif, which reads the frames on either side of each; a long broadcast file is
+    where both matter most.
+  - Where: first upstream, [shotdetector#628](https://github.com/bisforboman/shotdetector/issues/628) (in progress there,
+    2026-10-31: a range's first frame given the one before it, its last the one after; with it a public
+    `ShotDetection.RangeFrames(video, options, firstFrame, endFrame)`, the frames a range needs, the owner's choice as the
+    coordinator told it); then `Api`'s deinterlaced path (`Whole`) goes, `VideoInput.Deinterlaces` (a copy of
+    ShotDetector's internal rule) and the ranges' hard-coded margins for `RangeFrames`, `app.js`'s `planFor` and
+    `NOT_KEPT` with them, and the deinterlaced runs join the range, threads and resume checks and app-check's
+    `SPLIT_RUNS`.
+  - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
+  - Status: Waiting on upstream (shotdetector#628)
 
 - The first pts of a track whose edit list starts at 0 (found by the real-world check)
   - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000

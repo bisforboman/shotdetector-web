@@ -45,7 +45,7 @@
         <input type="file" id="file" accept=".mp4,.avi,video/mp4,video/x-msvideo">
         <label for="file">
           <strong id="drop-text">Choose an MP4 or an AVI, or drop one here</strong>
-          <small>8-bit 4:2:0 H.264 (progressive or MBAFF interlaced) or MJPEG, constant or variable frame rate, any size: it is read in parts, never uploaded</small>
+          <small>8-bit 4:2:0 H.264 (progressive or MBAFF interlaced, deinterlaced if asked) or MJPEG, constant or variable frame rate, any size: it is read in parts, never uploaded</small>
         </label>
         <p class="demo">
           <button type="button" id="demo">Try the demo</button>
@@ -79,6 +79,13 @@
         <label class="adaptive">Minimum content_val
           <input type="number" id="min-content" min="0" step="any" value="15" required
             title="The content_val a frame must reach as well for a cut: scenedetect's min_content_val">
+        </label>
+        <label>Deinterlace
+          <select id="deinterlace" title="yadif before detecting, as ShotDetector's --deinterlace: off (scenedetect's, the default), auto (when the video's field order says interlaced) or on (always). A deinterlaced run goes on one worker and can't be resumed yet">
+            <option value="off">off</option>
+            <option value="auto">auto</option>
+            <option value="on">on</option>
+          </select>
         </label>
       </div>
 

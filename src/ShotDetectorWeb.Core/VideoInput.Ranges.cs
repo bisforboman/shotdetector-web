@@ -205,9 +205,24 @@ public abstract partial class VideoInput
         return taken;
     }
 
+    /// <summary>
+    /// The options with ShotDetector.FastYuv's converter unless they name another, and its <see cref="Yadif"/> unless they
+    /// name another deinterlacer (frames from the caller have no FFmpeg filter: used only when the run deinterlaces).
+    /// </summary>
     static DetectionOptions WithConverter(DetectionOptions? options)
     {
         options ??= new DetectionOptions();
-        return options.Yuv420Converter is null ? options with { Yuv420Converter = new SwscaleYuv420() } : options;
+        if (options.Yuv420Converter is null)
+            options = options with { Yuv420Converter = new SwscaleYuv420() };
+        return options.Yadif is null ? options with { Yadif = new Yadif() } : options;
     }
+
+    /// <summary>
+    /// Whether a run with <paramref name="options"/> deinterlaces the frames, as ShotDetector decides it: always with
+    /// <see cref="DeinterlaceMode.On"/>, with <see cref="DeinterlaceMode.Auto"/> when the field order is interlaced (not
+    /// progressive or unknown). Such a run can't be scored in ranges yet (ShotDetector's <c>ScoreRange</c> refuses it:
+    /// yadif reads the frames on either side of each, shotdetector#628), so it is detected whole, on one worker.
+    /// </summary>
+    public bool Deinterlaces(DetectionOptions? options) => options?.Deinterlace == DeinterlaceMode.On ||
+        (options?.Deinterlace == DeinterlaceMode.Auto && Video.FieldOrder is not (FrameReader.FieldOrder.Progressive or FrameReader.FieldOrder.Unknown));
 }

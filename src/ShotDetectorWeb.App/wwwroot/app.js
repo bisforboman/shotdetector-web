@@ -109,7 +109,7 @@ const DEFAULT_WINDOW = 2, DEFAULT_MIN_CONTENT = 15;
 
 const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
-const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
+const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length'), deinterlace = $('deinterlace');
 const windowInput = $('window'), minContent = $('min-content');
 const detectButton = $('detect'), pauseButton = $('pause'), stopButton = $('stop');
 const resumeButton = $('resume'), forgetButton = $('forget');
@@ -429,17 +429,35 @@ async function start(how = 'detect') {
 async function detect(resumed = null) {
   setState('detecting');
   if (resumed) setForm(resumed.options);
-  const run = resumed?.options ?? options(), plan = await ranges(opened, resumed?.from ?? 0);
+  const run = resumed?.options ?? options(), { plan, note } = await planFor(run, resumed?.from ?? 0);
   listen();
-  await go(run, plan, null, resumed);
+  await go(run, plan, null, resumed, null, note);
+}
+
+// A run that deinterlaces (Deinterlace on, or auto where the video's field order says interlaced, as ShotDetector
+// decides it) can't be scored in ranges yet (ShotDetector's ranges refuse yadif, which reads the frames on either side
+// of each: shotdetector#628), so it is detected whole on one worker, and a stopped one isn't kept to resume.
+const NOT_SPLIT = 'Deinterlaced, so not split: ShotDetector can\'t score a deinterlaced run in ranges yet (shotdetector#628).';
+const NOT_KEPT = 'not kept to resume: ShotDetector can\'t resume a deinterlaced run yet (shotdetector#628)';
+const deinterlaces = (video, run) => run.deinterlace === 'on' ||
+  (run.deinterlace === 'auto' && !['progressive', 'unknown'].includes(String(video.fieldOrder).toLowerCase()));
+let wholeRun = false; // the run going, or last shown, deinterlaces
+
+// How a run goes: ranges (null for one worker), and note: why a run that would be split isn't (a deinterlaced one).
+async function planFor(run, from = 0) {
+  const plan = await ranges(opened, from);
+  if (!deinterlaces(opened, run)) return { plan, note: null };
+  return { plan: null, note: plan ? NOT_SPLIT : null };
 }
 
 // The run itself: on one worker (Api's Detect) or split (plan: splitRun). A split run whose ranges don't merge, or one of
 // whose workers fails, is detected again with one worker, saying why (fallback).
 // A resumed run (resumed: the kept record) goes on from its kept scores (Api's Resume, or Merge with them); kept scores
 // that don't resume (another version's, say) are forgotten and the run detected from the start, saying why (restarted).
-async function go(run, plan, fallback = null, resumed = null, restarted = null) {
+// note: why the run isn't split where it would be (planFor).
+async function go(run, plan, fallback = null, resumed = null, restarted = null, note = null) {
   const from = resumeFrom = resumed?.from ?? 0;
+  wholeRun = deinterlaces(opened, run);
   resumeAt = resumed?.frames ?? 0;
   framesDone = from;
   framesExpected = 0;
@@ -447,7 +465,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   // before it stay. Split, the merge tells them all.
   const before = resumed && !plan ? resumed.shots.slice(0, -1) : [];
   const keptBytes = resumed ? new Uint8Array(await resumed.blob.arrayBuffer()) : null;
-  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback, from });
+  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback: fallback ?? note, from });
   clearShots();
   for (const shot of before) {
     emit('shot', { video: opened, shot });
@@ -460,7 +478,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   estimate = estimateText(opened, workers, threads, frames);
   estimated = estimateSeconds(opened, workers, threads, frames);
   const doing = fallback ? `${fallback} ${resumed ? 'Resuming' : 'Detecting again'} with one worker`
-    : resumed ? `Resuming ${resumedFrom()}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
+    : note ? `${note} Detecting with one worker` : resumed ? `Resuming ${resumedFrom()}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
   say(`${doing} · about ${duration(estimated)} for ${count(frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
@@ -477,7 +495,8 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
     if (resumed && e.message?.startsWith(NOT_RESUMED) && state !== 'stopping') {
       running = null;
       forget();
-      return go(run, await ranges(opened), null, null, e.message);
+      const { plan: again, note: why } = await planFor(run);
+      return go(run, again, null, null, e.message, why);
     }
     if (!plan || state === 'stopping' || e.name === 'AbortError') throw e;
     running = null;
@@ -596,6 +615,7 @@ function setForm(run) {
   minLength.value = run.minSceneLength ?? DEFAULT_MIN_LENGTH;
   windowInput.value = run.frameWindow ?? DEFAULT_WINDOW;
   minContent.value = run.minContentVal ?? DEFAULT_MIN_CONTENT;
+  deinterlace.value = run.deinterlace ?? 'off';
 }
 
 // A run on one worker: Api's Detect's JSON, with threads (how many the decoder had). On threads where the page can
@@ -864,6 +884,8 @@ function options() {
     run.frameWindow = w === '' || Number(w) === DEFAULT_WINDOW ? null : Number(w);
     run.minContentVal = c === '' || Number(c) === DEFAULT_MIN_CONTENT ? null : Number(c);
   }
+  // Off, ShotDetector's default, as none.
+  if (deinterlace.value !== 'off') run.deinterlace = deinterlace.value;
   return run;
 }
 
@@ -933,7 +955,7 @@ function show(r, seconds, workers, threads, restored = null) {
       'browser (IndexedDB) until the run is finished, another one is stopped, or Forget',
   } : {
     text: r.stopped
-      ? `Stopped at ${at}, after ${seconds.toFixed(1)} s (${rate}): Resume goes on from there`
+      ? `Stopped at ${at}, after ${seconds.toFixed(1)} s (${rate}): ${wholeRun ? NOT_KEPT : 'Resume goes on from there'}`
       : `Done in ${seconds.toFixed(1)} s, ${rate} (${(ranSeconds / seconds).toFixed(1)} times real time)` +
         `${resumeFrom > 0 || resumeAt > 0 ? `, resumed ${resumedFrom()}` : ''}`,
     title: `${count(ran)} frames, ${ranSeconds.toFixed(3)} s of video, in ${seconds.toFixed(3)} s` +

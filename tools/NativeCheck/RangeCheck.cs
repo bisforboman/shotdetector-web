@@ -3,7 +3,7 @@ using ShotDetector;
 namespace ShotDetectorWeb.Checks;
 
 /// <summary>
-/// The range check (README, "Checks"): for each sample, the run with every detector (<see cref="Runs.All"/>' last) split
+/// The range check (README, "Checks"): for each sample, the run with every detector (<see cref="Runs.Every"/>) split
 /// into ranges at keyframes as the page splits a long video across workers (<see cref="VideoInput.Ranges"/>, at most 4),
 /// each range scored on its own (<see cref="VideoInput.ScoreRangeAsync"/>), carried as bytes and merged
 /// (<see cref="VideoInput.Merge"/>): the scene and stats CSVs must be the whole run's, which the main check wrote to the
@@ -18,7 +18,7 @@ internal static class RangeCheck
     public static int Run(IEnumerable<string> samples, string outDir)
     {
         int failures = 0;
-        var (run, options) = Runs.All[^1];
+        var (run, options) = Runs.Every;
         Console.WriteLine();
         Console.WriteLine($"| Sample | Ranges ({run}) | Shown frames | Against the whole run |");
         Console.WriteLine("| --- | --- | --- | --- |");

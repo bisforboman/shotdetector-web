@@ -165,13 +165,29 @@ public abstract partial class VideoInput
                     throw new UnsupportedVideoException($"A frame came out as {frame.Format}: only 8-bit 4:2:0 is supported so far.");
                 if ((frame.Width, frame.Height) != (Video.Width, Video.Height))
                     throw new UnsupportedVideoException($"The frame size changes ({Video.Width}x{Video.Height} to {frame.Width}x{frame.Height}): not supported.");
+                if (frame.IsCodedAsFields)
+                    throw new UnsupportedVideoException(FieldPictures);
                 var p = frame.Planes;
                 var o = frame.Offsets;
                 var s = frame.Strides;
-                yield return (new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2]) { Pts = frame.Pts }, frame.PictureType);
+                // FFmpeg's interlaced_frame and top_field_first, which set yadif's parity when the run deinterlaces.
+                var yuv = new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2])
+                {
+                    Pts = frame.Pts,
+                    Interlaced = frame.IsInterlaced,
+                    TopFieldFirst = frame.IsTopFieldFirst,
+                };
+                yield return (yuv, frame.PictureType);
             }
         }
     }
+
+    /// <summary>
+    /// Why a frame coded as two field pictures (PAFF) is refused: no encoder at hand makes a sample to check it on
+    /// (decision 2026-10-30-interlaced.md), and ManagedCodecs says which frames they are (<c>VideoFrame.IsCodedAsFields</c>).
+    /// </summary>
+    private protected const string FieldPictures =
+        "The video is interlaced coded as field pictures (PAFF): not supported yet (only MBAFF frames, which have a sample to check them on).";
 
     /// <summary>
     /// The frames decoded from video packet <paramref name="fromPacket"/> on (decode order; a keyframe, for a decoder that

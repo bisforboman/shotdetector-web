@@ -48,9 +48,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
   count: `frameCount` is FFmpeg's nb_frames, null when fragmented) and `audio`: `{ codec, sampleRate,
   channels }` from `VideoInput.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
-  frameWindow, minContentVal }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
+  frameWindow, minContentVal, deinterlace }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
   rate, duration, `stopped` and `warnings` as JSON; one range from frame 0 scored with `OnShot` and merged without it,
-  `Detect`'s result byte for byte, so that a stopped run leaves scores, pausing every 8 frames, `PauseEvery`),
+  `Detect`'s result byte for byte, so that a stopped run leaves scores, pausing every 8 frames, `PauseEvery`; a run
+  that deinterlaces, `VideoInput.Deinterlaces`, Detect's frames whole instead, keeping no scores: ShotDetector's ranges
+  refuse yadif, shotdetector#628),
   `Stop()` (the run's frames end at its next pause: the result for the frames read, `stopped` true) and `Cancel()` (the
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
@@ -166,7 +168,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
   types a run keeps vs ffprobe's `frame=pict_type` (its first field only: its csv adds x264's SEI to the first
   frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
-  app-check.mjs compares `FrameTypes()` with); `AudioStreamCheck.cs`: `VideoInput.Audio`
+  app-check.mjs compares `FrameTypes()` with); `FieldCheck.cs`: each frame's `YuvFrame.Interlaced` and `TopFieldFirst`
+  vs ffprobe's `frame=interlaced_frame,top_field_first`; `AudioStreamCheck.cs`: `VideoInput.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
   stopped half-way, vs one thread; `ResumeCheck.cs`: the default and all-detector runs on one range stopped twice and
@@ -243,7 +246,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
   shown packets' pts sorted, given where the frames leave the average rate's grid), upright or a quarter turn (`YuvVideo.Rotation`, the
   display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
-  as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); 4:2:0 MJPEG in AVI
+  as MBAFF frames (`YuvVideo.FieldOrder` and each frame's flags from ManagedCodecs, deinterlaced by FastYuv's `Yadif` when
+  the run asks, on one worker; field pictures refused: no sample); 4:2:0 MJPEG in AVI
   (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
   constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it, and its real-world file in `tools/realworld.sh` moved from "refused"

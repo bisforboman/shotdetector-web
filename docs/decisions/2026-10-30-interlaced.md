@@ -92,3 +92,11 @@ The owner's answers, 2026-10-30:
    stay unchecked: no encoder here makes a sample, and nothing tells them apart without ManagedCodecs#225 (JM's MP4s,
    one field a sample, stop at ShotDetector's constant-rate check). Deinterlacing, the field order and field pictures
    are the backlog's "Deinterlacing interlaced H.264" row, waiting on both issues.
+
+## Afterwards
+
+ShotDetector 3.23.0 (shotdetector#614, #619) and ManagedCodecs 0.4.0 (#225) shipped what the choices above waited on,
+and the backlog row "Deinterlacing interlaced H.264" took them on 2026-10-31: `Mp4Input` describes the field order
+(`H264Decoder.FieldOrder`) and each frame's flags, the page's Deinterlace option (off, auto, on) runs FastYuv's yadif on
+one worker (ShotDetector's ranges still refuse it, shotdetector#628), and frames coded as field pictures are refused
+by ManagedCodecs' `IsCodedAsFields`, still without a sample.
