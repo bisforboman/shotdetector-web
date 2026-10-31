@@ -37,8 +37,11 @@
 // The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
 // check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
 // whole run's; a stopped run's the whole run's first frames, as many as its result read.
-//   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4|.avi>... [--reject <file>...]
-//     [--no-aac <file>...] [--native <the native check's out dir>]
+// --light (tools/realworld.sh, for a real file over three minutes; the owner's choice, 2026-10-31): only the runs split
+// (SPLIT_RUNS: the default and every detector), each whole and split into ranges; no cancel, stop, pause or resume, and
+// no merges or resumes meant to fail, which the generated samples cover and which don't depend on the file.
+//   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4|.mov|.avi>... [--reject <file>...]
+//     [--no-aac <file>...] [--native <the native check's out dir>] [--light]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { basename, extname, join, resolve } from 'node:path';
@@ -68,9 +71,10 @@ const NOT_RESUMED = 'The stopped run didn\'t resume: ';
 
 const [wwwroot, outDir, ...rest] = process.argv.slice(2);
 const lists = { samples: [], '--reject': [], '--no-aac': [], '--native': [] };
-let list = lists.samples;
+let list = lists.samples, light = false;
 for (const arg of rest) {
-  if (arg in lists) list = lists[arg];
+  if (arg === '--light') light = true;
+  else if (arg in lists) list = lists[arg];
   else list.push(arg);
 }
 const { samples, '--reject': rejects, '--no-aac': noAac, '--native': [nativeDir] } = lists;
@@ -162,8 +166,8 @@ for (const [i, sample] of samples.entries()) {
   fileName = basename(sample);
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frames} frames, ${video.duration} s`);
   // Once: a run cancelled half-way fails as cancelled, keeps no result, and the next run goes on as if it hadn't been.
-  if (i === 0) await checkCancel(sample, video);
-  for (const [run, options] of Object.entries(RUNS)) {
+  if (i === 0 && !light) await checkCancel(sample, video);
+  for (const [run, options] of Object.entries(RUNS).filter(([run]) => !light || SPLIT_RUNS.includes(run))) {
     progress = [];
     told = [];
     toldAt = [];
@@ -205,13 +209,15 @@ for (const [i, sample] of samples.entries()) {
       wholePicture = checkPicture(sample, result);
       wholeTypes = checkFrameTypes(sample, result);
     }
-    await checkStop(sample, video, run, options, result, statsCsv);
-    if (run === 'adaptive') await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
+    if (!light) await checkStop(sample, video, run, options, result, statsCsv);
+    if (run === 'adaptive' && !light) await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
-    if (SPLIT_RUNS.includes(run)) await checkResume(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
+    if (SPLIT_RUNS.includes(run) && !light) await checkResume(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
   }
-  await checkNotResumed(sample);
-  await checkNotMerged(sample);
+  if (!light) {
+    await checkNotResumed(sample);
+    await checkNotMerged(sample);
+  }
   checkAudio(sample, video);
   checkPackets(sample);
 }
@@ -219,7 +225,7 @@ for (const [i, sample] of samples.entries()) {
 // Detect's pauses against the runs' time: the pauses must cost under 1% of it (Api's PauseEvery).
 const share = pauseSeconds / runSeconds;
 console.error(`Pauses: ${(pauseSeconds * 1000).toFixed(0)} ms of ${runSeconds.toFixed(1)} s of runs, ${(share * 100).toFixed(2)}%`);
-if (!(share < 0.01)) fail(`Detect's pauses took ${(share * 100).toFixed(2)}% of the runs' time, not under 1%`);
+if (runSeconds > 0 && !(share < 0.01)) fail(`Detect's pauses took ${(share * 100).toFixed(2)}% of the runs' time, not under 1%`);
 
 for (const file of noAac) {
   // Open names the codec as ffprobe does (make-samples.sh: mp3.mp4, opus.mp4, and aac-main.mp4, AAC its decoder refuses).
@@ -400,6 +406,13 @@ function checkAudio(sample, video) {
     if (audio.notMeasured !== `The audio is '${video.audio.codec}' in an AVI file: only AAC in MP4 is measured.` || w !== null)
       fail(`${name}: an AVI's audio, but ${JSON.stringify(audio).slice(0, 200)}`);
     console.error(`${name}: ${video.audio.codec} in AVI, not measured: ${audio.notMeasured}`);
+    return;
+  }
+  if (track === null && video.audio !== null && video.audio.codec !== 'aac') {
+    // Audio that isn't AAC (Tears of Steel's MP3, the real-world check) is described by Open, not measured: a reason.
+    if (typeof audio.notMeasured !== 'string' || w !== null)
+      fail(`${name}: ${video.audio.codec} audio, but ${JSON.stringify(audio).slice(0, 200)}`);
+    console.error(`${name}: ${video.audio.codec}, not measured: ${audio.notMeasured}`);
     return;
   }
   if (track === null) {

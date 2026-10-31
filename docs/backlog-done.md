@@ -1052,3 +1052,27 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Not: YouTube chapters, marker lists or the public launch (parked in the note); no path field (the editor relinks).
   - Status: Done (2026-10-31: the six files identical to the FFmpeg path's on every sample and run natively, 1330 of
     1330 files on wasm interpreted, and the page's 60 downloads the native run's; AOT in CI)
+
+- Real-world check: the core and the page on real files
+  - Why: the generated samples each isolate one thing, and real files mix them: long camera and broadcast-like H.264,
+    phone videos (rotation, a variable rate), fragmented and interlaced material, AAC audio, and old encoders' quirks.
+    Results must equal ShotDetector's FFmpeg path byte for byte on them too, as NativeCheck and app-check do on the
+    samples (the owner's choice, 2026-10-31; shotdetector's own is its `realworld.yml` and `tools/realworld.py`).
+  - Where: `tools/realworld.sh` (the files, pinned by SHA-256: Blender Foundation films, CC-BY, from
+    download.blender.org, the one host the cloud sandbox reaches, and variants of them the pinned FFmpeg makes:
+    fragmented, rotated, 1080i25 MBAFF), `.github/workflows/realworld.yml` (nightly and by hand, never on a pull
+    request, not required: the owner's choice, 2026-10-31), `tools/app-check.mjs --light` (the AOT bundle's default
+    and every-detector runs, whole and split, on files over three minutes), `tools/ci-scope.sh` (the two new files
+    need no pull-request check).
+  - Done when: realworld.yml's groups pass, or what they find is a row here or an ask upstream; README "Checks" says
+    what it runs.
+  - Not: no file in the repository, none that isn't openly licensed; no change to shotdetector.
+  - Status: Done (2026-10-31: run here before the nightly's first run. Byte for byte natively and AOT under Node:
+    Sintel's 720p trailer and its rotated variant (rotation landed with #83 while this row was open, so it moved from
+    refused to same), and Caminandes as 1080i25 MBAFF. Natively all agree on Big Buck Bunny, once `Mp4Audio` was
+    fixed (fixed here: with no edit list the audio starts at the first packet that decodes to samples, as FFmpeg's
+    first frame). Natively all agree on Tears of Steel's detector runs, packets, frame types, ranges, threads and
+    resume, its MP3 now answered with a reason. Caminandes fragmented: description, every run and packets the same,
+    the rest still running when the row closed. Elephants Dream is refused as a variable rate, really one (its 'stts'
+    mixes 1/24 and 2/24 s frames), for the VFR row. Caminandes' own first pts differs (ManagedCodecs#252, a row in
+    Waiting), its CSVs and shots identical. Real phone and broadcast files: a row in Maybe.)

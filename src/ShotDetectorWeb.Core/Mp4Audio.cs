@@ -63,16 +63,6 @@ public static class Mp4Audio
             if (firstDuration == 0)
                 firstDuration = packet.Duration;
 
-            // The audio starts at its first shown packet's pts plus the samples its edit list (or an iTunSMPB tag) skips,
-            // as FFmpeg's start_time, and as Mp4Input's format duration reads it.
-            if (start is null && !packet.Discard)
-            {
-                long skip = packet.SkipSamples;
-                if (info.SampleRate > 0 && info.SampleRate != info.TimeBase.Denominator)
-                    skip = skip * info.TimeBase.Denominator / info.SampleRate;
-                start = Seconds(packet.Pts + skip, info.TimeBase);
-            }
-
             AudioFrame frame;
             try
             {
@@ -85,6 +75,18 @@ public static class Mp4Audio
 
             if (frame.SampleCount == 0)
                 continue;
+
+            // The audio starts at the pts of the first shown packet that decodes to samples, plus the samples its edit
+            // list (or an iTunSMPB tag) skips: FFmpeg's first decoded frame's time, which its filters count from. With
+            // an edit list that is its start_time; without one (Big Buck Bunny's 2008 MP4, the real-world check) the
+            // decoder's first packet gives no samples, in FFmpeg too, and the audio starts at the second's pts.
+            if (start is null && !packet.Discard)
+            {
+                long skip = packet.SkipSamples;
+                if (info.SampleRate > 0 && info.SampleRate != info.TimeBase.Denominator)
+                    skip = skip * info.TimeBase.Denominator / info.SampleRate;
+                start = Seconds(packet.Pts + skip, info.TimeBase);
+            }
             if (measurer is null)
             {
                 // The waveform's points: about WaveformPoints of them over the track's length (its packets times the
