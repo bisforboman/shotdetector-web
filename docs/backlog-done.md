@@ -1178,3 +1178,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-31: natively every check agrees on every sample, the CSVs, JSON and HTML unchanged;
     size-change.mp4 refused by its run, "The frame size changes (320x240 to 352x288): not supported.". Each frame's
     own colour tags are a gap: ManagedCodecs' frames carry none, backlog "Each frame's own colour tags")
+
+- FrameReader's `LoudnessMeter` in place of the page's own meter
+  - Why: FrameReader 2.18.0's `LoudnessMeter` (shotdetector#646) measures EBU R128 loudness of samples decoded by the
+    caller with ebur128's own arithmetic and nothing of FFmpeg, so it runs in the browser; the page's `Loudness.cs` was
+    a second implementation of the same thing (the owner's choice, 2026-10-31: adopted after the 3.24.0 bump).
+  - Where: `Mp4Audio`'s measurer (the interleaved samples it already builds for FrameReader's waveform), the channel
+    weights in ManagedCodecs' AAC order; `Loudness.cs` deleted, its `Loudness` record kept in `Mp4Audio.cs` so the page's
+    `loudness` JSON keeps its shape.
+  - Done when: `AudioCheck.cs` passes against ebur128 within its tolerances, and the page's JSON is unchanged in shape.
+  - Status: Done (2026-10-31: STATUS)

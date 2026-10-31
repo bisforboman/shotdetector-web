@@ -34,7 +34,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by the input's
   walk when it opens a file; an AVI's `Offsets` too, where each chunk's data, a JPEG, starts in the file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
   `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
-  `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
+  FrameReader's `LoudnessMeter` (loudness and each channel's peaks, ebur128's arithmetic; the page's channel weights); `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
   decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
   parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: what FFmpeg's `signalstats`, `blackdetect` and `cropdetect`
   count, and colour bars by their definition, `BarColours`; and each frame's type, ManagedCodecs' `VideoFrame.PictureType`,

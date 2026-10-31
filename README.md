@@ -577,9 +577,10 @@ One pass over the audio packets with ManagedCodecs' `AacDecoder` (AAC LC and HE-
 into the measures and dropped, so the track is never held; only the audio packets' data is read. The waveform is
 FrameReader's `WaveformBuilder` (BBC audiowaveform's min and max per point, about a thousand points by default), the
 reference tone its `ReferenceToneFinder` (ShotDetector's definition: mostly 1 kHz, steady, at least 5 s), silences as
-FFmpeg's `silencedetect` (every channel below -60 dBFS for 2 s or more), peaks per channel with how many samples reach
-full scale, and loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, loudness range in LU, true peak in dBTP
-from the signal oversampled 4 times). Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
+FFmpeg's `silencedetect` (every channel below -60 dBFS for 2 s or more), and FrameReader's `LoudnessMeter` (2.18.0,
+shotdetector#646: ebur128's arithmetic without FFmpeg) for the peaks per channel with how many samples reach full scale
+and the loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, loudness range in LU, true peak in dBTP from the
+signal oversampled 4 times, BS.1770-4 Annex 2), given the channel weights of ManagedCodecs' AAC channel order. Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
 pass takes about 0.6 s natively. Checked against FFmpeg within tolerances (Checks, audio).
 
 On the page it is `Api.Audio()`, called in a worker of its own alongside a file's first run ("Running the page";
@@ -660,7 +661,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   to `out/native-report.md`, (a)'s CSVs, JSON and HTML to `out/native/`.
 - **audio** (`tools/NativeCheck/AudioCheck.cs`, part of native): for each sample with audio, the core's `Mp4Audio`
   (ManagedCodecs' AAC decoder, no FFmpeg) against FFmpeg's measures of the same file. These are **tolerances, not
-  byte-exact**: the decoded samples are within 3e-7 of FFmpeg's, not equal, and the measures are computed by other code.
+  byte-exact**: the decoded samples are within 3e-7 of FFmpeg's, not equal, and the measures are computed by other code (the loudness by ebur128's own arithmetic in FrameReader's `LoudnessMeter`,
+  so on the same samples it would be the same doubles; the true peak by BS.1770-4 Annex 2, ebur128's by resampling).
   The waveform against FrameReader's `WaveformData.Read` (FFmpeg decoding, the same points): each value within 1 (of
   32767); the reference tone against ShotDetector's `FindReferenceTone`: the same segments, each end within a packet,
   the level within 0.1 dB; silences against `silencedetect` at its default 2 s and at 1 s: the same spans, each end
