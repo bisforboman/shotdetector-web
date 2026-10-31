@@ -99,7 +99,14 @@ which app-check.mjs checks against Directory.Packages.props' pins). At phone wid
 order. The scenes and stats CSVs
 (`<file>.scenes.csv`, `<file>.stats.csv`, the file's name without its extension) are the ones scenedetect writes; the
 shots as JSON and HTML beside them (`<file>.shots.json`, ShotDetector's `Shots.Json`; `<file>.shots.html`, scenedetect's
-save-html page, `Shots.Html`, without images) are ShotDetector's, and checked as the CSVs are. A file
+save-html page, `Shots.Html`, without images) are ShotDetector's, and checked as the CSVs are. For editors, the
+card also offers the shots in scenedetect's timeline formats (`Api.TimelineFile`, ShotDetector's `Timeline` with its
+defaults through the core's `TimelineFiles`): `<file>.edl` (save-edl, CMX 3600), `<file>.fcpxml` (save-fcp, FCPXML
+1.9), `<file>.fcp7.xml` (save-fcp `--format fcp7`), `<file>.otio` (save-otio), `<file>.qp` (save-qp) and
+`<file>.keyframes.txt` (save-keyframes, Aegisub's keyframes), checked as the
+CSVs are. The browser never learns the picked file's folder, so they are given its name at the root (`/<name>`): the
+XMLs' and the OTIO's media path is `file:///<name>` or `/<name>`, which the editor relinks to the file where it is
+(scenedetect writes the absolute path it was given; the same string on the FFmpeg path gives the same bytes). A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -611,8 +618,10 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   of the file (FrameReader's probe and first decoded frame, as ShotDetector's own FrameInputTests builds it), field by
   field; then each detector (adaptive, content, threshold, histogram, hash, and all five in one run, with stats) on
   (a) the core library and (b) ShotDetector's `Detect(path)` with FFmpeg in-process and the same FastYuv converter:
-  frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV and the shots as JSON and HTML
-  (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) must be equal. It also
+  frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV, the shots as JSON and HTML
+  (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) and the editors' timeline files
+  (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes, both results given the sample's name) must
+  be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
@@ -661,8 +670,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   browser-wasm, called through the exports the page's worker calls (`Open`, `Detect`), on the same samples and runs,
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
   gives Node the `FileReaderSync` it lacks);
-  its CSVs and its shots as JSON and HTML (`ShotsJson`, `ShotsHtml`) written to `out/wasm/` and compared with
-  `out/native/` file for file (none missing, none extra), the JSON's shots `Detect`'s. It also
+  its CSVs, its shots as JSON and HTML (`ShotsJson`, `ShotsHtml`) and its timeline files (`TimelineFile`) written to
+  `out/wasm/` and compared with `out/native/` file for file (none missing, none extra), the JSON's shots `Detect`'s;
+  a run paused, split or resumed gives the whole run's timeline files too. It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
   to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
   the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), its JSON and HTML its own
@@ -720,8 +730,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   at 40% and resumed in the same visit, the rest split again; and in Firefox, on the page's worker (`?threads=0`), the
   demo stopped at 30%, the page reloaded, shown again and resumed (`PAGE_CHECK_FIREFOX=skip` leaves Firefox out, where
   Playwright can't download it: a cloud session). Each whole run must end `done`, its scenes and
-  stats CSVs and its shots as JSON and HTML, downloaded from the run's card as a visitor clicks them (`out/page/`),
-  must equal the native check's run of the detector picked byte for byte, the shots table must have a row per shot of
+  stats CSVs, its shots as JSON and HTML and its timeline files, downloaded from the run's card as a visitor clicks
+  them (`out/page/`), must equal the native check's run of the detector picked byte for byte (the timeline files but
+  for the file's name, the demo's `sintel-trailer`, the sample's `sintel_trailer-480p`), the shots table must have a row per shot of
   the CSV, and the picture's card must show the native check's cropdetect crop and colour bars with its lane drawn; the
   demo's sound must be measured. The stopped run must end `stopped` at
   the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held
