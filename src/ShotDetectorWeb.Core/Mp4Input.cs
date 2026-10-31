@@ -14,7 +14,8 @@ namespace ShotDetectorWeb;
 /// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant or variable frame rate (every frame's pts given
 /// up front, <see cref="YuvVideo.FrameTimestamps"/>, where the rate varies), upright or turned by
 /// a quarter turn (<see cref="YuvVideo.Rotation"/>, the frames as decoded): progressive, or
-/// interlaced coded as MBAFF frames (the frames as decoded, woven: deinterlacing waits on ShotDetector#614); anything else
+/// interlaced coded as MBAFF frames (its field order and each frame's flags described, for ShotDetector's
+/// <see cref="DetectionOptions.Deinterlace"/>; frames coded as field pictures refused); anything else
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
 /// <see cref="InvalidDataException"/>.
 /// </remarks>
@@ -54,7 +55,7 @@ public sealed class Mp4Input : VideoInput
 
         // The first frame's size (after the SPS's cropping) and timestamp: in display order, the smallest pts, which is
         // the stream's start (FFmpeg's start_time for an MP4 video track, edit list applied).
-        var (width, height, firstPts) = FirstFrame(demuxer);
+        var (width, height, firstPts, fieldOrder) = FirstFrame(demuxer);
 
         // The audio track as FFmpeg's demuxer describes it: its codec's name from the headers, the rate and channels the
         // demuxer read from the sample entry (an AAC track's from its AudioSpecificConfig). Nothing is decoded.
@@ -103,6 +104,7 @@ public sealed class Mp4Input : VideoInput
             FrameCount = header.SampleCount > 0 ? header.SampleCount : null,
             Duration = DurationOf(duration),
             Rotation = rotation,
+            FieldOrder = fieldOrder,
             FrameTimestamps = VariableRate(Packets, firstPts, timeBase, fps),
             Codec = "h264",
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
@@ -138,12 +140,22 @@ public sealed class Mp4Input : VideoInput
     /// </summary>
     public static new Mp4Input Open(Func<Stream> open) => new(open);
 
-    static (int Width, int Height, long Pts) FirstFrame(Mp4Demuxer demuxer)
+    /// <summary>
+    /// The first frame's size and pts, and the stream's field order as ffprobe prints it (ManagedCodecs'
+    /// <see cref="H264Decoder.FieldOrder"/>: FFmpeg's parser's for the first picture decoded), which ShotDetector's
+    /// <see cref="DeinterlaceMode.Auto"/> goes by. A first frame coded as field pictures is refused.
+    /// </summary>
+    static (int Width, int Height, long Pts, FrameReader.FieldOrder FieldOrder) FirstFrame(Mp4Demuxer demuxer)
     {
-        foreach (var frame in DecodedFrames(demuxer))
+        H264Decoder? decoder = null;
+        foreach (var frame in DecodedFrames(demuxer, created: d => decoder = d))
         {
             using (frame)
-                return (frame.Width, frame.Height, frame.Pts);
+            {
+                if (frame.IsCodedAsFields)
+                    throw new UnsupportedVideoException(FieldPictures);
+                return (frame.Width, frame.Height, frame.Pts, FieldOrderOf(decoder!.FieldOrder));
+            }
         }
 
         throw new UnsupportedVideoException("The video track decodes to no frames.");
@@ -235,11 +247,23 @@ public sealed class Mp4Input : VideoInput
             yield return frame;
     }
 
+    /// <summary>FFmpeg's field order (ManagedCodecs' has AVFieldOrder's values) as FrameReader's, which ShotDetector takes.</summary>
+    static FrameReader.FieldOrder FieldOrderOf(ManagedCodecs.FieldOrder order) => order switch
+    {
+        ManagedCodecs.FieldOrder.Progressive => FrameReader.FieldOrder.Progressive,
+        ManagedCodecs.FieldOrder.TT => FrameReader.FieldOrder.TopFirst,
+        ManagedCodecs.FieldOrder.BB => FrameReader.FieldOrder.BottomFirst,
+        ManagedCodecs.FieldOrder.TB => FrameReader.FieldOrder.TopCodedBottomFirst,
+        ManagedCodecs.FieldOrder.BT => FrameReader.FieldOrder.BottomCodedTopFirst,
+        _ => FrameReader.FieldOrder.Unknown,
+    };
+
     static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer, int fromPacket = 0, TimingOnlyStream? skipping = null,
-        int threads = 1)
+        int threads = 1, Action<H264Decoder>? created = null)
     {
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The MP4 file has no video track.");
         var decoder = new H264Decoder(info) { Threads = threads };
+        created?.Invoke(decoder);
         bool flushed = false;
         try
         {
