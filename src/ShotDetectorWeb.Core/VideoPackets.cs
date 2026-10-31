@@ -61,20 +61,26 @@ public sealed class VideoPackets
         PacketFlags[] _flags = new PacketFlags[capacity];
         int _count;
 
-        public void Add(in ManagedCodecs.Packet packet)
+        public void Add(in ManagedCodecs.Packet packet) =>
+            Add(packet.Pts, packet.Data.Length, packet.IsKeyframe, packet.Discard);
+
+        public void Add(in ManagedCodecs.PacketInfo packet) =>
+            Add(packet.Pts, packet.Size, packet.IsKeyframe, packet.Discard);
+
+        void Add(long pts, int size, bool keyframe, bool discard)
         {
             // An edit list can repeat samples (several edits) beyond the sample count.
             if (_count == _pts.Length)
             {
-                int size = Math.Max(4, _count * 2);
-                Array.Resize(ref _pts, size);
-                Array.Resize(ref _sizes, size);
-                Array.Resize(ref _flags, size);
+                int capacity = Math.Max(4, _count * 2);
+                Array.Resize(ref _pts, capacity);
+                Array.Resize(ref _sizes, capacity);
+                Array.Resize(ref _flags, capacity);
             }
 
-            _pts[_count] = packet.Pts;
-            _sizes[_count] = packet.Data.Length;
-            _flags[_count] = (packet.IsKeyframe ? PacketFlags.Keyframe : 0) | (packet.Discard ? PacketFlags.Discard : 0);
+            _pts[_count] = pts;
+            _sizes[_count] = size;
+            _flags[_count] = (keyframe ? PacketFlags.Keyframe : 0) | (discard ? PacketFlags.Discard : 0);
             _count++;
         }
 

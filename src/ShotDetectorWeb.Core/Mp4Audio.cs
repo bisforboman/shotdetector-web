@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using FrameReader;
 using ManagedCodecs;
 using ManagedCodecs.Aac;
@@ -39,8 +38,8 @@ public static class Mp4Audio
                 : AudioMeasures.Without("The file has no audio track.");
         }
 
-        var reader = new AudioDataStream(stream);
-        using var demuxer = new Mp4Demuxer(reader, leaveOpen: true);
+        // The audio track alone: the video's samples are neither indexed nor read.
+        using var demuxer = new Mp4Demuxer(stream, MediaTypes.Audio, leaveOpen: true);
         if (demuxer.Audio is not { } info)
             return AudioMeasures.Without("The file has no audio track.");
         if (info.Codec != CodecIds.Aac)
@@ -55,17 +54,12 @@ public static class Mp4Audio
             return AudioMeasures.Without($"ManagedCodecs' AAC decoder can't decode this audio: {e.Message}");
         }
 
-        // From here on only the audio packets' data is read (the video's would be read just to be dropped).
-        reader.SkipReads = true;
         Measurer? measurer = null;
         TimeSpan? start = null;
         long firstDuration = 0;
-        foreach (var read in demuxer.ReadPackets())
+        foreach (var packet in demuxer.ReadPackets())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (read.StreamIndex != info.StreamIndex)
-                continue;
-            var packet = reader.Fill(read);
             if (firstDuration == 0)
                 firstDuration = packet.Duration;
 
@@ -334,75 +328,4 @@ internal sealed class SilenceFinder(int sampleRate, int channels, AudioOptions o
     }
 
     TimeSpan Time(long sample) => TimeSpan.FromTicks(sample * TimeSpan.TicksPerSecond / sampleRate);
-}
-
-/// <summary>
-/// A stream whose reads, once <see cref="SkipReads"/> is set, read nothing (as Mp4Input's TimingOnlyStream), until
-/// <see cref="Fill"/> reads the packet just handed out. ManagedCodecs' MP4 demuxer reads each sample (seeking to it,
-/// then reading it whole) just before it hands out its packet, so the audio's data is read and the video's never is.
-/// (ManagedCodecs reading only the tracks asked for would make this unnecessary: backlog, "the MP4 index without its
-/// copies".)
-/// </summary>
-internal sealed class AudioDataStream(Stream inner) : Stream
-{
-    long _seek = -1;
-    long _skipped;
-
-    public bool SkipReads { get; set; }
-
-    public override bool CanRead => true;
-    public override bool CanSeek => true;
-    public override bool CanWrite => false;
-    public override long Length => inner.Length;
-
-    public override long Position
-    {
-        get => inner.Position;
-        set
-        {
-            inner.Position = value;
-            _seek = value;
-            _skipped = 0;
-        }
-    }
-
-    /// <summary>The packet just read, its data read from the file now (into its own buffer, which the read skipped).</summary>
-    public Packet Fill(Packet packet)
-    {
-        if (_seek < 0 || _skipped != packet.Data.Length)
-            throw new InvalidOperationException("ManagedCodecs' MP4 demuxer no longer reads a packet just before handing it out: Mp4Audio can't skip the video's data.");
-        long position = inner.Position;
-        inner.Position = _seek;
-        inner.ReadExactly(MemoryMarshal.AsMemory(packet.Data).Span);
-        inner.Position = position;
-        return packet;
-    }
-
-    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
-
-    public override int Read(Span<byte> buffer)
-    {
-        if (!SkipReads)
-            return inner.Read(buffer);
-        int n = (int)Math.Clamp(Length - Position, 0, buffer.Length);
-        inner.Position += n;
-        _skipped += n;
-        return n;
-    }
-
-    public override long Seek(long offset, SeekOrigin origin)
-    {
-        long position = inner.Seek(offset, origin);
-        _seek = position;
-        _skipped = 0;
-        return position;
-    }
-
-    public override void Flush()
-    {
-    }
-
-    public override void SetLength(long value) => throw new NotSupportedException();
-
-    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }

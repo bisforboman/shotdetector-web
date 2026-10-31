@@ -28,7 +28,7 @@ public sealed class Mp4Input : VideoInput
     Mp4Input(Func<Stream> open)
         : base(open)
     {
-        using var stream = new TimingOnlyStream(open());
+        using var stream = open();
         var header = Mp4Header.Read(stream);
         if (header.SampleEntry is not ("avc1" or "avc3"))
             throw new UnsupportedVideoException($"The video is '{header.SampleEntry}', not H.264 ('avc1'): only H.264 is supported so far.");
@@ -48,9 +48,9 @@ public sealed class Mp4Input : VideoInput
             throw new UnsupportedVideoException($"The video is {chroma} at {sps.BitDepthLuma} bits: only 8-bit 4:2:0 is supported so far.");
         }
 
-        // One demuxer for the first frame and the format's duration: building its sample index allocates about 77 bytes
-        // a sample and keeps 29 (ManagedCodecs 0.1.0), which the browser's heap keeps once it has grown (README, "What the
-        // heap holds").
+        // One demuxer for the first frame, the audio's description and the format's duration, which needs both tracks:
+        // building its sample index allocates about 77 bytes a sample and keeps 29 (ManagedCodecs 0.1.0), which the
+        // browser's heap keeps once it has grown (README, "What the heap holds").
         using var demuxer = new Mp4Demuxer(stream, leaveOpen: true);
 
         // The first frame's size (after the SPS's cropping) and timestamp: in display order, the smallest pts, which is
@@ -62,9 +62,9 @@ public sealed class Mp4Input : VideoInput
         if (demuxer.Audio is { } audio)
             Audio = new AudioStream(header.AudioCodec ?? audio.Codec, audio.SampleRate, audio.Channels);
 
-        // Only the packets' timing and sizes count for the duration and the packet list: from here on the packets' data
-        // is not read (on a film in the browser that would read gigabytes just to throw them away).
-        stream.SkipReads = true;
+        // Only the packets' timing and sizes count for the duration and the packet list: they come from the sample tables,
+        // the packets' data neither read nor allocated (on a film in the browser that would read gigabytes just to throw
+        // them away).
         var timeBase = new FrameReader.Rational(1, checked((int)header.Timescale));
         var packets = new VideoPackets.Builder(timeBase, (int)Math.Min(header.SampleCount, Array.MaxLength));
         var samples = new SampleDurations();
@@ -141,7 +141,7 @@ public sealed class Mp4Input : VideoInput
     static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples)
     {
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
-        foreach (var packet in demuxer.ReadPackets())
+        foreach (var packet in demuxer.ReadPacketInfo())
         {
             if (demuxer.Video is { } video && packet.StreamIndex == video.StreamIndex)
             {
@@ -194,13 +194,14 @@ public sealed class Mp4Input : VideoInput
 
     /// <summary>
     /// The frames decoded from video packet <paramref name="fromPacket"/> on (decode order; a keyframe, for a decoder that
-    /// starts clean there). The packets before it are neither decoded nor read: the demuxer walks them with their data
-    /// skipped, as opening does, and reads from the one before it on.
+    /// starts clean there). Only the video track is indexed and read (the audio's packets never are), and the packets
+    /// before <paramref name="fromPacket"/> are neither decoded nor read: the demuxer walks them with their data skipped,
+    /// and reads from the one before it on.
     /// </summary>
     private protected override IEnumerable<VideoFrame> DecodedFrames(int fromPacket)
     {
         using var stream = new TimingOnlyStream(OpenStream());
-        using var demuxer = new Mp4Demuxer(stream);
+        using var demuxer = new Mp4Demuxer(stream, MediaTypes.Video, leaveOpen: false);
         stream.SkipReads = fromPacket > 0;
         foreach (var frame in DecodedFrames(demuxer, fromPacket, stream, DecoderThreads))
             yield return frame;
