@@ -88,6 +88,15 @@ public static partial class Api
         var go = input.Continue(earlier.Scores);
         var picture = go.Rest is { } planned ? new PictureMeter(input.Video, planned) : null;
         var options = request.ToOptions(new JsProgress(go.Rest?.FirstFrame ?? 0, input.ShownFrames), new JsShots());
+        if (input.Deinterlaces(options))
+        {
+            // Not in ranges (ShotDetector's ScoreRange refuses yadif, which reads the frames on either side of each:
+            // shotdetector#628): Detect's frames whole, so a stopped run keeps nothing to resume from.
+            if (earlier.Scores.Count > 0)
+                throw new ShotDetectionException(ShotDetectionError.InvalidInput, NotSplit);
+            return await Whole(input, options, run);
+        }
+
         DetectionResult result;
         IReadOnlyList<RangeScores> ranges;
         try
@@ -126,6 +135,36 @@ public static partial class Api
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
         return Answered(input, result, ranges,
             PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()));
+    }
+
+    /// <summary>
+    /// Why a deinterlaced run is neither split nor kept to resume, as the page says it: ShotDetector's ranges, which both
+    /// need, refuse deinterlacing.
+    /// </summary>
+    const string NotSplit = "A deinterlaced run can't be split or resumed yet: ShotDetector's ranges can't deinterlace (yadif reads the frames on either side of each; shotdetector#628).";
+
+    /// <summary>
+    /// A deinterlaced run (<see cref="VideoInput.Deinterlaces"/>): the frames whole through ShotDetector's DetectAsync,
+    /// pausing and stopping as a range does, no ranges kept (<see cref="Kept"/> has none to resume from).
+    /// </summary>
+    static async Task<string> Whole(VideoInput input, DetectionOptions options, CancellationTokenSource run)
+    {
+        var picture = new PictureMeter(input.Video);
+        DetectionResult result;
+        try
+        {
+            result = await Host.Run(() => DamagedPrefixed(() => input.DetectAsync(PauseEvery, Between, options, run.Token, picture)));
+        }
+        catch (OperationCanceledException e) when (run.IsCancellationRequested)
+        {
+            throw new RunCancelledException(e);
+        }
+        finally
+        {
+            _run = null;
+        }
+
+        return Answered(input, result, [], picture.Measures);
     }
 
     /// <summary>
@@ -260,6 +299,7 @@ sealed record DetectRequest
     public int? FrameWindow { get; init; }
     public double? MinContentVal { get; init; }
     public IReadOnlyList<DetectorRequest>? Detectors { get; init; }
+    public DeinterlaceMode? Deinterlace { get; init; }
 
     public DetectionOptions ToOptions(IProgress<DetectionProgress> progress, IProgress<Shot>? onShot)
     {
@@ -278,6 +318,8 @@ sealed record DetectRequest
             options = options with { FrameWindow = window };
         if (MinContentVal is { } minContentVal)
             options = options with { MinContentVal = minContentVal };
+        if (Deinterlace is { } deinterlace)
+            options = options with { Deinterlace = deinterlace };
         return options;
     }
 }

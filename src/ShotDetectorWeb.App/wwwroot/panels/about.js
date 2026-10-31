@@ -50,6 +50,8 @@ on('opened', ({ video: v }) => {
     ['Frame rate', v.frameTimestamps ? `Variable, ${Number(rate.toFixed(3))} fps on average` : `${Number(rate.toFixed(3))} fps`,
       `frameRate: ${num}/${den} (FFmpeg's avg_frame_rate)${v.frameTimestamps ? '; frameTimestamps: every frame\'s pts, ' +
         'as the frames are detected at their own times' : ''}`],
+    ['Scan', FIELD_ORDERS[v.fieldOrder]?.[0] ?? v.fieldOrder, `fieldOrder: ${v.fieldOrder} (ffprobe's field_order: ` +
+      `${FIELD_ORDERS[v.fieldOrder]?.[1] ?? '?'}), what Deinterlace auto goes by`],
     ['Pixel format', PIXEL_FORMATS[v.pixelFormat] ?? v.pixelFormat, `pixelFormat: ${v.pixelFormat}`],
     ['Colour space', v.colorSpace === '' ? 'Not tagged' : COLOR_SPACES[v.colorSpace] ?? v.colorSpace, `colorSpace: "${v.colorSpace}"`],
     ['Range', v.fullRange ? 'Full (0–255)' : 'Limited (16–235)', `fullRange: ${v.fullRange}`],
@@ -69,6 +71,16 @@ on('opened', ({ video: v }) => {
     `[${value.length} pts: ${value.slice(0, 4).join(', ')}, …, ${value.at(-1)}]` : value, 2);
   section.hidden = false;
 });
+
+// The stream's field order (FFmpeg's, as ShotDetector's FrameReader names it): in a viewer's words, and ffprobe's.
+const FIELD_ORDERS = {
+  Unknown: ['Not known', 'unknown'],
+  Progressive: ['Progressive', 'progressive'],
+  TopFirst: ['Interlaced, top field first', 'tt'],
+  BottomFirst: ['Interlaced, bottom field first', 'bb'],
+  TopCodedBottomFirst: ['Interlaced, top field coded first, bottom shown first', 'tb'],
+  BottomCodedTopFirst: ['Interlaced, bottom field coded first, top shown first', 'bt'],
+};
 
 // The picture's size as it is shown: a video turned a quarter (its display matrix) the other way up.
 function size(v) {

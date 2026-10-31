@@ -80,6 +80,13 @@
           <input type="number" id="min-content" min="0" step="any" value="15" required
             title="The content_val a frame must reach as well for a cut: scenedetect's min_content_val">
         </label>
+        <label>Deinterlace
+          <select id="deinterlace" title="yadif before detecting, as ShotDetector's --deinterlace: off (scenedetect's, the default), auto (when the video's field order says interlaced) or on (always). A deinterlaced run goes on one worker and can't be resumed yet">
+            <option value="off">off</option>
+            <option value="auto">auto</option>
+            <option value="on">on</option>
+          </select>
+        </label>
       </div>
 
       <div class="actions">
