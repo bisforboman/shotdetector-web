@@ -1,0 +1,57 @@
+# Throwaway (backlog "A first visit downloads the .NET bundle once, not twice"): the page's first visit and revisit
+# measured, main's app.js against the branch's, the AOT bundle served with Pages' headers, in headless Chromium; and the
+# live site. Never on main.
+name: Perf bundle once
+
+on:
+  push:
+    branches: [claude/perf-bundle-once]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: dotnet workload install wasm-tools
+      - working-directory: tools/page-check
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Publish AOT, and the variants
+        run: |
+          lscpu | grep 'Model name'
+          dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -p:RunAOTCompilation=true -o "$RUNNER_TEMP/pub"
+          w=$RUNNER_TEMP/pub/wwwroot
+          for v in before after before-cache after-cache; do cp -r "$w" "$RUNNER_TEMP/$v"; done
+          git show origin/main:src/ShotDetectorWeb.App/wwwroot/app.js > "$RUNNER_TEMP/before/app.js"
+          cp "$RUNNER_TEMP/before/app.js" "$RUNNER_TEMP/before-cache/app.js"
+          for v in before-cache after-cache; do
+            sed -i 's/await dotnet.create()/await dotnet.withConfig({ disableNoCacheFetch: true }).create()/' "$RUNNER_TEMP/$v/worker.js"
+            grep -q disableNoCacheFetch "$RUNNER_TEMP/$v/worker.js"
+          done
+          diff -q "$RUNNER_TEMP/before/app.js" "$RUNNER_TEMP/after/app.js" && exit 1 || true
+          du -sh "$w/_framework"; ls "$w/_framework" | wc -l
+      - name: Measure, local
+        run: |
+          for round in 1 2; do
+            for v in before after; do node tools/page-check/perf.mjs "$RUNNER_TEMP/$v" --runs 5 --label "$v"; done
+          done
+          for d in 0 40; do
+            for v in after after-cache; do node tools/page-check/perf.mjs "$RUNNER_TEMP/$v" --runs 5 --delay $d --label "$v-delay$d"; done
+          done
+      - name: Measure, live
+        run: node tools/page-check/perf.mjs --url https://bisforboman.github.io/shotdetector-web/ --runs 5 --label live
