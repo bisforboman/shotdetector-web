@@ -15,9 +15,11 @@ import { append, blob, parts } from './blob-write.js';
 const THREADED = {
   Open: 'OpenThreaded', Detect: 'Detect', ScenesCsv: 'ScenesCsvThreaded', StatsCsv: 'StatsCsvThreaded',
   ShotsJson: 'ShotsJsonThreaded', ShotsHtml: 'ShotsHtmlThreaded', Picture: 'PictureThreaded',
-  FrameTypes: 'FrameTypesThreaded', TimelineFile: 'TimelineFileThreaded', Resume: 'Resume', Kept: 'KeptThreaded',
+  FrameTypes: 'FrameTypesThreaded', TimelineFile: 'TimelineFileThreaded',
+  YouTubeChapters: 'YouTubeChaptersThreaded', Resume: 'Resume', Kept: 'KeptThreaded',
 };
-export const RESULTS = new Set(['ScenesCsv', 'StatsCsv', 'ShotsJson', 'ShotsHtml', 'Picture', 'FrameTypes', 'TimelineFile', 'Kept']);
+export const RESULTS = new Set(['ScenesCsv', 'StatsCsv', 'ShotsJson', 'ShotsHtml', 'Picture', 'FrameTypes', 'TimelineFile',
+  'YouTubeChapters', 'Kept']);
 
 let api = null;     // the runtime's Api, once started (a promise)
 let current = null; // the runner whose run the runtime's imports report to
