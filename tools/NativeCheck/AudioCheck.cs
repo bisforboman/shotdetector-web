@@ -81,8 +81,10 @@ static class AudioCheck
         if (ours.Track is not { } track)
         {
             cells.Add(ours.NotMeasured ?? "");
-            // An AVI's audio is described (AudioStreamCheck), not measured: a reason, not a measure, is right there.
-            if (hasAudio && !(ours.NotMeasured is not null && Path.GetExtension(sample) == ".avi"))
+            // An AVI's audio is described (AudioStreamCheck), not measured, and so is audio that isn't AAC (Tears of
+            // Steel's MP3, the real-world check): a reason, not a measure, is right there.
+            bool notAac = Probe(libs, sample, "-select_streams", "a:0", "-show_entries", "stream=codec_name").Trim() != "aac";
+            if (hasAudio && !(ours.NotMeasured is not null && (Path.GetExtension(sample) == ".avi" || notAac)))
                 problems.Add("FFmpeg finds an audio stream");
             return;
         }

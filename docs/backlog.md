@@ -90,6 +90,20 @@ below is left.
   - Not: no yadif or slice-header parsing here (CLAUDE.md: report it there, don't work around it).
   - Status: Waiting on upstream (shotdetector#614 and ManagedCodecs#225, filed 2026-10-30)
 
+- The first pts of a track whose edit list starts at 0 (found by the real-world check)
+  - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
+    (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and
+    ManagedCodecs' `Mp4Demuxer` doesn't: the core's `StartPts` is 1000 against FFmpeg's 0, and every packet's pts
+    (`PacketCheck`) is 1000 later than ffprobe's, and so the black spans' times (`PictureCheck`, blackdetect) a frame
+    later than FFmpeg's. The CSVs and the shots' JSON and HTML are still identical, but the description isn't.
+  - Where: upstream, [ManagedCodecs#252](https://github.com/bisforboman/ManagedCodecs/issues/252) (`Mp4Demuxer`); then here a
+    ManagedCodecs bump, and a sample with that edit list in make-samples.sh (ffmpeg's muxer writes media_time = the
+    first offset, so none of today's samples has it).
+  - Done when: `tools/realworld.sh check wasm caminandes_gran_dillama.mp4 caminandes-fragmented.mp4` passes, and the
+    native check passes on the new sample.
+  - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
+  - Status: Waiting on upstream (ManagedCodecs#252, filed 2026-10-31)
+
 - 10-bit 4:2:0 and 8-bit 4:2:2
   - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
   - Where: first upstream: `YuvFrame` for 16-bit planes and 4:2:2 chroma, and `YuvVideo.PixelFormat` accepting
@@ -139,3 +153,13 @@ file out of `samples/reject/`, and passes the native check.
     decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
     reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
     question to open
+
+- Real phone and broadcast files for the real-world check
+  - Why: the real-world check's rotated and interlaced files are made from Blender films by FFmpeg, since no openly
+    licensed phone video or broadcast capture is on a host the cloud sandbox reaches (download.blender.org only:
+    not Wikimedia Commons, archive.org, FFmpeg's samples or test-videos.co.uk, tried 2026-10-31). Real ones have an
+    encoder's own SEI, rotation as phones write it, VFR as phones make it, PAFF field pictures.
+  - Where: `tools/realworld.sh`'s list: files from Wikimedia Commons (reachable from GitHub's runners), pinned by
+    SHA-256 recorded from the workflow's first download, as ci.yml's Sintel trailer was.
+  - Done when: realworld.yml runs them, each "same" or "refused" with its row named.
+  - Status: Maybe

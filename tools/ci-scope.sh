@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Which checks a pull request's changes need (README, "Checks"; ci.yml's step "What the change touches"): reads the
 # changed paths on standard input, one a line, and prints the widest tier any of them needs:
-#   none    nothing a check can see: docs/, *.md, LICENSE, and the WebCodecs measurement (tools/webcodecs/,
-#           tools/WebCodecsCheck/, tools/WebCodecsWasm/), which no check builds
+#   none    nothing a check can see: docs/, *.md, LICENSE, the WebCodecs measurement (tools/webcodecs/,
+#           tools/WebCodecsCheck/, tools/WebCodecsWasm/), which no check builds, and the real-world check
+#           (tools/realworld.sh, realworld.yml), which runs nightly and by hand, never on a pull request
 #   native  the native check alone: tools/NativeCheck/
 #   page    the native check and the page's smoke test in Chromium (tools/check.sh page, interpreted): the page's own
 #           files that no wasm check loads (index.html, style.css, app.js, which NativeCheck's DefaultsCheck reads,
@@ -18,7 +19,8 @@ tier=none
 while IFS= read -r path; do
   [[ -z $path ]] && continue
   case $path in
-    docs/* | *.md | LICENSE | tools/webcodecs/* | tools/WebCodecsCheck/* | tools/WebCodecsWasm/*)
+    docs/* | *.md | LICENSE | tools/webcodecs/* | tools/WebCodecsCheck/* | tools/WebCodecsWasm/* | \
+    tools/realworld.sh | .github/workflows/realworld.yml)
       need=none ;;
     src/ShotDetectorWeb.App/wwwroot/blob-read.js | src/ShotDetectorWeb.App/wwwroot/blob-write.js | \
     src/ShotDetectorWeb.App/wwwroot/pause.js)
