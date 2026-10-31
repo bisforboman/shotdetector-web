@@ -53,7 +53,14 @@ are in Next again. [#608](https://github.com/bisforboman/shotdetector/issues/608
 [#614](https://github.com/bisforboman/shotdetector/issues/614) shipped in ShotDetector 3.23.0 (2026-10-31), and
 ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the rows they waited on, worked by one session one after
 another, a pull request each (the owner's choice, 2026-10-31): rotation, the variable frame rate and deinterlacing,
-all done.
+all done. ShotDetector 3.24.0 and FrameReader 2.18.0 (2026-10-31) shipped
+[#625](https://github.com/bisforboman/shotdetector/issues/625) (a frame of another size refused),
+[#626](https://github.com/bisforboman/shotdetector/issues/626) (each frame's own colour tags),
+[#627](https://github.com/bisforboman/shotdetector/issues/627) (10-bit 4:2:0 and 8-bit 4:2:2),
+[#633](https://github.com/bisforboman/shotdetector/issues/633) (Subtitle Edit's shot changes),
+[#648](https://github.com/bisforboman/shotdetector/issues/648) (YouTube chapters) and FrameReader's `LoudnessMeter`
+([#646](https://github.com/bisforboman/shotdetector/issues/646)): the bump is done (backlog-done), and the rows below
+that waited on them are open.
 
 - Deinterlaced runs split and resumed
   - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,
@@ -89,8 +96,8 @@ all done.
     yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
     the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
     `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
-  - Status: Waiting on upstream ([shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627), from
-    the frame-source parity audit, 2026-10-31; the shotdetector coordinator is working it)
+  - Status: Open (shipped upstream in ShotDetector 3.24.0,
+    [shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627))
 
 - YouTube chapters: the download, and the chapters' titles edited on the page
   - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
@@ -103,15 +110,32 @@ all done.
   - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
     on the page the download carries them (page check).
   - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647).
-  - Status: Waiting on upstream ([shotdetector#648](https://github.com/bisforboman/shotdetector/issues/648))
+  - Status: Open (shipped upstream in ShotDetector 3.24.0,
+    [shotdetector#648](https://github.com/bisforboman/shotdetector/issues/648))
 
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
 since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlaced (`Yadif`), not yet in ranges
-(shotdetector#628). What it still lacks is in its `docs/frame-source-parity.md` (issues #625 to #630): a row that needs
-a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
+(shotdetector#628); since 3.24.0 10-bit 4:2:0 and 8-bit 4:2:2 (#627) and each frame's own colour tags (#626), a frame
+of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
+row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
+
+- Each frame's own colour tags (a matrix or range that changes midway)
+  - Why: ShotDetector 3.24.0 converts each frame with its own `YuvFrame.ColorSpace` and `FullRange` (shotdetector#626),
+    as `Detect(path)` does with each frame's tags from FFmpeg's decoder: a spliced stream whose SPS changes its VUI
+    colour matrix or range midway gives other stats here, without a word, since `Mp4Input` describes every frame with
+    the first SPS's (`SpsInfo.FromAvcConfig`, the 'avcC''s). ManagedCodecs' `VideoFrame` carries no colour tags (0.4.0),
+    so the core can't tell them per frame without parsing each packet's in-band SPS itself and tracking which decoded
+    frames each one covers, which is the decoder's knowledge.
+  - Where: first upstream, ManagedCodecs: each `VideoFrame`'s colour description from its active SPS (matrix and range;
+    an MJPEG frame's are fixed); then `VideoInput`'s frames set `YuvFrame.ColorSpace`/`FullRange` where they differ
+    from `YuvVideo`'s, and a sample in make-samples.sh (two streams with other VUI tags, their Annex B concatenated as
+    `samples/reject/size-change.mp4`'s are) that NativeCheck runs as every sample.
+  - Done when: the native check passes on that sample, byte for byte.
+  - Not: no SPS parsing of every packet in the core (the decoder's job: CLAUDE.md, report it there).
+  - Status: Maybe (found adopting ShotDetector 3.24.0, 2026-10-31; not filed upstream yet)
 
 - An AVI's JPEGs without Huffman tables
   - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
