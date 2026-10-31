@@ -37,7 +37,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Loudness.cs`'s BS.1770-4 meter; `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
   decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
   parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: what FFmpeg's `signalstats`, `blackdetect` and `cropdetect`
-  count, and colour bars by their definition, `BarColours`), `PictureMeasures` (by column; FFmpeg's figures from them,
+  count, and colour bars by their definition, `BarColours`; and each frame's type, ManagedCodecs' `VideoFrame.PictureType`,
+  FFmpeg's `pict_type`), `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures from them,
   `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
   (`PictureJson`), which NativeCheck also writes.
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
@@ -73,7 +74,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `points` { `framesPerPoint`,
   `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
   `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
-  (the scores' length, the scores, the range's picture measures); `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count, from)` (`{ frames, ranges:
+  (the scores' length, the scores, the range's picture measures); `Api.FrameTypes.cs` `FrameTypes()`: the last run's frames' types from its
+  `PictureMeasures`, one character a frame in display order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's
+  `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count, from)` (`{ frames, ranges:
   [{ firstFrame, endFrame }] }`, from 0 or a stopped run's rest's first frame), `ScoreRange(optionsJson, count, index,
   from)` (a promise of `{ frames, stopped }`; progress, pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()`
   (its `RangeScores` as bytes), `Merge(optionsJson, kept, bytes, lengths)` (a stopped run's kept bytes, empty for none,
@@ -126,7 +129,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
-  the page's own reading), `picture.js` (after a run: a lane of each frame's luma band and mean, the black spans, the
+  the page's own reading), `frametypes.js` (after a run: a lane under the bitrate's of each frame's type from
+  `FrameTypes()`, a bar a frame on a `<canvas>`, I tall, P shorter, B shortest, and a card of the counts, marked core),
+  `picture.js` (after a run: a lane of each frame's luma band and mean, the black spans, the
   colour bars and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
   folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
@@ -146,7 +151,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     `THREADED` and `RESULTS`: after a run on threads, `call()` asks the threaded runner for it. `app.js` changes
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `VideoInput.Packets` vs
-  `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `AudioStreamCheck.cs`: `VideoInput.Audio`
+  `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
+  types a run keeps vs `ffprobe -show_frames`' `pict_type` (its first field only: its csv adds x264's SEI to the first
+  frame), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
+  app-check.mjs compares `FrameTypes()` with); `AudioStreamCheck.cs`: `VideoInput.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
   stopped half-way, vs one thread; `ResumeCheck.cs`: the default and all-detector runs on one range stopped twice and
@@ -166,7 +174,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   whole run's CSVs, shots and picture, kept bytes of other options not resuming, every sample's default run paused half-way (no progress while held,
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
-  expects, and `Picture()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
+  expects, and `Picture()` and `FrameTypes()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
@@ -225,8 +233,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.22.0, FrameReader 2.16.0 and ManagedCodecs 0.2.4 (Containers, H264, Mjpeg, Aac, each
-  pinning Core) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
+- Packages: ShotDetector/FastYuv 3.22.0, FrameReader 2.16.0 and ManagedCodecs 0.3.0 (Containers, H264, Mjpeg, Aac, each
+  pinning Core, and Core, whose `PictureType` `PictureMeter` keeps) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
   file (`docs/decisions/2026-10-24-fastyuv-replaceable.md`; `tools/check.sh replace aot` in CI). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.

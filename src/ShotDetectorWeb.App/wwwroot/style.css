@@ -296,6 +296,13 @@ video {
 .track.bitrate .keyframes { stroke: var(--keyframe); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
 #bitrate p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
 
+/* Frame types: a bar a frame on a <canvas>, I tall in the keyframes' colour, P shorter, B shortest (frametypes.js). */
+.track.frametypes, .lane-label.frametypes { height: 2rem; }
+.lane-label.frametypes { line-height: 2rem; }
+.track.frametypes { --type-i: var(--keyframe); --type-p: var(--accent); --type-b: color-mix(in srgb, var(--muted) 70%, transparent); }
+.track.frametypes canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#frametypes p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
+
 /* The picture: each frame's luma as a band (YMIN to YMAX) and a line (YAVG), the out-of-range ticks along the bottom as
    tall as the share out of range (an SVG stretched over the frames read), the black spans hatched and the colour bars
    (as their luma steps) as marks over it; the measures' card. */

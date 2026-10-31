@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Runtime.Intrinsics;
+using ManagedCodecs;
 using ShotDetector;
 
 namespace ShotDetectorWeb;
@@ -10,7 +11,8 @@ namespace ShotDetectorWeb;
 /// before ShotDetector converts it, about 2% of a run. What it keeps per frame is what FFmpeg's filters count, so that
 /// <see cref="PictureMeasures"/> gives their figures exactly: <c>signalstats</c>' YMIN, YAVG, YMAX and BRNG,
 /// <c>blackdetect</c>'s black pixels, <c>cropdetect</c>'s first and last lines over its limit, and whether the frame is
-/// colour bars (by their definition: FFmpeg has no filter for them).
+/// colour bars (by their definition: FFmpeg has no filter for them). With them it keeps the decoder's picture type
+/// (I, P, B: FFmpeg's <c>pict_type</c>, ManagedCodecs' <see cref="VideoFrame.PictureType"/>), which costs nothing.
 /// </summary>
 public sealed class PictureMeter
 {
@@ -59,8 +61,11 @@ public sealed class PictureMeter
     /// <summary>The frames measured so far.</summary>
     public PictureMeasures Measures { get; }
 
-    /// <summary>Measures <paramref name="frame"/>, the next frame given, if it is one of the meter's.</summary>
-    public void Add(YuvFrame frame)
+    /// <summary>
+    /// Measures <paramref name="frame"/>, the next frame given, if it is one of the meter's, and keeps its picture type,
+    /// <paramref name="type"/>.
+    /// </summary>
+    public void Add(YuvFrame frame, PictureType type)
     {
         int index = _from + _index++;
         if (index < _first || index >= _end)
@@ -69,7 +74,7 @@ public sealed class PictureMeter
         int brng = luma.OutOfRange + ChromaOutOfRange(frame);
         var (top, bottom, left, right) = ContentLines(frame.Y.Span, frame.YStride);
         bool bars = IsBars(frame);
-        Measures.Add(frame.Pts, luma.Min, luma.Max, luma.Sum, luma.Black, brng, top, bottom, left, right, bars);
+        Measures.Add(frame.Pts, luma.Min, luma.Max, luma.Sum, luma.Black, brng, top, bottom, left, right, bars, type);
     }
 
     /// <summary>The luma's sum, minimum and maximum, the pixels at or under blackdetect's threshold and those outside 16 to 235.</summary>
@@ -429,11 +434,11 @@ sealed class BarColours
 /// The picture's measures of a run's frames (<see cref="PictureMeter"/>), by column, from <see cref="FirstFrame"/>, and
 /// FFmpeg's figures from them: <c>signalstats</c>' (<see cref="YAvg"/>, <see cref="Brng"/>), <c>blackdetect</c>'s
 /// (<see cref="BlackSpans"/>), <c>cropdetect</c>'s (<see cref="Crop"/>, <see cref="FrameCrop"/>), and the colour bars
-/// (<see cref="BarsSpans"/>). The ranges of a split run join (<see cref="Join"/>) into the whole run's, byte for byte.
+/// (<see cref="BarsSpans"/>); and each frame's picture type (<see cref="Type"/>, <see cref="Types"/>). The ranges of a split run join (<see cref="Join"/>) into the whole run's, byte for byte.
 /// </summary>
 public sealed class PictureMeasures
 {
-    const uint Magic = 0x31434950; // "PIC1"
+    const uint Magic = 0x32434950; // "PIC2"
 
     readonly List<long> _pts = [];
     readonly List<byte> _min = [], _max = [];
@@ -441,6 +446,7 @@ public sealed class PictureMeasures
     readonly List<int> _black = [], _brng = [];
     readonly List<short> _top = [], _bottom = [], _left = [], _right = [];
     readonly List<bool> _bars = [];
+    readonly List<PictureType> _type = [];
 
     internal PictureMeasures(int width, int height, bool fullRange, FrameReader.Rational timeBase, int firstFrame)
     {
@@ -469,7 +475,7 @@ public sealed class PictureMeasures
     int Pixels => Width * Height;
 
     internal void Add(long pts, byte min, byte max, long sum, int black, int brng, short top, short bottom, short left,
-        short right, bool bars)
+        short right, bool bars, PictureType type)
     {
         _pts.Add(pts);
         _min.Add(min);
@@ -482,6 +488,7 @@ public sealed class PictureMeasures
         _left.Add(left);
         _right.Add(right);
         _bars.Add(bars);
+        _type.Add(type);
     }
 
     public long Pts(int i) => _pts[i];
@@ -506,6 +513,32 @@ public sealed class PictureMeasures
 
     /// <summary>Colour bars (<see cref="PictureMeter"/>, by their definition).</summary>
     public bool IsBars(int i) => _bars[i];
+
+    /// <summary>The frame's picture type as the decoder says it (FFmpeg's <c>pict_type</c>).</summary>
+    public PictureType Type(int i) => _type[i];
+
+    /// <summary>
+    /// Every frame's picture type, one character each, as FFmpeg's <c>av_get_picture_type_char</c> writes it (ffprobe's
+    /// <c>pict_type</c>): I, P, B, S, i (SI), p (SP), b (BI), ? (none).
+    /// </summary>
+    public string Types() => string.Create(Count, _type, static (chars, types) =>
+    {
+        for (int i = 0; i < chars.Length; i++)
+            chars[i] = TypeChar(types[i]);
+    });
+
+    /// <summary>FFmpeg's <c>av_get_picture_type_char</c>.</summary>
+    public static char TypeChar(PictureType type) => type switch
+    {
+        PictureType.I => 'I',
+        PictureType.P => 'P',
+        PictureType.B => 'B',
+        PictureType.S => 'S',
+        PictureType.SI => 'i',
+        PictureType.SP => 'p',
+        PictureType.BI => 'b',
+        _ => '?',
+    };
 
     /// <summary>
     /// blackdetect's spans with <c>d=<paramref name="minSeconds"/></c>: from a black frame's pts to the first frame
@@ -577,7 +610,7 @@ public sealed class PictureMeasures
     {
         var taken = new PictureMeasures(Width, Height, FullRange, TimeBase, FirstFrame);
         for (int i = 0; i < Math.Min(count, Count); i++)
-            taken.Add(_pts[i], _min[i], _max[i], _sum[i], _black[i], _brng[i], _top[i], _bottom[i], _left[i], _right[i], _bars[i]);
+            taken.Add(_pts[i], _min[i], _max[i], _sum[i], _black[i], _brng[i], _top[i], _bottom[i], _left[i], _right[i], _bars[i], _type[i]);
         return taken;
     }
 
@@ -603,7 +636,7 @@ public sealed class PictureMeasures
             for (int i = 0; i < range.Count; i++)
             {
                 joined.Add(range._pts[i], range._min[i], range._max[i], range._sum[i], range._black[i], range._brng[i],
-                    range._top[i], range._bottom[i], range._left[i], range._right[i], range._bars[i]);
+                    range._top[i], range._bottom[i], range._left[i], range._right[i], range._bars[i], range._type[i]);
             }
         }
 
@@ -614,7 +647,7 @@ public sealed class PictureMeasures
     public byte[] ToBytes()
     {
         const int header = 4 * 4 + 1 + 4 * 2 + 4;
-        const int perFrame = 8 + 1 + 1 + 8 + 4 + 4 + 2 * 4 + 1;
+        const int perFrame = 8 + 1 + 1 + 8 + 4 + 4 + 2 * 4 + 1 + 1;
         var bytes = new byte[header + perFrame * Count + 8];
         var w = new Writer(bytes);
         w.UInt(Magic);
@@ -638,6 +671,7 @@ public sealed class PictureMeasures
             w.Short(_left[i]);
             w.Short(_right[i]);
             w.Byte(_bars[i] ? (byte)1 : (byte)0);
+            w.Byte((byte)_type[i]);
         }
 
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(w.At), Hash(bytes.AsSpan(0, w.At)));
@@ -661,7 +695,7 @@ public sealed class PictureMeasures
         for (int i = 0; i < count; i++)
         {
             measures.Add(r.Long(), r.Byte(), r.Byte(), r.Long(), r.Int(), r.Int(), r.Short(), r.Short(), r.Short(), r.Short(),
-                r.Byte() != 0);
+                r.Byte() != 0, (PictureType)r.Byte());
         }
 
         return measures;

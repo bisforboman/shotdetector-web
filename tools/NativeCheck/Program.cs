@@ -4,8 +4,9 @@
 // FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV and the shots as JSON
 // and HTML (Shots.Json, Shots.Html: the page's other downloads) must be equal byte for byte. Writes (a)'s files to --out
 // (the wasm check compares its own with them), (b)'s next to them where they differ.
-// Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check,
-// and its audio track's description (AudioStreamCheck.cs). And every sample's run with every detector split into ranges at
+// Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check, its
+// frames' types against ffprobe's pict_type (FrameTypeCheck.cs), whole, on four threads and in ranges, ffprobe's going
+// to --out too, and its audio track's description (AudioStreamCheck.cs). And every sample's run with every detector split into ranges at
 // keyframes, scored on their own and merged, against the whole run (RangeCheck.cs), and decoded on four threads against
 // one (ThreadsCheck.cs); stopped twice and resumed, on one range and split, against the whole run (ResumeCheck.cs).
 // And the page's defaults, read from its app.js, against ShotDetector's own (DefaultsCheck.cs).
@@ -113,6 +114,7 @@ foreach (string sample in samples)
 }
 
 failures += PacketCheck.Run(samples, libs, outDir);
+failures += FrameTypeCheck.Run(samples, libs, outDir);
 failures += RangeCheck.Run(samples, outDir);
 failures += ThreadsCheck.Run(samples, outDir);
 failures += ResumeCheck.Run(samples, outDir);

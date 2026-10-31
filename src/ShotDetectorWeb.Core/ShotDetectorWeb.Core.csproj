@@ -30,10 +30,12 @@
     <None Include="$(PkgShotDetector_FastYuv)/COPYING.LGPL" Link="licenses/ShotDetector.FastYuv/COPYING.LGPL" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
-  <!-- ManagedCodecs (MIT) from nuget.org, the four packages this path uses; each pins ManagedCodecs.Core at its own version. -->
+  <!-- ManagedCodecs (MIT) from nuget.org, the packages this path uses. Core is referenced too, not only through the others:
+       PictureMeter uses its PictureType, and a central version pins only the packages a project references. -->
   <ItemGroup>
     <PackageReference Include="ManagedCodecs.Aac" />
     <PackageReference Include="ManagedCodecs.Containers" />
+    <PackageReference Include="ManagedCodecs.Core" />
     <PackageReference Include="ManagedCodecs.H264" />
     <PackageReference Include="ManagedCodecs.Mjpeg" />
   </ItemGroup>

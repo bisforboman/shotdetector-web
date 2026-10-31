@@ -84,7 +84,7 @@ public abstract partial class VideoInput
         PictureMeter? picture = null)
     {
         options = WithConverter(options);
-        return ShotDetection.Detect(Video, Measured(Frames(), picture), options, cancellationToken);
+        return ShotDetection.Detect(Video, Measured(Frames(0), picture), options, cancellationToken);
     }
 
     /// <summary>
@@ -109,22 +109,18 @@ public abstract partial class VideoInput
     /// </summary>
     public IAsyncEnumerable<YuvFrame> FramesAsync(int every, Func<int, ValueTask<bool>> between,
         CancellationToken cancellationToken = default, PictureMeter? picture = null) =>
-        Paused(Measured(Frames(), picture), int.MaxValue, every, between, cancellationToken);
+        Paused(Measured(Frames(0), picture), int.MaxValue, every, between, cancellationToken);
 
-    /// <summary><paramref name="frames"/>, each measured by <paramref name="meter"/> as it is given (none without one).</summary>
-    static IEnumerable<YuvFrame> Measured(IEnumerable<YuvFrame> frames, PictureMeter? meter)
+    /// <summary>
+    /// <paramref name="frames"/>' frames, each measured by <paramref name="meter"/> with its picture type as it is given
+    /// (none without one).
+    /// </summary>
+    static IEnumerable<YuvFrame> Measured(IEnumerable<(YuvFrame Frame, PictureType Type)> frames, PictureMeter? meter)
     {
-        if (meter is null)
-            return frames;
-        return Each(frames, meter);
-
-        static IEnumerable<YuvFrame> Each(IEnumerable<YuvFrame> frames, PictureMeter meter)
+        foreach (var (frame, type) in frames)
         {
-            foreach (var frame in frames)
-            {
-                meter.Add(frame);
-                yield return frame;
-            }
+            meter?.Add(frame, type);
+            yield return frame;
         }
     }
 
@@ -153,10 +149,13 @@ public abstract partial class VideoInput
     /// The decoded frames in display order, each valid until the enumeration moves on. Every enumeration decodes the file
     /// again from its start.
     /// </summary>
-    public IEnumerable<YuvFrame> Frames() => Frames(0);
+    public IEnumerable<YuvFrame> Frames() => Measured(Frames(0), null);
 
-    /// <summary><see cref="Frames()"/> decoded from video packet <paramref name="fromPacket"/> (decode order), a keyframe.</summary>
-    IEnumerable<YuvFrame> Frames(int fromPacket)
+    /// <summary>
+    /// <see cref="Frames()"/> decoded from video packet <paramref name="fromPacket"/> (decode order), a keyframe, each with
+    /// its picture type as the decoder says it (FFmpeg's <c>pict_type</c>).
+    /// </summary>
+    IEnumerable<(YuvFrame Frame, PictureType Type)> Frames(int fromPacket)
     {
         foreach (var frame in DecodedFrames(fromPacket))
         {
@@ -169,7 +168,7 @@ public abstract partial class VideoInput
                 var p = frame.Planes;
                 var o = frame.Offsets;
                 var s = frame.Strides;
-                yield return new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2]) { Pts = frame.Pts };
+                yield return (new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2]) { Pts = frame.Pts }, frame.PictureType);
             }
         }
     }

@@ -80,19 +80,6 @@ are in Next again.
   - Done when: the native, wasm (whole and split) and page checks pass on the VFR sample byte for byte.
   - Status: Waiting on upstream (shotdetector#609, filed 2026-10-30)
 
-- Frame types (I, P, B) on the strip
-  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
-    chose it on 2026-10-30.
-  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
-    exists inside the decoder, `SliceType` internal; neither 0.2.4 nor main has it, 2026-10-30), filed as
-    ManagedCodecs#221: each frame's type as FFmpeg's `pict_type`, checked against `ffprobe -show_frames`. Then here: a
-    lane of the frame types from the run's frames after `bitrate.js`'s keyframes lane, marked `core` with a
-    NativeCheck comparison against `ffprobe -show_frames` field by field, as `PacketCheck.cs`.
-  - Done when: a ManagedCodecs release has it, and the lane shows each frame's type, checked natively against ffprobe.
-  - Not: no parsing of slice headers here (CLAUDE.md: report it there, don't work around it).
-  - Status: Waiting on upstream ([ManagedCodecs#221](https://github.com/bisforboman/ManagedCodecs/issues/221), filed
-    2026-10-30)
-
 - Deinterlacing interlaced H.264
   - Why: broadcast material is interlaced; MBAFF video is detected on its woven frames since the "Interlaced H.264"
     row, as ShotDetector's default, but `--deinterlace auto` (yadif) is the setting for it, and FFmpeg's field order

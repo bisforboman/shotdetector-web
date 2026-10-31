@@ -918,3 +918,18 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     1280x800 for the demo done, kept and resumed: 47, 9 and 48 px at most under a details card (main: 656), no inner
     scroll, no red in a lane but the playhead, the run's figures down to 324 and 379 px, nothing wider than the window
     or its card; screenshots at 1280 and 390 px, light and dark. The owner saw them before and after and said yes)
+
+- Frame types (I, P, B) on the strip
+  - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
+    chose it on 2026-10-30.
+  - Where: first upstream: ManagedCodecs' `VideoFrame` doesn't say what kind of picture it is (`SliceHeader.Type`
+    exists inside the decoder, `SliceType` internal; neither 0.2.4 nor main has it, 2026-10-30), filed as
+    ManagedCodecs#221: each frame's type as FFmpeg's `pict_type`, checked against `ffprobe -show_frames`. Then here: a
+    lane of the frame types from the run's frames after `bitrate.js`'s keyframes lane, marked `core` with a
+    NativeCheck comparison against `ffprobe -show_frames` field by field, as `PacketCheck.cs`.
+  - Done when: a ManagedCodecs release has it, and the lane shows each frame's type, checked natively against ffprobe.
+  - Not: no parsing of slice headers here (CLAUDE.md: report it there, don't work around it).
+  - Status: Done (2026-10-30: ManagedCodecs 0.3.0's `VideoFrame.PictureType`, kept by `PictureMeter` as a column of
+    `PictureMeasures`; `Api.FrameTypes`, `panels/frametypes.js` marked core; `FrameTypeCheck.cs` the same as
+    `ffprobe -show_frames` on all 19 samples, MBAFF and MJPEG (all I) included, whole, on four threads and in ranges;
+    app-check.mjs and the page check hold the App and the page to it)
