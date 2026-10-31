@@ -1059,10 +1059,12 @@ function showPicture(jpeg, frame) {
 // The video's length on the axis: Open's duration, or its frames over its rate.
 const lengthOf = v => v.duration ?? v.frames * v.frameRate.den / v.frameRate.num;
 
-// The toolbar's line on the file: its size, and once opened the description's first facts.
+// The toolbar's line on the file: its size, and once opened the description's first facts, the picture's size as it is
+// shown (a rotated video's upright).
 function facts(f, v) {
   const rate = Number((v.frameRate.num / v.frameRate.den).toFixed(3));
-  return [megabytes(f.size), `${v.width}×${v.height}`, `${rate} fps`, `${lengthOf(v).toFixed(1)} s`,
+  const [w, h] = Math.abs(v.rotation) % 180 === 90 ? [v.height, v.width] : [v.width, v.height];
+  return [megabytes(f.size), `${w}×${h}`, `${rate} fps`, `${lengthOf(v).toFixed(1)} s`,
     v.audio ? v.audio.codec.toUpperCase() : 'no audio'].join(' · ');
 }
 

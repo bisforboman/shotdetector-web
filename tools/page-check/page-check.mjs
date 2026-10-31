@@ -28,15 +28,17 @@
 //   9. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
+//  10. each more sample (a rotated video, ...: what the first sample doesn't have) picked on threads and split across
+//      two workers, after 2: the same downloads, picture and frame types as 1 and 2.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
-// After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
+// After each whole run (1 to 3, 10), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there; the frame types' card (panels/frametypes.js) the counts of ffprobe's pict_type
 // as the native check wrote them, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
-// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
+// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -46,14 +48,15 @@ import { basename, extname, join, normalize, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
 const at = args.indexOf('--native');
-if (at < 0 || args.length !== 7) {
-  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>');
+if (at < 0 || args.length < 7) {
+  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
-const [root, outDir, sample, demo, avi] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
+const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
-const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi };
+const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
+  ...Object.fromEntries(more.map(m => [basename(m), m])) };
 const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
@@ -486,9 +489,9 @@ function report(what, errors) {
   if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
 }
 
-async function picked(query, what) {
+async function picked(query, what, file = sample) {
   const { context, page, errors } = await open(query);
-  await page.setInputFiles('#file', sample);
+  await page.setInputFiles('#file', file);
   await page.click('#detect');
   const run = await page.inputValue('#detector');
   const status = await finished(page, what);
@@ -500,9 +503,9 @@ async function picked(query, what) {
       const bands = await page.locator('.range').count();
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
     }
-    await compare(page, what, basename(sample), run);
-    await picture(page, what, sample);
-    await frameTypes(page, what, sample);
+    await compare(page, what, basename(file), run);
+    await picture(page, what, file);
+    await frameTypes(page, what, file);
   }
   report(what, errors);
   await context.close();
@@ -587,6 +590,10 @@ try {
   await picked('', `${basename(sample)}, picked`);
   await picked('?threads=0', `${basename(sample)}, the page's worker`);
   await picked('?workers=2', `${basename(sample)}, two workers`);
+  for (const m of more) {
+    await picked('', `${basename(m)}, picked`, m);
+    await picked('?workers=2', `${basename(m)}, two workers`, m);
+  }
 
   const what = 'the demo';
   const { context, page, errors } = await open();

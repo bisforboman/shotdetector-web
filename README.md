@@ -24,14 +24,15 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive,
-or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
+Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, upright or turned a
+quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
+the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
 pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
 in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
-`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, rotated, variable
-frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; rotation, a variable rate and 4:2:2 wait on
+`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, a rotation that isn't a
+quarter turn, variable frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; a variable rate and 4:2:2 wait on
 ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
 can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
@@ -600,7 +601,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
-  (`PictureMeasures.Types`, ManagedCodecs' `VideoFrame.PictureType`) against `ffprobe -show_frames -show_entries
+  (`PictureMeasures.Types`, ManagedCodecs' `VideoFrame.PictureType`) against `ffprobe -show_entries
   frame=pict_type`, frame by frame in display order, an MJPEG sample's all I, whole, on four decoder threads and in
   ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each sample's run with all five detectors split
   into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
@@ -693,7 +694,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   in the status); `mjpeg-320x240-25.avi` picked, which no browser plays: its downloads the native run's, the player an
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
-  every shot; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
+  every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
+  (a quarter turn); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
   in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on

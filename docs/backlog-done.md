@@ -968,3 +968,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     hashes the bytes at every offset against ffprobe's `data_hash`, natively and on wasm; the page check picks
     `mjpeg-320x240-25.avi`: frame 0, the frame after a timeline click and a shot's first frame shown, a still per shot,
     the downloads the native run's)
+
+- Rotation
+  - Why: phones record rotated; the FFmpeg path turns frames upright.
+  - Where: first upstream, [shotdetector#608](https://github.com/bisforboman/shotdetector/issues/608)
+    (`YuvVideo.Rotation`); then `Mp4Header` reads the `tkhd` matrix's angle as `av_display_rotation_get`, quarter turns
+    only, samples at 90, 180 and 270, `PictureMeter`'s crop and colour bars in the upright frame's coordinates (the
+    owner's choice, decision 2026-10-30-scope-widening.md).
+  - Done when: the native, wasm and page checks pass on the rotated samples byte for byte.
+  - Status: Done (2026-10-31: ShotDetector 3.23.0's `YuvVideo.Rotation` (shotdetector#608, #615); `Mp4Header.Rotation`
+    from the 'tkhd' matrix after the 'mvhd' one as mov.c, the angle as `av_display_rotation_get`, `Mp4Input` taking a
+    quarter turn and refusing any other; three samples, 90, 180 and 270 (FFmpeg's 90, -180, -90), coded turned and
+    letterboxed on four different widths, their rotation and coded size checked with ffprobe; the native check's
+    rotation field, every run, the ranges, threads, resume and the picture (crop `288:176:8:22` and the colour bars in
+    the upright picture) the FFmpeg path's; the page check picks the 90 one on threads and on two workers; the
+    About card says how the video is shown; `FrameTypeCheck` without `-show_frames`, whose display matrix side data
+    ffprobe prints over lines)
