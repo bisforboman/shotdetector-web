@@ -201,7 +201,9 @@ video, .frame {
 #run .figures .detector dd { font-size: 1rem; }
 #run .downloads { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; }
 #run .downloads a { font-weight: 600; }
-#run .downloads.editors span { color: var(--muted); font-size: 0.9rem; }
+#run .downloads.editors span, #run .downloads.chapters > span { color: var(--muted); font-size: 0.9rem; }
+#run .downloads.chapters input { width: 4.5em; }
+#run #chapters-none { flex-basis: 100%; }
 
 /* The timeline: lane labels on the left, the tracks on one time axis, the playhead across all of them. */
 #timeline { display: flex; font-size: 0.8rem; user-select: none; }
