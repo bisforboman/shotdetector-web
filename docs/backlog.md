@@ -96,7 +96,7 @@ that waited on them are open.
     yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
     the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
     `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
-  - Status: Open (shipped upstream in ShotDetector 3.24.0,
+  - Status: In progress (2026-10-31; shipped upstream in ShotDetector 3.24.0,
     [shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627))
 
 - YouTube chapters: the download, and the chapters' titles edited on the page
