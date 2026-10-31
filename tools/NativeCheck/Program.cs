@@ -3,7 +3,8 @@
 // then every detector run on (a) the core library (ManagedCodecs + FastYuv) and (b) ShotDetector's Detect(path) with
 // FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV, the shots as JSON
 // and HTML (Shots.Json, Shots.Html: the page's other downloads) and the editors' timeline files (TimelineFiles: EDL,
-// FCPXML, FCP7 XML, OTIO, QP, Aegisub keyframes, each given the sample's file name) must be equal byte for byte. Writes (a)'s files to --out
+// FCPXML, FCP7 XML, OTIO, QP, Aegisub keyframes, each given the sample's file name) must be equal byte for byte, and the
+// YouTube chapters (TimelineFiles.Chapters at 10 and 30 s, Timeline's) too, within YouTube's rules (ChaptersCheck.cs). Writes (a)'s files to --out
 // (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check, its
 // frames' types against ffprobe's pict_type (FrameTypeCheck.cs), whole, on four threads and in ranges, ffprobe's going
@@ -44,7 +45,7 @@ Directory.CreateDirectory(outDir);
 FrameReader.FFmpegLibraries.Load(libs);
 int failures = 0;
 
-Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Stats CSV | Shots JSON, HTML | Timelines | Core time | FFmpeg time |");
+Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Stats CSV | Shots JSON, HTML | Timelines, chapters | Core time | FFmpeg time |");
 Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 foreach (string sample in samples)
 {
@@ -94,6 +95,20 @@ foreach (string sample in samples)
             {
                 timelinesDiffer.Add(format);
                 File.WriteAllText($"{name}.ffmpeg.{extension}", fileTimeline);
+            }
+        }
+
+        // The YouTube chapters (Timeline's) at YouTube's minimum and the page's default: the FFmpeg path's,
+        // and within YouTube's rules.
+        foreach (int minimum in ChaptersCheck.Minimums)
+        {
+            string chaptersJson = TimelineFiles.Chapters(ours, minimum), fileChaptersJson = TimelineFiles.Chapters(file, minimum);
+            File.WriteAllText($"{name}.chapters-{minimum}.json", chaptersJson);
+            var broken = ChaptersCheck.Problems(ours, chaptersJson);
+            if (chaptersJson != fileChaptersJson || broken.Count > 0)
+            {
+                timelinesDiffer.Add($"chapters {minimum} s{(broken.Count > 0 ? $" ({string.Join("; ", broken)})" : "")}");
+                File.WriteAllText($"{name}.ffmpeg.chapters-{minimum}.json", fileChaptersJson);
             }
         }
 
