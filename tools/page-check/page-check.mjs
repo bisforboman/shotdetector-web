@@ -30,8 +30,9 @@
 //   9. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
-//  10. each more sample (a rotated video, ...: what the first sample doesn't have) picked on threads and split across
-//      two workers, after 2: the same downloads, picture and frame types as 1 and 2.
+//  10. each more sample (a rotated video, a variable frame rate, ...: what the first sample doesn't have) picked on
+//      threads and split across two workers, after 2: the same downloads, picture and frame types as 1 and 2; a
+//      variable-rate video's second range drawn at its first frame's own time.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -519,6 +520,26 @@ async function frameTypes(page, what, file) {
     console.log(`${what}: the frame types' card: ${expected}, ffprobe's`);
 }
 
+// A variable-rate video's ranges lane (Open's frameTimestamps): the second band starts where its first frame's own pts
+// puts it on the axis, from ffprobe's packets as the native check wrote them (the shown ones, sorted), not where its
+// number over the average rate would.
+async function rangesAtTheirTimes(page, what, file) {
+  const video = JSON.parse(await page.textContent('#about pre'));
+  if (!video.frameTimestamps) return;
+  const native = join(nativeDir, `${stem(file)}.packets.txt`);
+  if (!existsSync(native)) return fail(`${what}: no native ${native} (tools/check.sh native first)`);
+  const times = lines(readFileSync(native, 'utf8')).filter(l => !/flags=[^|]*D/.test(l))
+    .map(l => Number(/pts_time=([^|]+)/.exec(l)[1])).sort((a, b) => a - b);
+  const band = page.locator('.range').nth(1);
+  const [left, title] = [await band.evaluate(b => parseFloat(b.style.left)), await band.getAttribute('title')];
+  const first = Number(/frames (\d+) to/.exec(title)[1]);
+  const at = (times[first] - times[0]) / video.duration * 100;
+  const byRate = first * video.frameRate.den / video.frameRate.num / video.duration * 100;
+  if (!(Math.abs(left - at) < 0.01) || Math.abs(byRate - at) < 0.5)
+    fail(`${what}: the second range's band starts at ${left}%, not ${at.toFixed(3)}% (frame ${first}'s pts; ${byRate.toFixed(3)}% by the average rate)`);
+  else console.log(`${what}: the second range (from frame ${first}) at ${left.toFixed(3)}%, its frame's own time`);
+}
+
 function lines(csv) {
   return csv.split(/\r?\n/).filter(line => line !== '');
 }
@@ -540,6 +561,7 @@ async function picked(query, what, file = sample) {
     if (split) {
       const bands = await page.locator('.range').count();
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
+      else await rangesAtTheirTimes(page, what, file);
     }
     await compare(page, what, basename(file), run);
     await picture(page, what, file);

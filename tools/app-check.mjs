@@ -321,18 +321,22 @@ async function checkPause(sample, video, options, whole, wholeScenes, wholeStats
 function checkStopped(name, video, result, statsCsv, whole, wholeStats) {
   const n = result.frameCount, rate = video.frameRate.num / video.frameRate.den;
 
-  // The stats: the whole run's rows for frames 1 to n, but None for the adaptive ratio in the last w.
+  // The stats: the whole run's rows for the first n frames, but None for the adaptive ratio in the last w. A row a frame
+  // in the order decoded, from frame 0 or (a detector that scores a frame against the one before) frame 1, which the
+  // whole run's rows against its frames say: rows by their place, not their Frame Number, which at a variable rate is
+  // scenedetect's for the frame's time at the average rate.
   const lines = csv => csv.split(/\r?\n/).filter(line => line !== '');
   const ours = lines(statsCsv), theirs = lines(wholeStats);
   const header = ours[0].split(',');
   const ratios = header.flatMap((h, i) => /^adaptive_ratio.*\(w=(\d+)\)$/.test(h) ? [i] : []);
   const window = ratios.length > 0 ? Number(/\(w=(\d+)\)$/.exec(header[ratios[0]])[1]) : 0;
-  const rows = theirs.filter((line, i) => i === 0 || Number(line.split(',')[0]) <= n).length;
+  const skipped = whole.frameCount - (theirs.length - 1); // 0 or 1: data row i (from 1) is frame i - 1 + skipped
+  const rows = Math.min(theirs.length, n - skipped + 1);
   const wrong = [];
   for (let i = 0; i < Math.max(ours.length, rows); i++) {
     if (ours[i] === theirs[i]) continue;
     const a = ours[i]?.split(','), b = theirs[i]?.split(',');
-    const late = a && b && i < rows && Number(a[0]) > n - window && a.length === b.length &&
+    const late = a && b && i < rows && i + skipped > n - window && a.length === b.length &&
       a.every((cell, c) => cell === b[c] || (ratios.includes(c) && cell === 'None'));
     if (!late) wrong.push(i);
   }
