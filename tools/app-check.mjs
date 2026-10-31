@@ -74,6 +74,9 @@ for (const arg of rest) {
 const { samples, '--reject': rejects, '--no-aac': noAac, '--native': [nativeDir] } = lists;
 
 let progress = [], told = [], toldAt = [];
+// The shots the range from frame 0 told as it scored (scoreRanges): the page shows them while the run goes; the other
+// ranges tell none.
+let rangeTold = [];
 let wholePicture = null; // the sample's first run's Picture(), which every other whole run's must be
 let wholeTypes = null;   // and its FrameTypes()
 // Detect's pauses (the 'pause' import, pause.js as in the worker): how many, and how long they took in all, and the
@@ -509,9 +512,6 @@ function checkPackets(sample) {
 
 // Scores every range of Ranges(RANGES) one after another on this runtime, as the page's workers each score one, each
 // stopped at half its frames from range `stopFrom` on (as the page stops every worker at once): each one's bytes.
-// The shots the range from frame 0 told as it scored (rangeTold): the page shows them while the run goes; the other
-// ranges tell none.
-let rangeTold = [];
 async function scoreRanges(options, plan, stopFrom = plan.ranges.length, from = 0) {
   const bytes = [];
   rangeTold = [];
