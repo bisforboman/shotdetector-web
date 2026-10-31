@@ -106,6 +106,19 @@ another, a pull request each (the owner's choice, 2026-10-31).
   - Status: Waiting on upstream ([shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627), from
     the frame-source parity audit, 2026-10-31; the shotdetector coordinator is working it)
 
+- YouTube chapters: the download, and the chapters' titles edited on the page
+  - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
+    shots-to-chapters rule (first at 0:00, at least three, each long enough) and placeholder titles live on ShotDetector's
+    `Timeline`, and the page owns only the UI around it. The standing rule: a file format built from a cut list lives on
+    `Timeline`.
+  - Where: after the ShotDetector release with #648 and its package bump: `TimelineFiles` gains the chapters format
+    (one more download in run.js's "For editors" row, checked byte for byte as the others), then a title per chapter
+    edited on the page (with the shots table, kept with the kept run), the download written from the edited titles.
+  - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
+    on the page the download carries them (page check).
+  - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647).
+  - Status: Waiting on upstream ([shotdetector#648](https://github.com/bisforboman/shotdetector/issues/648))
+
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
