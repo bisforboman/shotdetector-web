@@ -102,7 +102,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `wwwroot/blob-read.js` is its `read` (`FileReaderSync`), `wwwroot/blob-write.js` its `parts`, `append` and `blob`, `wwwroot/pause.js` its `pause` (a `MessageChannel`; `hold`
   and `release`: while held the promise stays unresolved, so the run waits there, README "Pausing a run");
   `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel); `wwwroot/threads.js` the
-  threaded runtime on the page's thread, a `ThreadedRunner` that speaks `worker.js`'s messages (only `Open`, `Detect`,
+  threaded runtime on the page's thread (started by `warm()` when a file is picked or the demo fetched), a
+  `ThreadedRunner` that speaks `worker.js`'s messages (only `Open`, `Detect`,
   `Resume`, the last run's result, stop, cancel, pause, resume), abandoned rather than terminated; `wwwroot/sw.js` the service
   worker: COOP/COEP on every response (cross-origin isolation, which the threads need) and the page offline, network
   first. The page (no build step, no dependency, native ES modules; README "Running the page";
