@@ -40,7 +40,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   count, and colour bars by their definition, `BarColours`; and each frame's type, ManagedCodecs' `VideoFrame.PictureType`,
   FFmpeg's `pict_type`), `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures from them,
   `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
-  (`PictureJson`), which NativeCheck also writes.
+  (`PictureJson`), which NativeCheck also writes; `TimelineFiles` (a result's shots in scenedetect's timeline formats,
+  ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes` and each one's extension, the
+  result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
@@ -57,7 +59,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Blob` written a row at a time by `Stats.WriteCsv` through `BlobWriter`, a write-only `Stream` whose parts go out
   through the `[JSImport]`s `parts`, `append` and `blob`, so it is never one string in the heap: README "What the heap
   holds"); `Api.Shots.cs` has `ShotsJson()` and `ShotsHtml()` (the last run's shots as `Shots.Json` and as
-  `Shots.Html` without images, the run card's other two downloads, which `run.js` asks for on `done`),
+  `Shots.Html` without images, the run card's other two downloads, which `run.js` asks for on `done`);
+  `Api.Timeline.cs` has `TimelineFile(format, fileName)` (the last run's `TimelineFiles.Write` for the picked file's
+  name, the run card's "For editors" downloads, which `run.js` asks for after those),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
@@ -127,7 +131,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
-  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads, the CSVs and the shots as JSON and HTML), `shots.js`
+  when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads, the CSVs and the shots as JSON and HTML, and
+  for editors the EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes of `TimelineFile` for the file `chose` named), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
   decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
@@ -155,7 +160,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     result (as `ShotsJson`, `Picture`) also needs its task twin in `Api.Threads.cs` and its name in `threads.js`'s
     `THREADED` and `RESULTS`: after a run on threads, `call()` asks the threaded runner for it. `app.js` changes
     only for a new event of the page's.
-- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs and the shots as JSON and HTML), and `PacketCheck.cs`: `VideoInput.Packets` vs
+- `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs, the shots as JSON and HTML and the
+  timeline files, `TimelineFiles` given the sample's name on both), and `PacketCheck.cs`: `VideoInput.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
   types a run keeps vs ffprobe's `frame=pict_type` (its first field only: its csv adds x264's SEI to the first
   frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which

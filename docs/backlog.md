@@ -30,8 +30,30 @@ itself", which lists the first release's page, not every page there will be. Sin
 module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
-exactness check speaks for.
+derives for display is labelled as the page's own; the CSVs, the shots as JSON and HTML and the editors' timeline files
+stay the only output the exactness check speaks for.
+
+### Performance
+
+- A first visit downloads the .NET bundle once, not twice
+  - Why: found by the performance pass (backlog-done "Performance pass on the page", 2026-10-31). On a first visit the
+    page starts its worker, whose runtime fetches the worker's bundle (4.8 MB gzipped, 14.6 MB), and registers `sw.js`;
+    once the service worker takes over, the page reloads to become cross-origin isolated (`app.js`, `serve()`), which
+    aborts the bundle half-loaded, and the reloaded page fetches it all again. Measured on the live site from GitHub's
+    runner: 39 to 44 more requests and 4.8 to 5.2 MB more after the reload, interactive at 890 to 950 ms; on a slow
+    connection the first download is mostly wasted, and the bytes count twice on a metered one.
+  - Where: `app.js`: don't start the worker's runtime (`replaceWorker()` at the bottom, after `serve()`) in a document
+    that is about to reload: on a first visit where service workers exist, wait until the page is controlled and
+    isolated, or until `serve()` has decided not to reload (a file picked, a reload already made this session, no
+    service worker, registration failed), then start it. Whether .NET's loader fetching with `no-cache` (every later
+    visit revalidates the 26 files, 304s on Pages) is worth a change too: measure it, and say so in the row either way.
+  - Done when: a first visit to the page, measured as the pass did (the AOT bundle served with Pages' headers, headless
+    Chromium in CI, and the live site after the deploy), fetches each of the worker bundle's files once, and becomes
+    interactive no later than before; the page check passes as it is (isolated, the demo on threads, offline, Firefox),
+    nothing detected or downloaded changing.
+  - Not: no change to the threaded bundle's loading (started when a file is picked, `threads.js` `warm()`), to the
+    service worker's caching, or to what a visit without a service worker does.
+  - Status: Open
 
 ## Waiting
 
@@ -89,21 +111,35 @@ another, a pull request each (the owner's choice, 2026-10-31).
   - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
   - Status: Waiting on upstream (ManagedCodecs#252, filed 2026-10-31)
 
-## Maybe
-
-Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`, 3.14.0) takes 8-bit 4:2:0 of an even
-height at a constant frame rate, upright, and refuses `Deinterlace` and `Yadif`: most rows below need a change there
-first, named in each. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
-file out of `samples/reject/`, and passes the native check.
-
-
 - 10-bit 4:2:0 and 8-bit 4:2:2
   - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
   - Where: first upstream: `YuvFrame` for 16-bit planes and 4:2:2 chroma, and `YuvVideo.PixelFormat` accepting
     yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
     the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
     `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
-  - Status: Maybe (needs ShotDetector)
+  - Status: Waiting on upstream ([shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627), from
+    the frame-source parity audit, 2026-10-31; the shotdetector coordinator is working it)
+
+- YouTube chapters: the download, and the chapters' titles edited on the page
+  - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
+    shots-to-chapters rule (first at 0:00, at least three, each long enough) and placeholder titles live on ShotDetector's
+    `Timeline`, and the page owns only the UI around it. The standing rule: a file format built from a cut list lives on
+    `Timeline`.
+  - Where: after the ShotDetector release with #648 and its package bump: `TimelineFiles` gains the chapters format
+    (one more download in run.js's "For editors" row, checked byte for byte as the others), then a title per chapter
+    edited on the page (with the shots table, kept with the kept run), the download written from the edited titles.
+  - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
+    on the page the download carries them (page check).
+  - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647).
+  - Status: Waiting on upstream ([shotdetector#648](https://github.com/bisforboman/shotdetector/issues/648))
+
+## Maybe
+
+Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
+since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlaced (`Yadif`), not yet in ranges
+(shotdetector#628). What it still lacks is in its `docs/frame-source-parity.md` (issues #625 to #630): a row that needs
+a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
+file out of `samples/reject/`, and passes the native check.
 
 - An AVI's JPEGs without Huffman tables
   - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
@@ -119,7 +155,8 @@ file out of `samples/reject/`, and passes the native check.
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
     identical results are the point. Decision "Not doing".
-  - Status: Maybe. Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
+  - Status: Maybe (issue #89 asks it again for the files the page refuses, marked not exact; #15, speed, closed into
+    it). Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
     decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
     reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
     question to open

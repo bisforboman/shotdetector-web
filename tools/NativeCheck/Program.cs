@@ -1,8 +1,9 @@
 // The native exactness check (README, "Checks"): for each sample, ShotDetectorWeb.Core's description of the video
 // (YuvVideo) against FFmpeg's (FrameReader's probe and first decoded frame, as ShotDetector's FrameInputTests builds it),
 // then every detector run on (a) the core library (ManagedCodecs + FastYuv) and (b) ShotDetector's Detect(path) with
-// FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV and the shots as JSON
-// and HTML (Shots.Json, Shots.Html: the page's other downloads) must be equal byte for byte. Writes (a)'s files to --out
+// FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV, the shots as JSON
+// and HTML (Shots.Json, Shots.Html: the page's other downloads) and the editors' timeline files (TimelineFiles: EDL,
+// FCPXML, FCP7 XML, OTIO, QP, Aegisub keyframes, each given the sample's file name) must be equal byte for byte. Writes (a)'s files to --out
 // (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check, its
 // frames' types against ffprobe's pict_type (FrameTypeCheck.cs), whole, on four threads and in ranges, ffprobe's going
@@ -42,8 +43,8 @@ Directory.CreateDirectory(outDir);
 FrameReader.FFmpegLibraries.Load(libs);
 int failures = 0;
 
-Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Stats CSV | Shots JSON, HTML | Core time | FFmpeg time |");
-Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+Console.WriteLine("| Sample | Run | Frames | Shots | YuvVideo | Scenes CSV | Stats CSV | Shots JSON, HTML | Timelines | Core time | FFmpeg time |");
+Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 foreach (string sample in samples)
 {
     VideoInput input;
@@ -53,7 +54,7 @@ foreach (string sample in samples)
     }
     catch (Exception e)
     {
-        Console.WriteLine($"| {Path.GetFileName(sample)} | - | - | - | open failed: {e.GetType().Name}: {e.Message} | | | | | |");
+        Console.WriteLine($"| {Path.GetFileName(sample)} | - | - | - | open failed: {e.GetType().Name}: {e.Message} | | | | | | |");
         failures++;
         continue;
     }
@@ -81,6 +82,19 @@ foreach (string sample in samples)
         var (fileJson, fileHtml) = Runs.ShotFiles(file);
         File.WriteAllText(name + ".shots.json", json);
         File.WriteAllText(name + ".shots.html", html);
+        // The editors' files, both results given the sample's name (the page gives the picked file's).
+        var timelinesDiffer = new List<string>();
+        foreach (var (format, extension) in TimelineFiles.Formats)
+        {
+            string timeline = TimelineFiles.Write(ours, format, Path.GetFileName(sample));
+            string fileTimeline = TimelineFiles.Write(file, format, Path.GetFileName(sample));
+            File.WriteAllText($"{name}.{extension}", timeline);
+            if (timeline != fileTimeline)
+            {
+                timelinesDiffer.Add(format);
+                File.WriteAllText($"{name}.ffmpeg.{extension}", fileTimeline);
+            }
+        }
 
         var problems = new List<string>();
         if (!file.Video.DecodedInProcess)
@@ -100,6 +114,9 @@ foreach (string sample in samples)
         string scenesResult = scenes == fileScenes ? "same" : "DIFFERS";
         string statsResult = stats == fileStats ? $"same ({stats.Length:N0} bytes)" : "DIFFERS";
         string shotsResult = (json == fileJson ? "same" : "JSON DIFFERS") + ", " + (html == fileHtml ? "same" : "HTML DIFFERS");
+        string timelinesResult = timelinesDiffer.Count == 0 ? "same" : $"DIFFERS: {string.Join(", ", timelinesDiffer)}";
+        if (timelinesDiffer.Count > 0)
+            failures++;
         if (scenes != fileScenes || stats != fileStats || json != fileJson || html != fileHtml || problems.Count > 0)
         {
             failures++;
@@ -110,7 +127,7 @@ foreach (string sample in samples)
         }
 
         string frames = problems.Count == 0 ? $"{ours.FrameCount}" : $"{ours.FrameCount} ({string.Join(", ", problems)})";
-        Console.WriteLine($"| {Path.GetFileName(sample)} | {run} | {frames} | {ours.Shots.Count} | {described} | {scenesResult} | {statsResult} | {shotsResult} | {oursTime.TotalSeconds:F2} s | {fileTime.TotalSeconds:F2} s |");
+        Console.WriteLine($"| {Path.GetFileName(sample)} | {run} | {frames} | {ours.Shots.Count} | {described} | {scenesResult} | {statsResult} | {shotsResult} | {timelinesResult} | {oursTime.TotalSeconds:F2} s | {fileTime.TotalSeconds:F2} s |");
         described = "";
     }
 }
