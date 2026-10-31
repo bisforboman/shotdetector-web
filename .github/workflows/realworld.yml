@@ -1,0 +1,126 @@
+# The real-world check (tools/realworld.sh; README, "Checks"): the core and the page's AOT bundle on real files, Blender
+# Foundation films pinned by SHA-256 and variants of them made by the pinned FFmpeg, against ShotDetector's FFmpeg path,
+# byte for byte. Nightly and by hand, never on a pull request, and not a check main requires (the owner's choice,
+# 2026-10-31): its films take hours of runner time. A failure is a finding: the backlog gets a row for it.
+name: Real world
+
+on:
+  schedule:
+    - cron: '41 1 * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'One group to run (clips, caminandes, fragmented, interlaced, bunny, tears), or all'
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: realworld
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  # The page's bundle, AOT, as pages.yml deploys it, published once for every group.
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The groups: each one job, its files cached together (a made file with the one it is made from). Short files and
+      # the refused ones share a job; each long one has its own.
+      - name: The groups
+        id: plan
+        env:
+          ONLY: ${{ inputs.only || 'all' }}
+        run: |
+          all='[
+            {"group": "clips", "files": "sintel_trailer-720p.mp4 sintel_trailer-720p-rotated.mp4 elephantsdream-480-h264-st-aac.mov"},
+            {"group": "caminandes", "files": "caminandes_gran_dillama.mp4"},
+            {"group": "fragmented", "files": "caminandes-fragmented.mp4"},
+            {"group": "interlaced", "files": "caminandes-1080i25.mp4"},
+            {"group": "bunny", "files": "BigBuckBunny_320x180.mp4"},
+            {"group": "tears", "files": "tears_of_steel_720p.mov"}
+          ]'
+          matrix=$(jq -c --arg only "$ONLY" '[.[] | select($only == "all" or .group == $only)]' <<< "$all")
+          [[ $matrix != '[]' ]] || { echo "::error::No group $ONLY"; exit 1; }
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Publish the App, AOT
+        run: dotnet publish src/ShotDetectorWeb.App -c Release -v q -nologo -warnaserror -p:RunAOTCompilation=true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: bundle
+          path: src/ShotDetectorWeb.App/bin/Release/net10.0/publish/wwwroot
+          if-no-files-found: error
+          retention-days: 3
+
+  check:
+    needs: bundle
+    name: Real world (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    # Tears of Steel's 12 minutes at 720p: the whole native check, then the bundle's lighter runs.
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.bundle.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # FFmpeg 8.1 with its shared libraries (BtbN's build, pinned by SHA-256), as ci.yml: ShotDetector's in-process
+      # path, ffprobe for the checks, and libx264 for the variants.
+      - name: Install FFmpeg 8.1
+        id: ffmpeg
+        uses: ./.github/actions/btbn-ffmpeg
+        with:
+          build: gpl-shared
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bundle
+          path: ${{ runner.temp }}/bundle
+
+      # The files, and the made ones' sources; realworld.sh checks each SHA-256 after a restore too.
+      - name: Cache the files
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: samples/realworld
+          key: realworld-${{ matrix.group }}-${{ hashFiles('tools/realworld.sh') }}
+
+      - name: Native check and the AOT bundle under Node
+        env:
+          SHOTDETECTOR_FFMPEG_LIBS: ${{ steps.ffmpeg.outputs.bin }}
+          BUNDLE: ${{ runner.temp }}/bundle
+          FILES: ${{ matrix.files }}
+        run: tools/realworld.sh check wasm $FILES
+
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: realworld-${{ matrix.group }}
+          path: out/realworld/
+          if-no-files-found: ignore
