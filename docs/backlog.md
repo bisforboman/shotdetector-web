@@ -106,8 +106,8 @@ another, a pull request each (the owner's choice, 2026-10-31).
   - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
     (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and
     ManagedCodecs' `Mp4Demuxer` doesn't: the core's `StartPts` is 1000 against FFmpeg's 0, and every packet's pts
-    (`PacketCheck`) is 1000 later than ffprobe's. The CSVs and the shots' JSON and HTML are still identical, but the
-    description isn't.
+    (`PacketCheck`) is 1000 later than ffprobe's, and so the black spans' times (`PictureCheck`, blackdetect) a frame
+    later than FFmpeg's. The CSVs and the shots' JSON and HTML are still identical, but the description isn't.
   - Where: upstream in ManagedCodecs' `Mp4Demuxer` (sent to the shotdetector coordinator, 2026-10-31); then here a
     ManagedCodecs bump, and a sample with that edit list in make-samples.sh (ffmpeg's muxer writes media_time = the
     first offset, so none of today's samples has it).
