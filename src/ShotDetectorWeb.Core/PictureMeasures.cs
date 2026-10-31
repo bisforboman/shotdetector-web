@@ -13,6 +13,8 @@ namespace ShotDetectorWeb;
 /// <c>blackdetect</c>'s black pixels, <c>cropdetect</c>'s first and last lines over its limit, and whether the frame is
 /// colour bars (by their definition: FFmpeg has no filter for them). With them it keeps the decoder's picture type
 /// (I, P, B: FFmpeg's <c>pict_type</c>, ManagedCodecs' <see cref="VideoFrame.PictureType"/>), which costs nothing.
+/// 8-bit 4:2:0 and 4:2:2 are measured; a 10-bit video's frames keep their types only (<see cref="PictureMeasures.NotMeasured"/>:
+/// FFmpeg's filters count 10-bit values there, with thresholds of their own, which these measures don't do yet).
 /// </summary>
 public sealed class PictureMeter
 {
@@ -22,7 +24,10 @@ public sealed class PictureMeter
     const int CropLimit = 24;
 
     readonly int _width, _height, _black;
-    readonly bool _fullRange;
+    readonly bool _fullRange, _measured;
+
+    // How many luma rows a chroma row covers, as a shift: 1 for 4:2:0, 0 for 4:2:2 (a chroma row for every row).
+    readonly int _chromaShift;
 
     // The clockwise quarter turn that makes the decoded frame upright (ShotDetector's VideoReader.Turn: 0, 90, 180, 270)
     // and the upright size.
@@ -52,6 +57,9 @@ public sealed class PictureMeter
         _width = video.Width;
         _height = video.Height;
         _fullRange = video.FullRange;
+        int depth = video.PixelFormat == "yuv420p10le" ? 10 : 8;
+        _measured = depth == 8;
+        _chromaShift = video.PixelFormat is "yuv422p" or "yuvj422p" ? 0 : 1;
         _turn = ((-video.Rotation % 360) + 360) % 360;
         (_uprightWidth, _uprightHeight) = _turn % 180 == 90 ? (_height, _width) : (_width, _height);
         // blackdetect's pixel_black_th_i, an unsigned int: 16 + 0.1 * 219 = 37.9 is 37, 0.1 * 255 = 25.5 is 25.
@@ -61,7 +69,7 @@ public sealed class PictureMeter
         _first = first;
         _end = end;
         Measures = new PictureMeasures(_uprightWidth, _uprightHeight, _fullRange,
-            video.TimeBase ?? throw new ArgumentException("The video has no time base.", nameof(video)), first);
+            video.TimeBase ?? throw new ArgumentException("The video has no time base.", nameof(video)), first, depth);
     }
 
     /// <summary>The frames measured so far.</summary>
@@ -76,6 +84,12 @@ public sealed class PictureMeter
         int index = _from + _index++;
         if (index < _first || index >= _end)
             return;
+        if (!_measured)
+        {
+            Measures.Add(frame.Pts, 0, 0, 0, 0, 0, -1, -1, -1, -1, false, type);
+            return;
+        }
+
         var luma = Luma(frame.Y.Span, frame.YStride);
         int brng = luma.OutOfRange + ChromaOutOfRange(frame);
         var (top, bottom, left, right) = _turn == 0 ? ContentLines(frame.Y.Span, frame.YStride) : TurnedContentLines(frame.Y.Span, frame.YStride);
@@ -156,14 +170,15 @@ public sealed class PictureMeter
 
     /// <summary>
     /// signalstats' BRNG counts a luma pixel when it or its chroma sample is out of range (16 to 240): the luma pixels
-    /// in range under each chroma sample out of range, which <see cref="Luma"/> didn't count.
+    /// in range under each chroma sample out of range, which <see cref="Luma"/> didn't count. A chroma row is under two
+    /// luma rows at 4:2:0, one at 4:2:2 (signalstats' <c>j &gt;&gt; vsub</c>).
     /// </summary>
     int ChromaOutOfRange(YuvFrame frame)
     {
         var u = frame.U.Span;
         var v = frame.V.Span;
         var y = frame.Y.Span;
-        int width = (_width + 1) / 2, height = (_height + 1) / 2;
+        int width = (_width + 1) / 2, height = (_height + (1 << _chromaShift) - 1) >> _chromaShift;
         var under16 = Vector128.Create((byte)15);
         var over240 = Vector128.Create((byte)240);
         int count = 0;
@@ -201,7 +216,8 @@ public sealed class PictureMeter
     int LumaInRange(ReadOnlySpan<byte> y, int stride, int cx, int cy)
     {
         int n = 0;
-        for (int r = 2 * cy; r < Math.Min(_height, 2 * cy + 2); r++)
+        int top = cy << _chromaShift;
+        for (int r = top; r < Math.Min(_height, top + (1 << _chromaShift)); r++)
         {
             for (int x = 2 * cx; x < Math.Min(_width, 2 * cx + 2); x++)
             {
@@ -390,8 +406,9 @@ public sealed class PictureMeter
         int columns = (_uprightWidth + 1) / 2;
         if (_turn == 0)
         {
-            return _bars.InRow(frame.Y.Span.Slice(row * frame.YStride), frame.U.Span.Slice((row >> 1) * frame.UStride, columns),
-                frame.V.Span.Slice((row >> 1) * frame.VStride, columns), _width);
+            int chromaRow = row >> _chromaShift;
+            return _bars.InRow(frame.Y.Span.Slice(row * frame.YStride), frame.U.Span.Slice(chromaRow * frame.UStride, columns),
+                frame.V.Span.Slice(chromaRow * frame.VStride, columns), _width);
         }
 
         // The upright row's luma and the chroma row under it, read from the decoded planes as cv::rotate turns them
@@ -411,7 +428,21 @@ public sealed class PictureMeter
             };
         }
 
-        for (int c = 0; c < columns; c++)
+        for (int c = 0; c < columns && _chromaShift == 0; c++)
+        {
+            // 4:2:2: the chroma sample under the upright pair's first pixel, (2c, row), in the decoded frame, whose chroma
+            // is half as wide and as high as the luma.
+            var (dx, dy) = _turn switch
+            {
+                90 => (row, H - 1 - 2 * c),
+                180 => (W - 1 - 2 * c, H - 1 - row),
+                _ => (W - 1 - row, 2 * c),
+            };
+            blue[c] = u[(dy * frame.UStride) + (dx >> 1)];
+            red[c] = v[(dy * frame.VStride) + (dx >> 1)];
+        }
+
+        for (int c = 0; c < columns && _chromaShift == 1; c++)
         {
             int at(int stride) => _turn switch
             {
@@ -544,7 +575,7 @@ sealed class BarColours
 /// </summary>
 public sealed class PictureMeasures
 {
-    const uint Magic = 0x32434950; // "PIC2"
+    const uint Magic = 0x33434950; // "PIC3"
 
     readonly List<long> _pts = [];
     readonly List<byte> _min = [], _max = [];
@@ -554,14 +585,22 @@ public sealed class PictureMeasures
     readonly List<bool> _bars = [];
     readonly List<PictureType> _type = [];
 
-    internal PictureMeasures(int width, int height, bool fullRange, FrameReader.Rational timeBase, int firstFrame)
+    internal PictureMeasures(int width, int height, bool fullRange, FrameReader.Rational timeBase, int firstFrame, int bitDepth = 8)
     {
+        BitDepth = bitDepth;
         Width = width;
         Height = height;
         FullRange = fullRange;
         TimeBase = timeBase;
         FirstFrame = firstFrame;
     }
+
+    /// <summary>The video's bits per sample: 8, or 10, whose frames keep only their types (<see cref="NotMeasured"/>).</summary>
+    public int BitDepth { get; }
+
+    /// <summary>Why the frames' picture wasn't measured (their types were kept); null when it was.</summary>
+    public string? NotMeasured => BitDepth == 8 ? null
+        : $"The video is {BitDepth}-bit: FFmpeg's signalstats, blackdetect and cropdetect count {BitDepth}-bit values there, which these measures don't do yet (only 8-bit is measured).";
 
     public int Width { get; }
 
@@ -714,7 +753,7 @@ public sealed class PictureMeasures
     /// <summary>The first <paramref name="count"/> frames' measures (a run's, cut to the frames its result read).</summary>
     public PictureMeasures Take(int count)
     {
-        var taken = new PictureMeasures(Width, Height, FullRange, TimeBase, FirstFrame);
+        var taken = new PictureMeasures(Width, Height, FullRange, TimeBase, FirstFrame, BitDepth);
         for (int i = 0; i < Math.Min(count, Count); i++)
             taken.Add(_pts[i], _min[i], _max[i], _sum[i], _black[i], _brng[i], _top[i], _bottom[i], _left[i], _right[i], _bars[i], _type[i]);
         return taken;
@@ -737,7 +776,8 @@ public sealed class PictureMeasures
                 continue;
             }
 
-            if (range.FirstFrame != joined.Count || (range.Width, range.Height, range.FullRange) != (joined.Width, joined.Height, joined.FullRange))
+            if (range.FirstFrame != joined.Count ||
+                (range.Width, range.Height, range.FullRange, range.BitDepth) != (joined.Width, joined.Height, joined.FullRange, joined.BitDepth))
                 break;
             for (int i = 0; i < range.Count; i++)
             {
@@ -752,7 +792,7 @@ public sealed class PictureMeasures
     /// <summary>The measures as bytes, for a range's worker to hand to the one that joins them, checked by a hash.</summary>
     public byte[] ToBytes()
     {
-        const int header = 4 * 4 + 1 + 4 * 2 + 4;
+        const int header = 4 * 4 + 1 + 1 + 4 * 2 + 4;
         const int perFrame = 8 + 1 + 1 + 8 + 4 + 4 + 2 * 4 + 1 + 1;
         var bytes = new byte[header + perFrame * Count + 8];
         var w = new Writer(bytes);
@@ -761,6 +801,7 @@ public sealed class PictureMeasures
         w.Int(Height);
         w.Int(FirstFrame);
         w.Byte(FullRange ? (byte)1 : (byte)0);
+        w.Byte((byte)BitDepth);
         w.Int(TimeBase.Num);
         w.Int(TimeBase.Den);
         w.Int(Count);
@@ -795,8 +836,9 @@ public sealed class PictureMeasures
             throw new InvalidDataException("These aren't the picture's measures.");
         int width = r.Int(), height = r.Int(), first = r.Int();
         bool full = r.Byte() != 0;
+        int depth = r.Byte();
         var timeBase = new FrameReader.Rational(r.Int(), r.Int());
-        var measures = new PictureMeasures(width, height, full, timeBase, first);
+        var measures = new PictureMeasures(width, height, full, timeBase, first, depth);
         int count = r.Int();
         for (int i = 0; i < count; i++)
         {
