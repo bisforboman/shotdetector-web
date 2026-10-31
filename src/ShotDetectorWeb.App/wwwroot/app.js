@@ -48,7 +48,7 @@
 //                       title (MARKS), markTitle how they are checked, the chip's tooltip; a row of another kind says
 //                       so in its own tooltip.
 import { RESULTS, ThreadedRunner, threadsUsable } from './threads.js';
-import { secondsOf, setDuration, timecode } from './timeline.js';
+import { held, playheadTime, secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
 // browser has finished a run (its own rate, kept in localStorage), the rate is the one measured for Sintel's trailer
@@ -110,7 +110,7 @@ const resumeButton = $('resume'), forgetButton = $('forget');
 const demoButton = $('demo'), changeButton = $('change');
 const fileName = $('file-name'), fileFacts = $('file-facts');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
-const result = $('result'), video = $('video'), now = $('now');
+const result = $('result'), video = $('video'), now = $('now'), picture = $('frame');
 const places = { run: $('run-cards'), below: $('below'), details: $('details') };
 
 // Whose number it is (decision 2026-10-26-new-ui.md, "One mark"): the CSVs, checked byte for byte; the core's measures,
@@ -369,6 +369,9 @@ async function choose(chosen) {
   if (video.src) URL.revokeObjectURL(video.src);
   unplayable.hidden = true;
   video.hidden = false;
+  held(false);
+  showPicture(null);
+  jpegs = new Promise(resolve => { tellJpegs = resolve; });
   video.src = URL.createObjectURL(file);
   say('');
   // A stopped run of this file kept from this visit or an earlier one: shown at once, its options in the form.
@@ -393,8 +396,14 @@ async function start(how = 'detect') {
       progress.removeAttribute('value');
       say(`Opening ${file.name}…`);
       // The File itself: the worker reads it in slices as .NET needs them, so it is never copied whole (worker.js).
-      opened = JSON.parse(await call('Open', file));
+      const opening = file;
+      try {
+        opened = JSON.parse(await call('Open', file));
+      } finally {
+        if (opening === file) tellJpegs(opened?.codec === 'mjpeg' ? jpegsOf(opening) : null);
+      }
       setDuration(lengthOf(opened));
+      picture.style.setProperty('--picture-aspect', `${opened.width} / ${opened.height}`);
       fileFacts.textContent = facts(file, opened);
       emit('opened', { video: opened });
     }
@@ -972,7 +981,8 @@ function shotAt(t) {
 }
 
 function follow() {
-  const t = video.currentTime || 0, i = shotAt(t), s = shots[i];
+  const t = playheadTime(), i = shotAt(t), s = shots[i];
+  if (video.hidden) pictureAt(t);
   if (!s) {
     now.textContent = shots.length > 0 ? 'Outside the shots found.' : '';
     now.title = '';
@@ -984,6 +994,66 @@ function follow() {
     now.title = `Shot ${s.shot}: ${s.startTimecode} to ${s.endTimecode}; the playhead at ${timecode(t)}`;
   }
   emit('playing', { shot: s ?? null, paused: video.paused });
+}
+
+// The pictures of an MJPEG file (an AVI's): each video packet a JPEG, cut from the file. jpegs: a promise of the
+// opened file's { file, times, offsets, sizes } (times in seconds from the first packet, ascending), or null for any
+// other file; settled once Open has answered.
+let jpegs = Promise.resolve(null), tellJpegs = () => {};
+
+async function jpegsOf(of) {
+  try {
+    const { timeBase: { num, den }, pts, offsets, sizes } = JSON.parse(await call('Packets'));
+    if (!offsets) return null;
+    return { file: of, times: pts.map(p => (p - pts[0]) * num / den), offsets, sizes };
+  } catch {
+    return null;
+  }
+}
+
+// The JPEG shown at a time on the axis (a Blob of type image/jpeg): the last packet starting at or before it, or null
+// when the file has no JPEGs. For the player and the shots' stills (panels/shots.js).
+export async function frameAt(t) {
+  const j = await jpegs;
+  if (!j || j.times.length === 0) return null;
+  const i = frameIndex(j, t);
+  return j.file.slice(j.offsets[i], j.offsets[i] + j.sizes[i], 'image/jpeg');
+}
+
+function frameIndex(j, t) {
+  let lo = 0, hi = j.times.length - 1, found = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (j.times[mid] <= t + 1e-6) { found = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return found;
+}
+
+// The player's picture at the playhead, a new <img> source only when the frame changes; the frame's number is the
+// image's data-frame (the page check reads it).
+let pictureFrame = -1;
+async function pictureAt(t) {
+  const j = await jpegs;
+  if (!j || j.file !== file || !video.hidden) return;
+  const i = frameIndex(j, t);
+  if (i === pictureFrame) return;
+  pictureFrame = i;
+  showPicture(j.file.slice(j.offsets[i], j.offsets[i] + j.sizes[i], 'image/jpeg'), i);
+}
+
+function showPicture(jpeg, frame) {
+  if (picture.src) URL.revokeObjectURL(picture.src);
+  if (!jpeg) {
+    picture.removeAttribute('src');
+    delete picture.dataset.frame;
+    picture.hidden = true;
+    pictureFrame = -1;
+    return;
+  }
+  picture.src = URL.createObjectURL(jpeg);
+  picture.dataset.frame = frame;
+  picture.alt = `Frame ${count(frame)} of the video, the file's own JPEG`;
+  picture.hidden = false;
 }
 
 // The video's length on the axis: Open's duration, or its frames over its rate.
@@ -1012,13 +1082,25 @@ changeButton.onclick = () => fileInput.click();
 // The whole drop zone picks a file, not only its label: all but the demo's line.
 drop.onclick = e => { if (e.target === drop) fileInput.click(); };
 for (const type of ['timeupdate', 'seeking', 'emptied', 'play', 'pause']) video.addEventListener(type, follow);
-// A file the browser can't play (MJPEG in AVI: decision 2026-10-30-mjpeg-avi.md) is analysed all the same: a line in the
-// player's place says so.
+// A file the browser can't play (MJPEG in AVI: decision 2026-10-30-mjpeg-avi.md) is analysed all the same. An AVI's
+// MJPEG packets are each a JPEG, which the browser shows: the player is the JPEG at the playhead, cut from the picked
+// file where Api's Packets says its data is (offsets), without sound, and the playhead the page's own (timeline.js's
+// held), moved by the timeline and the shots' rows (backlog "The picture of an AVI on the page"). A line under it says
+// so; for another file the browser can't play, the line alone.
 const unplayable = $('unplayable');
-video.addEventListener('error', () => {
+video.addEventListener('error', async () => {
   if (!video.error || video.error.code === MediaError.MEDIA_ERR_ABORTED) return;
+  const of = file;
   video.hidden = true;
+  held(true);
+  const has = await jpegs;
+  if (of !== file) return;
+  unplayable.textContent = has
+    ? 'No browser plays MJPEG in AVI: the picture is the file\'s own JPEG at the playhead, without sound; click the ' +
+      'timeline or a shot to move it. The shots and everything else come from the file itself, as for any other.'
+    : 'This browser can\'t play the file: the shots and everything else here come from the file itself, as for any other.';
   unplayable.hidden = false;
+  follow();
 });
 form.onsubmit = e => { e.preventDefault(); start(); };
 stopButton.onclick = stop;

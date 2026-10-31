@@ -55,7 +55,8 @@ public sealed class AviInput : VideoInput
         {
             if (packet.StreamIndex != info.StreamIndex)
                 continue;
-            packets.Add(packet);
+            // The demuxer reads a chunk's data in one read of its size (ReadsThrough), just before it hands the packet out.
+            packets.Add(packet, stream.LongReadAt);
             if (firstPts < 0)
                 firstPts = packet.Pts;
             count++;

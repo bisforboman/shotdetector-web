@@ -26,13 +26,15 @@ public sealed class VideoPackets
     readonly long[] _pts;
     readonly int[] _sizes;
     readonly PacketFlags[] _flags;
+    readonly long[] _offsets;
 
-    VideoPackets(FrameReader.Rational timeBase, long[] pts, int[] sizes, PacketFlags[] flags)
+    VideoPackets(FrameReader.Rational timeBase, long[] pts, int[] sizes, PacketFlags[] flags, long[] offsets)
     {
         TimeBase = timeBase;
         _pts = pts;
         _sizes = sizes;
         _flags = flags;
+        _offsets = offsets;
     }
 
     /// <summary>The packets' time base (the track's 1 / timescale, <see cref="ShotDetector.YuvVideo.TimeBase"/>).</summary>
@@ -50,6 +52,13 @@ public sealed class VideoPackets
     /// <summary>Each packet's flags.</summary>
     public ReadOnlySpan<PacketFlags> Flags => _flags;
 
+    /// <summary>
+    /// Where each packet's data starts in the file, in bytes (its <see cref="Sizes"/> long), where a packet is a picture
+    /// a browser shows on its own: an AVI's MJPEG chunks, each a JPEG (backlog "The picture of an AVI on the page"; the
+    /// page cuts them from the picked file). Empty for an MP4, whose packets are H.264 that only a decoder shows.
+    /// </summary>
+    public ReadOnlySpan<long> Offsets => _offsets;
+
     /// <summary>Packet <paramref name="index"/>'s pts in seconds, as FFmpeg computes pts_time (pts × av_q2d(time base)).</summary>
     public double Seconds(int index) => _pts[index] * (TimeBase.Num / (double)TimeBase.Den);
 
@@ -59,6 +68,7 @@ public sealed class VideoPackets
         long[] _pts = new long[capacity];
         int[] _sizes = new int[capacity];
         PacketFlags[] _flags = new PacketFlags[capacity];
+        long[]? _offsets;
         int _count;
 
         public void Add(in ManagedCodecs.Packet packet) =>
@@ -66,6 +76,16 @@ public sealed class VideoPackets
 
         public void Add(in ManagedCodecs.PacketInfo packet) =>
             Add(packet.Pts, packet.Size, packet.IsKeyframe, packet.Discard);
+
+        /// <summary>A packet whose data starts at <paramref name="offset"/> in the file: every packet, or none, has one.</summary>
+        public void Add(in ManagedCodecs.Packet packet, long offset)
+        {
+            _offsets ??= new long[_pts.Length];
+            if (_count == _offsets.Length)
+                Array.Resize(ref _offsets, Math.Max(4, _count * 2));
+            _offsets[_count] = offset;
+            Add(packet);
+        }
 
         void Add(long pts, int size, bool keyframe, bool discard)
         {
@@ -94,7 +114,9 @@ public sealed class VideoPackets
                 Array.Resize(ref _flags, _count);
             }
 
-            return new VideoPackets(timeBase, _pts, _sizes, _flags);
+            if (_offsets is not null && _offsets.Length != _count)
+                Array.Resize(ref _offsets, _count);
+            return new VideoPackets(timeBase, _pts, _sizes, _flags, _offsets ?? []);
         }
     }
 }

@@ -208,6 +208,12 @@ sealed class TimingOnlyStream(Stream inner) : Stream
     /// </summary>
     public int ReadsThrough { get; init; }
 
+    /// <summary>
+    /// Where the last read longer than <see cref="ReadsThrough"/> started, skipped or not: for an AVI, the data of the
+    /// packet its demuxer just handed out (<see cref="VideoPackets.Offsets"/>).
+    /// </summary>
+    public long LongReadAt { get; private set; } = -1;
+
     public override bool CanRead => true;
     public override bool CanSeek => true;
     public override bool CanWrite => false;
@@ -223,7 +229,10 @@ sealed class TimingOnlyStream(Stream inner) : Stream
 
     public override int Read(Span<byte> buffer)
     {
-        if (!SkipReads || buffer.Length <= ReadsThrough)
+        if (buffer.Length <= ReadsThrough)
+            return inner.Read(buffer);
+        LongReadAt = Position;
+        if (!SkipReads)
             return inner.Read(buffer);
         int n = (int)Math.Clamp(Length - Position, 0, buffer.Length);
         Position += n;

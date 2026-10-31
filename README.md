@@ -81,7 +81,11 @@ large, the downloads, the warnings when ShotDetector has any); the timeline acro
 whose rows play the video from the shot, the row of the shot playing marked, each row as soon as ShotDetector knows the
 shot (a few frames after the cut that ends it, `DetectionOptions.OnShot`) and starting with a still of the shot's middle
 frame (the browser's own decode, not ShotDetector's frame: a hidden second `<video>` on the same file, sought one still
-at a time as rows come into the table's view; on Sintel's trailer every still is there as the run ends); and last a grid of cards: the shots'
+at a time as rows come into the table's view; on Sintel's trailer every still is there as the run ends). An AVI, which
+no browser plays, has its picture from its own JPEGs: each MJPEG packet is one, cut from the picked file where
+`Packets()` says its data is and decoded by the browser, an `<img>` of the frame at the playhead in the video's place
+(no sound; the playhead the page's own, moved by the timeline and the shots' rows) and the stills from the same, during
+a run too; and last a grid of cards: the shots'
 statistics (the number of shots, average and median shot length, shortest and longest, cuts per minute, the run's speed
 against real time: the page's own figures, worked out from the shots), the picture's measures (the luma's lowest,
 highest and mean, broadcast range, the black spans of 2 s or more, the letterbox as cropdetect finds it, the colour
@@ -503,13 +507,17 @@ In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which Managed
 `VideoInput.Packets` lists the video track's packets as FFmpeg's demuxer gives them, in decode order, edit list applied
 and discarded packets included (what `ffprobe -show_packets -select_streams v:0` prints): each one's pts (`Pts`, in
 `TimeBase`; `Seconds(i)` as ffprobe's pts_time), size in bytes (`Sizes`) and keyframe and discard flags (`Flags`), the
-bitrate over time and the encoder's keyframes without decoding. Opening the file already walks every packet for the
+bitrate over time and the encoder's keyframes without decoding; and in an AVI where each packet's data starts in the
+file (`Offsets`, the position of the demuxer's one read of the chunk's data, skipped as it is: empty for an MP4), for the
+page's picture of an AVI, each MJPEG packet a JPEG. Opening the file already walks every packet for the
 duration, with their data skipped; the list is kept on the way, by column, 13 bytes a packet, its arrays allocated
 once at the track's sample count. Measured 2026-10-25 natively against `main` on a two-hour file (172,800 frames at
 24 fps, 337,501 AAC packets): `Open` keeps 2.25 MB more and allocates 2.25 MB more, in the same time (0.9 s).
 
 On the page it is `Api.Packets()`, called as soon as the file is opened, whose JSON (CLAUDE.md, "Layout") the
-timeline's Bitrate lane and its card read: the bitrate per second, a tick at each keyframe, and after a run how many
+timeline's Bitrate lane and its card read (and, for an AVI, the player and the shots' stills: its `offsets`, the JPEGs
+cut from the picked `File` with `slice`, so a run on the page's worker, which answers one call at a time, doesn't hold
+them up; the owner's choice, 2026-10-31): the bitrate per second, a tick at each keyframe, and after a run how many
 cuts fall on a keyframe (a shot's first frame in display order), the page's own reading of the packets. JSON by
 column rather than typed arrays: an export returns a string the worker passes on as it is, and a `[JSImport]` of
 typed arrays would need a new import in `worker.js`. Measured 2026-10-26 on a two-hour MP4 (the trailer looped, 640x360
@@ -663,7 +671,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   gap, each edge within a video frame, and that each waveform's values are within 1 of the
   native check's (`out/native/<sample>.waveform.json`: the same managed code, another runtime), that `Packets()` (the
   bitrate lane's) lists every sample's video packets as ffprobe does (`out/native/<sample>.packets.txt`): the same
-  packets in the same order, each with the same pts, pts_time, size and K and D flags, that `FrameTypes()` after a
+  packets in the same order, each with the same pts, pts_time, size and K and D flags, an AVI's offsets each at bytes
+  that hash to ffprobe's `data_hash` of the packet (an MP4's null), that `FrameTypes()` after a
   whole run is ffprobe's types as the native check wrote them (`out/native/<sample>.frametypes.txt`), after a split
   run's merge the whole run's, after a stopped run the whole run's first frames, that `Picture()` after a whole
   run is the native check's `out/native/<sample>.picture.json` exactly, after a split run's merge the whole run's, and
@@ -682,7 +691,10 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   reload of a first visit): `with-audio-320x240-25.mp4` set on the file input and detected with the options as
   the page prefills them, on threads ("on N threads" in the status); the same on the page's worker (`?threads=0`, as
   where the page isn't isolated); the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers"
-  in the status); then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
+  in the status); `mjpeg-320x240-25.avi` picked, which no browser plays: its downloads the native run's, the player an
+  `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
+  on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
+  every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
   (a quarter turn); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
