@@ -33,6 +33,28 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
+### Performance
+
+- A first visit downloads the .NET bundle once, not twice
+  - Why: found by the performance pass (backlog-done "Performance pass on the page", 2026-10-31). On a first visit the
+    page starts its worker, whose runtime fetches the worker's bundle (4.8 MB gzipped, 14.6 MB), and registers `sw.js`;
+    once the service worker takes over, the page reloads to become cross-origin isolated (`app.js`, `serve()`), which
+    aborts the bundle half-loaded, and the reloaded page fetches it all again. Measured on the live site from GitHub's
+    runner: 39 to 44 more requests and 4.8 to 5.2 MB more after the reload, interactive at 890 to 950 ms; on a slow
+    connection the first download is mostly wasted, and the bytes count twice on a metered one.
+  - Where: `app.js`: don't start the worker's runtime (`replaceWorker()` at the bottom, after `serve()`) in a document
+    that is about to reload: on a first visit where service workers exist, wait until the page is controlled and
+    isolated, or until `serve()` has decided not to reload (a file picked, a reload already made this session, no
+    service worker, registration failed), then start it. Whether .NET's loader fetching with `no-cache` (every later
+    visit revalidates the 26 files, 304s on Pages) is worth a change too: measure it, and say so in the row either way.
+  - Done when: a first visit to the page, measured as the pass did (the AOT bundle served with Pages' headers, headless
+    Chromium in CI, and the live site after the deploy), fetches each of the worker bundle's files once, and becomes
+    interactive no later than before; the page check passes as it is (isolated, the demo on threads, offline, Firefox),
+    nothing detected or downloaded changing.
+  - Not: no change to the threaded bundle's loading (started when a file is picked, `threads.js` `warm()`), to the
+    service worker's caching, or to what a visit without a service worker does.
+  - Status: Open
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
