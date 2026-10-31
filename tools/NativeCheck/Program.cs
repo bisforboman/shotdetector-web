@@ -14,7 +14,8 @@
 // And the picture's measures against FFmpeg's blackdetect, signalstats and cropdetect, and the colour bars by their
 // definition (PictureCheck.cs).
 //   NativeCheck [--out dir] [--reject file...] sample.mp4...    (SHOTDETECTOR_FFMPEG_LIBS: FFmpeg 8.1's shared libraries)
-// Exit code 0 when everything agreed and every --reject file was refused with an UnsupportedVideoException.
+// Exit code 0 when everything agreed and every --reject file was refused with an UnsupportedVideoException, when opened
+// or by its run.
 using System.Globalization;
 using ShotDetector;
 using ShotDetector.FastYuv;
@@ -145,7 +146,9 @@ foreach (string reject in rejects)
 {
     try
     {
-        VideoInput.Open(reject);
+        // Refused when opened, or, for what only the frames tell (a size that changes midway), by the run: the
+        // core's frames refuse it before ShotDetector would read one at the video's size.
+        VideoInput.Open(reject).Detect();
         Console.WriteLine($"Not refused: {reject}");
         failures++;
     }
