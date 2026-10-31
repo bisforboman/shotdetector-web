@@ -105,20 +105,6 @@ that waited on them are open.
   - Not: anything of the detection (its CSVs are already byte for byte).
   - Status: Open (found 2026-10-31, widening the scope to 10 bits)
 
-- YouTube chapters: the download, and the chapters' titles edited on the page
-  - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
-    shots-to-chapters rule (first at 0:00, at least three, each long enough) and placeholder titles live on ShotDetector's
-    `Timeline`, and the page owns only the UI around it. The standing rule: a file format built from a cut list lives on
-    `Timeline`.
-  - Where: after the ShotDetector release with #648 and its package bump: `TimelineFiles` gains the chapters format
-    (one more download in run.js's "For editors" row, checked byte for byte as the others), then a title per chapter
-    edited on the page (with the shots table, kept with the kept run), the download written from the edited titles.
-  - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
-    on the page the download carries them (page check).
-  - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647).
-  - Status: Open (shipped upstream in ShotDetector 3.24.0,
-    [shotdetector#648](https://github.com/bisforboman/shotdetector/issues/648))
-
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
@@ -142,6 +128,15 @@ file out of `samples/reject/`, and passes the native check.
   - Done when: the native check passes on that sample, byte for byte.
   - Not: no SPS parsing of every packet in the core (the decoder's job: CLAUDE.md, report it there).
   - Status: Maybe (found adopting ShotDetector 3.24.0, 2026-10-31; not filed upstream yet)
+
+- Chapter titles kept with the kept run
+  - Why: the titles typed for a run's YouTube chapters (the run card's Titles) last while the run is shown; a stopped
+    run kept in IndexedDB and shown again on a later visit (decision `2026-10-30-resume-across-visits.md`) comes back
+    without them, and a resumed run's chapters change where the rest adds cuts.
+  - Where: `app.js`'s `KEPT` record (the titles by chapter start, beside the options and `Kept()`'s Blob), told to
+    `run.js` with the kept run; the page check's reload.
+  - Done when: the page check types a title, stops, reloads and finds it in the chapters' download.
+  - Status: Maybe (left out of the chapters row, 2026-10-31)
 
 - An AVI's JPEGs without Huffman tables
   - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
