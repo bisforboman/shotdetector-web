@@ -847,6 +847,57 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     description field, CSV, JSON and HTML byte for byte, natively and on wasm, interpreted and AOT; 4:2:2 MJPEG waits
     for the 4:2:2 row; a dropped frame refused, ManagedCodecs#226; the page's picture of an AVI a row of its own)
 
+- Resume after Stop, across visits
+  - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
+    between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that
+    ended early. Scoring a second range from where it stopped and calling `Merge` on both gives exactly the result for
+    the whole video. `RangeScores.ToBytes` makes the stopped part's scores storable, so a later visit can resume too.
+  - Where: built with the workers row, on the same `ScoreRangeAsync` and `Merge`:
+    - **At Stop:** `Merge` of the ranges so far shows the result for the part read (find out from ShotDetector's source
+      that `Merge` takes ranges that end before the video does, as the workers decision's Stop already assumes).
+    - **Resume:** a range from the last frame read (decoding from the keyframe before it and dropping frames up to the
+      one before), then `Merge` over all ranges.
+    - **Kept in the browser:** the scores' bytes in IndexedDB, keyed by the file's name, size and modified time and by
+      the options, behind try/catch; "Resume" offered when the same file and options come back, and forgotten on a
+      finished run or a click.
+    - **Live shots:** `ScoreRange` tells no shots (`OnShot` isn't honoured there: shots are decided in `Merge`), so a
+      one-worker run built this way would lose its live table. Ask upstream for `OnShot` on a range starting at frame 0
+      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it. Until it ships,
+      a run on `DetectAsync` keeps no scores to merge, so resuming it would mean scoring its start again: run one-worker
+      runs through `ScoreRangeAsync` with progress but no live table, or leave them unresumable. Measure both and put
+      the choice to the owner in the PR.
+  - Done when: `tools/app-check.mjs` stops at a frame on every sample, resumes, and gets exactly the full run's CSVs;
+    the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
+  - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
+  - Depends on: "Long videos across several Web Workers".
+  - Status: Done (2026-10-30: every one-worker run one range from frame 0, merged; a stopped run's scores kept in
+    IndexedDB, one record (the owner's choice), shown again at once when its file is picked, resumed on one worker with
+    its shots told, or split for a rest over 2 minutes; the decision's later answers and "As built"; NativeCheck's
+    ResumeCheck, app-check.mjs's checkResume on every sample, and the page check across a reload in Chromium (on
+    threads) and Firefox, split in the same visit)
+
+- The page's numbers and words after a stop, a resume and a reload
+  - Why: after a resumed run the status line's "times real time" divided the whole video by the rest's time (5.2
+    against the statistics' 4.7); "resumed from frame 124" after a stop at 216 named the keyframe the rest scores
+    again from, not where the run had got to; the kept run shown again after a reload had no sound, and its bitrate
+    and statistics cards counted the whole file's keyframes and the cut-short last shot as a length; the picture card
+    said "and 3 shorter, on the timeline." after "Black: none of 2 s or more."; Forget, which deletes the kept run,
+    looked like Detect.
+  - Where: `app.js` (`show`, `resumedFrom`, `restore` measuring the sound as a run does), `panels/stats.js`,
+    `panels/bitrate.js`, `panels/picture.js`, `index.html` and `style.css` (Forget's `danger` style),
+    `tools/page-check/page-check.mjs`.
+  - Done when: the page check asserts each: the two times real time equal after a resume, the resumed status naming
+    the stopped frame (the keyframe in brackets), the kept run's sound card and waveform, its bitrate and statistics of
+    the frames read, no picture line that isn't a sentence, Forget unfilled and not Detect's colour; the CSVs, JSON and
+    HTML byte for byte as before (`tools/check.sh native page`).
+  - Not: no change to the layout (the next row) or to any export.
+  - Status: Done (2026-10-30: the status line's times real time and the statistics' Run both of the frames read, 1.3
+    and 1.3 after a resume across a reload; "resumed from frame 192 (rescored from its keyframe, frame 124)"; the kept
+    run's sound measured as for a run, its bitrate "In the 192 frames read: ..." and its statistics without the
+    cut-short last shot; "Shorter than 2 s: 7, on the timeline." on a line of its own; Forget underlined in the
+    error's colour, unfilled. The page check asserts each (Chromium here; Firefox in CI), the downloads identical to
+    the native run's)
+
 - Frame types (I, P, B) on the strip
   - Why: shows the encoder's structure (GOPs, where the B-frames go) next to the bitrate and keyframes. The owner
     chose it on 2026-10-30.

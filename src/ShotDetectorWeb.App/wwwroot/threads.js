@@ -3,7 +3,7 @@
 // threaded runtime starts (not in a Web Worker), and only where the page is cross-origin isolated (sw.js). .NET runs
 // the exports on a thread of its own and the run on its thread pool (Host.cs), so the page stays responsive. A runner
 // looks like worker.js to app.js: postMessage the same messages, onmessage the same answers and progress, shots and
-// 'held'. Only Open, Detect, the last run's result (RESULTS), Stop and Cancel are called here (the threaded exports,
+// 'held'. Only Open, Detect, Resume, the last run's result (RESULTS), Stop and Cancel are called here (the threaded exports,
 // Api.Threads.cs); everything else stays with the page's worker. Unlike a worker it can't be terminated: a runner that
 // is ended is abandoned (its run cancelled) and, the runtime being one per page, no threaded run starts again before a
 // reload; one whose runtime ends calls its onerror, as a worker that dies does.
@@ -15,9 +15,9 @@ import { append, blob, parts } from './blob-write.js';
 const THREADED = {
   Open: 'OpenThreaded', Detect: 'Detect', ScenesCsv: 'ScenesCsvThreaded', StatsCsv: 'StatsCsvThreaded',
   ShotsJson: 'ShotsJsonThreaded', ShotsHtml: 'ShotsHtmlThreaded', Picture: 'PictureThreaded',
-  FrameTypes: 'FrameTypesThreaded',
+  FrameTypes: 'FrameTypesThreaded', Resume: 'Resume', Kept: 'KeptThreaded',
 };
-export const RESULTS = new Set(['ScenesCsv', 'StatsCsv', 'ShotsJson', 'ShotsHtml', 'Picture', 'FrameTypes']);
+export const RESULTS = new Set(['ScenesCsv', 'StatsCsv', 'ShotsJson', 'ShotsHtml', 'Picture', 'FrameTypes', 'Kept']);
 
 let api = null;     // the runtime's Api, once started (a promise)
 let current = null; // the runner whose run the runtime's imports report to

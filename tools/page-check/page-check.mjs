@@ -14,8 +14,17 @@
 //   4. the demo detected again, paused and stopped while paused: it ends stopped at the pause it was held at, its
 //      stats CSV the native run's first rows up to there, the shots table, the JSON and the HTML a shot each of its
 //      scenes CSV's;
-//   5. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
-//      (cached when it was fetched) runs on threads to the same downloads.
+//   5. across a reload (backlog "Resume after Stop, across visits"): the page reloaded, the demo picked again shows the
+//      stopped run kept in IndexedDB (its downloads the stopped run's, its options in the form, Resume beside Detect),
+//      and Resume goes on from there on threads to the whole run's downloads;
+//   6. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
+//      (cached when it was fetched) runs on threads to the same downloads;
+//   7. the demo split across two workers (?workers=2), stopped half-way and resumed in the same visit: the rest split
+//      again, merged with the kept scores to the whole run's downloads;
+//   8. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
+//      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
+//      Firefox: a cloud session's).
+// Screenshots of the stopped run shown again after the reload and of its resume go to <out>.
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there; the frame types' card (panels/frametypes.js) the counts of ffprobe's pict_type
 // as the native check wrote them, and its lane is there.
@@ -45,7 +54,7 @@ try {
 } catch {
   playwright = createRequire(import.meta.url)('playwright');
 }
-const { chromium } = playwright;
+const { chromium, firefox } = playwright;
 
 // Pages' types for what the bundle has; anything else as bytes. .wasm must be application/wasm (README, "Running the
 // page").
@@ -75,27 +84,132 @@ const browser = await chromium.launch();
 const failures = [];
 const fail = message => { failures.push(message); console.log(`FAIL ${message}`); };
 
+// Each page's switch for the leave-out below, for a reload the check makes itself (resumedAfterReload).
+const settlings = new WeakMap();
+
 // A fresh page each time, as a visitor's first visit (no rate kept from an earlier run), its errors collected:
 // exceptions, console errors (the workers' too) and failed or missing requests.
-async function open(query = '') {
-  const context = await browser.newContext({ acceptDownloads: true });
+async function open(query = '', on = browser) {
+  const context = await on.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   const errors = [];
+  // A first visit reloads once its service worker takes over (app.js, serve), which aborts the replaced document's
+  // runtime as it loads: Firefox reports that ("error loading dynamically imported module", requests
+  // NS_BINDING_ABORTED; CI, 2026-10-30), Chromium doesn't. That isn't the page's error, and the reloaded document loads
+  // it all again under watch: until the page has settled, a request aborted, what a replaced document or its worker
+  // says, and the aborted import itself (Firefox's page reports its worker's too, after the reload) are left out. A
+  // runtime that really doesn't load fails the runs that follow. Each document counts as one; its workers belong to it.
+  let documents = 0, settling = true;
+  settlings.set(page, on => { settling = on; });
+  const aborted = /error loading dynamically imported module/;
+  const counted = (doc, text) => { if (!(settling && (doc < documents || aborted.test(text)))) errors.push(text); };
+  page.on('framenavigated', f => { if (f === page.mainFrame()) documents++; });
   const watch = (where, target) => {
-    target.on('console', m => { if (m.type() === 'error') errors.push(`${where} console: ${m.text()}`); });
-    target.on('pageerror', e => errors.push(`${where}: ${e.message}`));
+    target.on('console', m => { if (m.type() === 'error') counted(documents, `${where} console: ${m.text()}`); });
+    target.on('pageerror', e => counted(documents, `${where}: ${e.message}`));
   };
   watch('page', page);
-  page.on('worker', w => w.on('console', m => { if (m.type() === 'error') errors.push(`worker console: ${m.text()}`); }));
+  page.on('worker', w => {
+    const doc = documents;
+    w.on('console', m => { if (m.type() === 'error') counted(doc, `worker console: ${m.text()}`); });
+  });
   // The <video> aborts its own range requests of the file's blob URL as it seeks and buffers: not an error.
   page.on('requestfailed', r => {
     const why = r.failure()?.errorText;
-    if (!(r.resourceType() === 'media' && why === 'net::ERR_ABORTED')) errors.push(`request failed: ${r.url()} (${why})`);
+    if (r.resourceType() === 'media' && why === 'net::ERR_ABORTED') return;
+    if (settling && /ABORTED/.test(why ?? '')) return;
+    errors.push(`request failed: ${r.url()} (${why})`);
   });
   page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()}: ${r.url()}`); });
   await page.goto(base + query);
-  await isolated(page);
+  await (on === browser ? isolated(page) : served(page));
+  settling = false;
   return { context, page, errors };
+}
+
+// Another browser, which needn't become isolated (the runs go on the page's worker): its service worker in control,
+// and the reload a first visit makes, if it makes one (app.js, serve), done.
+async function served(page) {
+  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await page.waitForLoadState('load');
+}
+
+// Stops a run once its bar reaches at (a fraction): the stopped result, its frames read (null if it didn't stop).
+async function stopped(page, what, at) {
+  await page.waitForFunction(f => document.body.dataset.state === 'detecting' &&
+    document.getElementById('progress').value >= f, at, { timeout: 15 * 60 * 1000, polling: 50 });
+  await page.click('#stop');
+  const status = await finished(page, what, 'stopped');
+  return status === null ? null : Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
+}
+
+// The page reloaded (a later visit) and the demo picked again: the stopped run kept in this browser shown at once,
+// stopped at frames, with Resume and Forget, its downloads the stopped run's; then resumed to the whole run's.
+async function resumedAfterReload(page, what, frames, run, settle, threads) {
+  settlings.get(page)(true);
+  await page.reload();
+  await settle(page);
+  settlings.get(page)(false);
+  await page.click('#demo');
+  const status = await finished(page, `${what}, shown again`, 'stopped');
+  if (status === null) return;
+  const at = Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
+  if (at !== frames || !status.includes('kept in this browser') || !await page.isVisible('#resume') ||
+    await page.inputValue('#detector') !== run)
+    fail(`${what}: after the reload, not the stopped run at frame ${frames} kept with Resume: ${status}`);
+  await compare(page, `${what}, shown again`, 'sintel-trailer.mp4', run, frames);
+  await keptCards(page, `${what}, shown again`, frames);
+  await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.kept.png`), fullPage: true });
+  await page.click('#resume');
+  const done = await finished(page, `${what}, resumed`);
+  if (done === null) return;
+  if (!resumedAt(done, frames) || THREADED.test(done) !== threads) fail(`${what}: resumed, the status says ${done}`);
+  await realTime(page, `${what}, resumed`, done);
+  await compare(page, `${what}, resumed`, 'sintel-trailer.mp4', run);
+  await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.resumed.png`), fullPage: true });
+  if (await page.isVisible('#resume')) fail(`${what}: finished, Resume is still offered`);
+}
+
+// A resumed run's status names the frame the stopped run had got to, and the keyframe before it its rest scored again
+// from only as that, in brackets (app.js, resumedFrom): "resumed from frame 216 (rescored from its keyframe, frame 124)".
+function resumedAt(status, frames) {
+  const m = /resumed from frame ([\d,]+)(?: \(rescored from its keyframe, frame ([\d,]+)\))?/.exec(status);
+  const n = s => Number(s.replace(/,/g, ''));
+  return m !== null && n(m[1]) === frames && (m[2] === undefined || n(m[2]) < frames);
+}
+
+// A finished run's times real time, the status line's and the shot statistics' Run, the same figure: of the video the
+// run read (a resumed run's rest from its keyframe), not the whole video.
+async function realTime(page, what, status) {
+  const ours = /\(([\d.]+) times real time\)/.exec(status)?.[1];
+  const card = /([\d.]+) times real time/.exec(await page.textContent('#stats dl') ?? '')?.[1];
+  if (ours === undefined || ours !== card) fail(`${what}: the status says ${ours} times real time, the statistics ${card}`);
+  else console.log(`${what}: ${ours} times real time, in the status and the statistics`);
+}
+
+// The stopped run shown again (frames read): the sound measured as for a run, its card and waveform there (the demo
+// has AAC); the bitrate's cuts on keyframes and the statistics of the part read, the cut-short last shot in no length;
+// Forget not styled as a button to press.
+async function keptCards(page, what, frames) {
+  await page.waitForFunction(() => document.getElementById('sound')?.hidden === false &&
+    !document.getElementById('status-text').textContent.includes('measuring the sound'), null, { timeout: 5 * 60 * 1000 })
+    .catch(() => {});
+  if (await page.locator('#sound').isHidden() || await page.locator('.track.waveform svg').count() !== 1)
+    fail(`${what}: no sound card or waveform for the kept run`);
+  const bitrate = await page.textContent('#bitrate') ?? '';
+  const all = Number(/([\d,]+) keyframes?,?/.exec(bitrate)?.[1].replace(/,/g, ''));
+  const elsewhere = Number(/([\d,]+) keyframes? (?:is|are) at no cut/.exec(bitrate)?.[1]);
+  if (!bitrate.includes(`In the ${frames.toLocaleString('en')} frames read:`) || !(elsewhere < all - 1))
+    fail(`${what}: the bitrate card doesn't count the frames read: ${bitrate}`);
+  const stats = await page.textContent('#stats dl') ?? '', shots = Number(/^Shots(\d+)/.exec(stats)?.[1]);
+  if (!(shots > 0) || stats.includes(`(shot ${shots})`))
+    fail(`${what}: the statistics count the last shot, cut short at the stop, as a length: ${stats}`);
+  const style = id => page.$eval(id, b => { const s = getComputedStyle(b); return [s.backgroundColor, s.color, s.borderColor]; });
+  const [forget, detect, resume] = [await style('#forget'), await style('#detect'), await style('#resume')];
+  if (forget[0] !== 'rgba(0, 0, 0, 0)' || forget[1] === detect[1] || forget[1] === resume[1])
+    fail(`${what}: Forget is styled as Detect or Resume: ${forget} against ${detect} and ${resume}`);
+  console.log(`${what}: the sound measured, the bitrate and the statistics of the ${frames} frames read, Forget quiet`);
 }
 
 // The page cross-origin isolated: on a first visit, once sw.js has taken over and the page has reloaded (app.js, serve).
@@ -248,6 +362,9 @@ async function picture(page, what, file) {
   const crop = p.crop ? `crop=${p.crop.w}:${p.crop.h}:${p.crop.x}:${p.crop.y}` : 'Too few frames for cropdetect.';
   const bars = (text.match(/Colour bars: \d/g) ?? []).length;
   const lane = await page.locator('.track.picture svg').count();
+  // Each line a sentence of its own: none goes on from the one before (as "and 3 shorter" after "none").
+  const dangling = await page.$$eval('#picture p', ps => ps.map(p => p.textContent).filter(t => /^(and|or|but) /.test(t)));
+  if (dangling.length > 0) fail(`${what}: the picture's card has lines that aren't sentences: ${dangling.join(' | ')}`);
   if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);
   else
@@ -342,6 +459,8 @@ try {
         if (frames !== at)
           fail(`${again}: stopped at frame ${frames}, not at ${at}, where it said it was held: ${status}`);
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
+        if (!await page.isVisible('#resume')) fail(`${again}: no Resume offered`);
+        await resumedAfterReload(page, 'the demo across a reload', frames, run, isolated, true);
       }
     }
 
@@ -359,6 +478,44 @@ try {
   }
   report(what, errors);
   await context.close();
+
+  // Split across two workers, stopped and resumed in the same visit: the rest split again.
+  {
+    const what = 'the demo on two workers, resumed';
+    const { context, page, errors } = await open('?workers=2');
+    await page.click('#demo');
+    const frames = await stopped(page, `${what}, stopped`, 0.4);
+    if (frames !== null) {
+      await page.click('#resume');
+      const status = await finished(page, what);
+      if (status !== null) {
+        if (!/with 2 workers/.test(status) || !resumedAt(status, frames))
+          fail(`${what}: not resumed on 2 workers from frame ${frames}: ${status}`);
+        await realTime(page, what, status);
+        await compare(page, what, 'sintel-trailer.mp4', await page.inputValue('#detector'));
+      }
+    }
+    report(what, errors);
+    await context.close();
+  }
+
+  if (process.env.PAGE_CHECK_FIREFOX === 'skip') {
+    console.log('Firefox: left out (PAGE_CHECK_FIREFOX=skip)');
+  } else {
+    const fox = await firefox.launch();
+    try {
+      const what = 'Firefox';
+      const { context, page, errors } = await open('?threads=0', fox);
+      await page.click('#demo');
+      const run = await page.inputValue('#detector');
+      const frames = await stopped(page, `${what}, the demo stopped`, 0.3);
+      if (frames !== null) await resumedAfterReload(page, `${what}, the demo across a reload`, frames, run, served, false);
+      report(what, errors);
+      await context.close();
+    } finally {
+      await fox.close();
+    }
+  }
 } finally {
   await browser.close();
   server.close();
@@ -370,4 +527,5 @@ if (failures.length > 0) {
 }
 console.log('The page check passed: isolated, picked on threads, on the page\'s worker and split across two workers, ' +
   'the demo on threads paused and resumed, and offline, the CSVs, JSON and HTML identical to the native run\'s; the ' +
-  'demo stopped while paused, the result for the frames read.');
+  'demo stopped while paused, the result for the frames read, and resumed across a reload' +
+  `${process.env.PAGE_CHECK_FIREFOX === 'skip' ? '' : ' (in Firefox too)'} and split.`);

@@ -5,25 +5,33 @@
 // the demo and the shot playing under the video (decision 2026-10-26-new-ui.md), a long video split across workers
 // and the sound's own worker (decision 2026-10-26-workers.md), a one-worker run's decoder on several threads (decision
 // 2026-10-30-threads.md, threads.js) and the service worker that makes that possible and keeps the page for offline use
-// (sw.js); what else is shown of a file or a run is in the panels
+// (sw.js), and a stopped run kept in this browser to resume, in this visit or a later one (backlog "Resume after Stop,
+// across visits"); what else is shown of a file or a run is in the panels
 // (panels/<name>.js, listed in index.html), each a lane of the timeline (timeline.js) or a card. A panel imports from
 // here:
 //   on(event, f)       f(data) on each of the page's events, in this order for a run:
 //                        'chose'    { file }                     a new file: whatever was shown of the last one goes
 //                        'opened'   { video }                    the file's YuvVideo, from Api's Open (its frames too)
-//                        'run'      { video, options, ranges, fallback }   a run starts: whatever was shown of the
-//                                                                last run goes. ranges: a run split across workers
+//                        'run'      { video, options, ranges, fallback, from }   a run starts: whatever was shown of
+//                                                                the last run goes. ranges: a run split across workers
 //                                                                (decision 2026-10-26-workers.md), Api's Ranges'
 //                                                                [{ firstFrame, endFrame }], else null; fallback: why a
-//                                                                split run is being detected again with one worker
+//                                                                split run is being detected again with one worker;
+//                                                                from: the frame a stopped run resumes from (its rest's
+//                                                                first), else 0. A kept run shown again starts as a run
+//                                                                too, its 'done' a stopped run's
 //                        'progress' { video, done, expected }    frames done and expected (0 when unknown), one worker
 //                        'range'    { video, index, done, of }   a split run's range: its frames done, of how many
 //                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it
-//                        'done'     { video, result, seconds, name }   the run's result (Api's Detect, its CSVs as
-//                                                                scenesCsv, a string, and statsCsv, a Blob of text/csv);
-//                                                                name: the file's, without its
+//                        'done'     { video, result, seconds, name, from, restored }   the run's result (Api's
+//                                                                Detect, its CSVs as scenesCsv, a string, and statsCsv,
+//                                                                a Blob of text/csv); name: the file's, without its
 //                                                                extension, for downloads. A stopped run's too, with
-//                                                                result.stopped: the result for its frameCount frames
+//                                                                result.stopped: the result for its frameCount frames.
+//                                                                from: the frame a resumed run's rest started at (the
+//                                                                frames before it scored in an earlier run), else 0;
+//                                                                restored: a stopped run kept in this browser shown
+//                                                                again, which didn't run now (seconds 0)
 //                        'cancelled' { video, done, expected }   the run was lost at frame done: the worker didn't
 //                                                                answer a stop and was terminated
 //                        'audio'    { video, audio }             the file's sound, measured in a worker of its own
@@ -64,6 +72,8 @@ const MOST_WORKERS = 4;
 const ASKED_WORKERS = Number(new URLSearchParams(location.search).get('workers')) || null;
 // What Api's Merge says first when the ranges don't make up the video: the run is detected again with one worker.
 const NOT_MERGED = 'The ranges didn\'t merge: ';
+// What Api's Resume says first when the kept scores don't go on (another version's): the run is detected from the start.
+const NOT_RESUMED = 'The stopped run didn\'t resume: ';
 // How many times as fast a run goes split across 2, 3 and 4 workers as on one, for the estimate: measured on a
 // two-hour film on a 4-core machine (README "Long videos across workers").
 const SPLIT_SPEEDUP = { 2: 1.97, 3: 2.93, 4: 3.6 };
@@ -96,6 +106,7 @@ const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('d
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length');
 const windowInput = $('window'), minContent = $('min-content');
 const detectButton = $('detect'), pauseButton = $('pause'), stopButton = $('stop');
+const resumeButton = $('resume'), forgetButton = $('forget');
 const demoButton = $('demo'), changeButton = $('change');
 const fileName = $('file-name'), fileFacts = $('file-facts');
 const progress = $('progress'), statusText = $('status-text'), error = $('error');
@@ -130,6 +141,9 @@ let shown = null;       // what the status says of the last result, { text, titl
 let shots = [];         // the shots known, for the caption: told while a run goes, the result's once it is done
 let starts = [];        // each one's start in seconds, and its end
 let ends = [];
+let kept = null;        // the stopped run kept for the chosen file, to resume (KEPT's record), or null
+let resumeFrom = 0;     // the frame the current run's rest starts at when it resumes a stopped run, else 0
+let resumeAt = 0;       // and the frame the stopped run had got to: the rest scores again from its keyframe (from)
 
 const listeners = {};
 export function on(event, f) {
@@ -236,7 +250,7 @@ const fromWorker = {
     framesExpected = expected;
     if (expected > 0) progress.value = Math.min(done / expected, 1);
     const seconds = runMs() / 1000;
-    const fps = seconds > 0 ? done / seconds : 0;
+    const fps = seconds > 0 ? (done - resumeFrom) / seconds : 0;
     if (state === 'stopping') say(`Stopping at frame ${count(done)}…`);
     else if (state === 'paused') sayPaused();
     else say(`Frame ${count(done)}${expected > 0 ? ` of ${count(expected)}` : ''} · ${fps.toFixed(0)} frames per second` +
@@ -248,7 +262,8 @@ const fromWorker = {
   // processed, can be up to a pause's 8 frames behind it).
   held({ frames }) {
     if (state !== 'paused' || split) return;
-    framesDone = frames;
+    // A resumed run's frames count from the one before its rest's first.
+    framesDone = frames + Math.max(resumeFrom - 1, 0);
     sayPaused();
   },
   // A shot as soon as ShotDetector knows it: a few frames after the cut that ends it with one detector (what the page
@@ -312,6 +327,9 @@ function setState(next) {
   stopButton.hidden = !busy;
   stopButton.disabled = next === 'stopping';
   stopButton.textContent = next === 'opening' ? 'Cancel' : 'Stop';
+  resumeButton.hidden = forgetButton.hidden = busy || !keptFor(file);
+  // With a stopped run to resume, Resume is the button to press; Detect starts over.
+  detectButton.classList.toggle('quiet', !resumeButton.hidden);
   progress.hidden = !busy;
   error.hidden = next !== 'error';
   if (next === 'opening') result.hidden = true;
@@ -353,12 +371,20 @@ async function choose(chosen) {
   video.hidden = false;
   video.src = URL.createObjectURL(file);
   say('');
+  // A stopped run of this file kept from this visit or an earlier one: shown at once, its options in the form.
+  if (!keptFor(chosen)) kept = null;
   setState('idle');
+  const record = await readKept();
+  if (file !== chosen || state !== 'idle') return false;
+  if (keptFor(chosen, record)) kept = record;
+  if (!keptFor(chosen)) return false;
+  start('restore');
+  return true;
 }
 
-// Opens the file if the current worker hasn't, then detects. Errors are the library's messages; a call that a cancel or
-// a replaced worker took away is no error.
-async function start() {
+// Opens the file if the current worker hasn't, then detects ('detect'), resumes the kept run ('resume') or shows it
+// again ('restore'). Errors are the library's messages; a call that a cancel or a replaced worker took away is no error.
+async function start(how = 'detect') {
   if (!file) return;
   error.textContent = '';
   try {
@@ -372,49 +398,73 @@ async function start() {
       fileFacts.textContent = facts(file, opened);
       emit('opened', { video: opened });
     }
-    await detect();
+    if (how === 'restore') await restore(kept);
+    else await detect(how === 'resume' ? kept : null);
   } catch (e) {
     if (e.name !== 'AbortError') fail(e.message);
   }
 }
 
 // One run on the opened file, split across workers for a long video (ranges), the sound measured alongside it the
-// first time. Stop (stop) ends it early with the result for the frames read, which is shown as a finished run's is; a
-// new file (choose) abandons it.
-async function detect() {
+// first time; or the rest of a stopped run (resumed: the kept record), with the options it ran with, split as a run of
+// the rest's length would be. Stop (stop) ends it early with the result for the frames read, which is shown as a
+// finished run's is; a new file (choose) abandons it.
+async function detect(resumed = null) {
   setState('detecting');
-  const run = options(), plan = await ranges(opened);
+  if (resumed) setForm(resumed.options);
+  const run = resumed?.options ?? options(), plan = await ranges(opened, resumed?.from ?? 0);
   listen();
-  await go(run, plan);
+  await go(run, plan, null, resumed);
 }
 
 // The run itself: on one worker (Api's Detect) or split (plan: splitRun). A split run whose ranges don't merge, or one of
 // whose workers fails, is detected again with one worker, saying why (fallback).
-async function go(run, plan, fallback = null) {
-  framesDone = framesExpected = 0;
-  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback });
+// A resumed run (resumed: the kept record) goes on from its kept scores (Api's Resume, or Merge with them); kept scores
+// that don't resume (another version's, say) are forgotten and the run detected from the start, saying why (restarted).
+async function go(run, plan, fallback = null, resumed = null, restarted = null) {
+  const from = resumeFrom = resumed?.from ?? 0;
+  resumeAt = resumed?.frames ?? 0;
+  framesDone = from;
+  framesExpected = 0;
+  // A resume on one worker tells the shots of the rest from the stopped part's last, cut short at the stop: the ones
+  // before it stay. Split, the merge tells them all.
+  const before = resumed && !plan ? resumed.shots.slice(0, -1) : [];
+  const keptBytes = resumed ? new Uint8Array(await resumed.blob.arrayBuffer()) : null;
+  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback, from });
   clearShots();
+  for (const shot of before) {
+    emit('shot', { video: opened, shot });
+    addShot(shot);
+  }
   result.hidden = false;
   progress.removeAttribute('value');
   const workers = plan?.ranges.length ?? 1, threads = plan ? 1 : threadCount();
-  estimate = estimateText(opened, workers, threads);
-  estimated = estimateSeconds(opened, workers, threads);
-  say(`${fallback ? `${fallback} Detecting again with one worker` : 'Detecting'} · about ${duration(estimated)} for ` +
-    `${count(opened.frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
+  const frames = Math.max(opened.frames - from, 0);
+  estimate = estimateText(opened, workers, threads, frames);
+  estimated = estimateSeconds(opened, workers, threads, frames);
+  const doing = fallback ? `${fallback} ${resumed ? 'Resuming' : 'Detecting again'} with one worker`
+    : resumed ? `Resuming ${resumedFrom()}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
+  say(`${doing} · about ${duration(estimated)} for ${count(frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
   pausedFor = 0;
   runner = worker;
-  const video = opened, detecting = running = plan ? splitRun(plan, run) : oneRun(run, threads);
+  const video = opened;
+  const detecting = running = plan ? splitRun(plan, run, keptBytes, from) : oneRun(run, threads, keptBytes);
   let json;
   try {
     json = await detecting;
   } catch (e) {
     if (running !== detecting) return; // abandoned: a new file was chosen
     if (e.name === 'TimeoutError') return lost(video);
+    if (resumed && e.message?.startsWith(NOT_RESUMED) && state !== 'stopping') {
+      running = null;
+      forget();
+      return go(run, await ranges(opened), null, null, e.message);
+    }
     if (!plan || state === 'stopping' || e.name === 'AbortError') throw e;
     running = null;
-    return go(run, null, e.message.startsWith(NOT_MERGED) ? e.message : `A worker failed: ${e.message}`);
+    return go(run, null, e.message.startsWith(NOT_MERGED) ? e.message : `A worker failed: ${e.message}`, resumed);
   }
   const r = JSON.parse(json);
   const seconds = runMs() / 1000;
@@ -427,18 +477,121 @@ async function go(run, plan, fallback = null) {
   r.statsCsv = await callOn(by, 'StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile
   show(r, seconds, workers, by === threaded ? r.threads : 1);
+  // Stopped: kept to resume, in this visit or a later one; finished: the kept run of these options is done with.
+  if (r.stopped) await keep(by, run, r);
+  else if (keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run)) forget();
+}
+
+// A stopped run kept in this browser to resume (the owner's choices, 2026-10-30: only the last one, of any file; shown
+// at once when its file is picked again, its options in the form): IndexedDB's KEPT store, one record under KEPT_KEY,
+// { name, size, lastModified, options, blob, frames, from, shots, saved }: the file (by name, size and modified time),
+// the options it ran with, its scores as Api's Kept gives them (a Blob, whose first four bytes are the frame its rest
+// starts at: from), the frames its result read and its shots (which a resume shows while the rest's are told), and
+// when. Nothing leaves the browser. Storage can be off or fail (a
+// private window): the run then resumes only in this visit, from the record kept in memory.
+const KEPT = 'kept', KEPT_KEY = 'last';
+
+function keptStore(mode, f) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open('shotdetector-web', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore(KEPT);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, t = db.transaction(KEPT, mode), request = f(t.objectStore(KEPT));
+      t.oncomplete = () => { db.close(); resolve(request.result); };
+      t.onerror = t.onabort = () => { db.close(); reject(t.error); };
+    };
+  });
+}
+
+async function readKept() {
+  try { return await keptStore('readonly', s => s.get(KEPT_KEY)) ?? null; } catch { return null; }
+}
+
+// Whether record (the kept run, unless said) is of file f.
+function keptFor(f, record = kept) {
+  return !!record && !!f && record.name === f.name && record.size === f.size && record.lastModified === f.lastModified;
+}
+
+async function keep(by, run, r) {
+  const video = opened, chosen = file;
+  let blob;
+  try {
+    blob = await callOn(by, 'Kept');
+  } catch {
+    return; // the runner went: nothing to keep
+  }
+  const from = new DataView(await blob.slice(0, 4).arrayBuffer()).getInt32(0, true);
+  if (opened !== video || from < 0) return;
+  kept = { name: chosen.name, size: chosen.size, lastModified: chosen.lastModified, options: run, blob,
+    frames: r.frameCount, from, shots: r.shots, saved: Date.now() };
+  setState(state);
+  const record = kept;
+  try { await keptStore('readwrite', s => s.put(record, KEPT_KEY)); } catch { /* kept for this visit only */ }
+}
+
+function forget() {
+  kept = null;
+  setState(state);
+  keptStore('readwrite', s => s.delete(KEPT_KEY)).catch(() => {});
+}
+
+// The kept run shown again (a later visit, its file picked): Api's Merge of its scores alone, the stopped run's result,
+// shown as a stopped run's with Resume beside Detect. Scores that don't merge any more are forgotten. The file's sound is
+// measured as it would be for a run (listen).
+async function restore(record) {
+  const video = opened;
+  setForm(record.options);
+  setState('opening');
+  progress.removeAttribute('value');
+  say('Showing the stopped run kept in this browser…');
+  const bytes = new Uint8Array(await record.blob.arrayBuffer());
+  let json;
+  try {
+    json = await call('Merge', JSON.stringify(record.options), bytes, new Uint8Array(0), []);
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    forget();
+    setState('idle');
+    say(`The stopped run kept in this browser didn't show, so it was forgotten: ${e.message}`);
+    return;
+  }
+  if (opened !== video || kept !== record) return;
+  // The sound is the file's, not the run's: measured alongside, as for a run.
+  listen();
+  emit('run', { video, options: record.options, ranges: null, fallback: null, from: 0 });
+  clearShots();
+  result.hidden = false;
+  const r = JSON.parse(json);
+  resultOn = worker;
+  r.scenesCsv = await call('ScenesCsv');
+  r.statsCsv = await call('StatsCsv');
+  if (opened !== video) return;
+  resumeFrom = resumeAt = 0;
+  show(r, 0, 1, 1, record);
+}
+
+// The form showing a run's options (as options() sends them: a default as none).
+function setForm(run) {
+  detector.value = run.detector ?? 'adaptive';
+  form.dataset.detector = detector.value;
+  threshold.value = run.threshold ?? DEFAULT_THRESHOLDS[detector.value];
+  minLength.value = run.minSceneLength ?? DEFAULT_MIN_LENGTH;
+  windowInput.value = run.frameWindow ?? DEFAULT_WINDOW;
+  minContent.value = run.minContentVal ?? DEFAULT_MIN_CONTENT;
 }
 
 // A run on one worker: Api's Detect's JSON, with threads (how many the decoder had). On threads where the page can
 // (threadCount), on the threaded runner (threads.js), which opens the file for itself first; on the page's worker if the
 // threaded runtime doesn't start.
-async function oneRun(run, threads) {
-  const json = JSON.stringify(run);
+// A resumed run (keptBytes: its kept scores) is Api's Resume.
+async function oneRun(run, threads, keptBytes = null) {
+  const json = JSON.stringify(run), args = keptBytes ? ['Resume', json, keptBytes] : ['Detect', json];
   if (threads > 1) {
     const r = await threadedRunner(threads);
     if (r) {
       runner = r;
-      const detecting = callOn(r, 'Detect', json);
+      const detecting = callOn(r, ...args);
       // Stopped while the threaded runtime opened the file: the run stops at its first pause.
       if (state === 'stopping') r.postMessage({ type: 'stop' });
       return JSON.stringify({ ...JSON.parse(await detecting), threads });
@@ -446,7 +599,7 @@ async function oneRun(run, threads) {
     // Paused while the threaded runtime didn't start: the page's worker holds the run instead.
     if (state === 'paused') worker.postMessage({ type: 'pause' });
   }
-  return call('Detect', json);
+  return call(...args);
 }
 
 // How many threads a one-worker run's decoder has: ?threads=N, else the machine's cores, at most MOST_THREADS; 1 (the
@@ -493,12 +646,14 @@ function replaceRunner(w) {
 
 // How a run of the opened file is split (decision 2026-10-26-workers.md): above SPLIT_SECONDS of video, into as many
 // ranges as there are cores but one, at most MOST_WORKERS (or as ?workers= says), each from a keyframe (Api's Ranges):
-// { count, frames, ranges }, or null for one worker (a short video, a machine with two cores, too few keyframes).
-async function ranges(video) {
+// { count, frames, ranges }, or null for one worker (a short video, a machine with two cores, too few keyframes). A
+// resumed run's rest from frame from, by its own length.
+async function ranges(video, from = 0) {
+  const length = lengthOf(video) * Math.max(video.frames - from, 0) / video.frames;
   const count = ASKED_WORKERS ??
-    (lengthOf(video) > SPLIT_SECONDS ? Math.min((navigator.hardwareConcurrency || 1) - 1, MOST_WORKERS) : 1);
+    (length > SPLIT_SECONDS ? Math.min((navigator.hardwareConcurrency || 1) - 1, MOST_WORKERS) : 1);
   if (count < 2) return null;
-  const plan = JSON.parse(await call('Ranges', count));
+  const plan = JSON.parse(await call('Ranges', count, from));
   return plan.ranges.length > 1 ? { count, ...plan } : null;
 }
 
@@ -507,10 +662,11 @@ async function ranges(video) {
 // which is Detect's. Stopped (stop), every worker ends its range where it has got to, and the ranges from the start
 // without a gap merge into the result for those frames, as a one-worker run stopped there; a worker that doesn't answer
 // is ended and its range left out, unless it is the page's own (a TimeoutError: the run is lost).
-async function splitRun(plan, run) {
+// A resumed run's rest (from its first frame, from) merges with its kept scores (keptBytes).
+async function splitRun(plan, run, keptBytes = null, from = 0) {
   const json = JSON.stringify(run);
   let stopped;
-  split = { frames: plan.frames, done: plan.ranges.map(() => 0), stopped: new Promise(resolve => { stopped = resolve; }) };
+  split = { frames: plan.frames, from, done: plan.ranges.map(() => 0), stopped: new Promise(resolve => { stopped = resolve; }) };
   split.stop = stopped;
   const quiet = () => {};
   helpers = plan.ranges.slice(1).map((_, i) => newWorker({
@@ -519,7 +675,7 @@ async function splitRun(plan, run) {
   const scored = plan.ranges.map((_, i) => (async () => {
     const w = i === 0 ? worker : helpers[i - 1];
     if (i > 0) await callOn(w, 'Open', file);
-    await callOn(w, 'ScoreRange', json, plan.count, i);
+    await callOn(w, 'ScoreRange', json, plan.count, i, from);
     return callOn(w, 'RangeBytes');
   })());
   let first = false; // the first range has its answer
@@ -529,7 +685,7 @@ async function splitRun(plan, run) {
     let bytes = await Promise.race([Promise.all(scored), split.stopped.then(() => null)]);
     if (bytes === null) {
       // Stopped: as long as a few pauses take at the run's rate, and a second more (answered), for every range.
-      const frame = framesDone > 0 ? runMs() / framesDone * plan.ranges.length : 0;
+      const frame = framesDone > from ? runMs() / (framesDone - from) * plan.ranges.length : 0;
       bytes = await Promise.all(scored.map(p => within(p, 1000 + 24 * frame)));
       if (bytes[0] === undefined) {
         replaceWorker();
@@ -542,7 +698,7 @@ async function splitRun(plan, run) {
       joined.set(b, at);
       at += b.length;
     }
-    return await call('Merge', json, joined, bytes.map(b => b?.length ?? 0));
+    return await call('Merge', json, keptBytes ?? new Uint8Array(0), joined, bytes.map(b => b?.length ?? 0));
   } finally {
     split = null;
     endHelpers();
@@ -570,11 +726,11 @@ function endHelpers() {
 function rangeProgress(index, done, of) {
   if (!runGoes() || !split) return;
   split.done[index] = Math.min(done, of);
-  framesDone = split.done.reduce((a, b) => a + b, 0);
+  framesDone = split.from + split.done.reduce((a, b) => a + b, 0);
   framesExpected = split.frames;
   progress.value = Math.min(framesDone / framesExpected, 1);
   const seconds = runMs() / 1000;
-  const fps = seconds > 0 ? framesDone / seconds : 0;
+  const fps = seconds > 0 ? (framesDone - split.from) / seconds : 0;
   if (state === 'paused') sayPaused();
   if (state === 'detecting') {
     say(`Frame ${count(framesDone)} of ${count(framesExpected)} · ${split.done.length} workers · ` +
@@ -587,7 +743,7 @@ function rangeProgress(index, done, of) {
 // Whether a call answered (anything: its value, an error, a cancel) within a second or so: as long as the worker takes
 // for a few pauses of Detect's (8 frames apart, Api's PauseEvery) at the rate the run has had, and a second more.
 async function answered(call) {
-  const frame = framesDone > 0 ? runMs() / framesDone : 0;
+  const frame = framesDone > resumeFrom ? runMs() / (framesDone - resumeFrom) : 0;
   let timer;
   const late = new Promise(resolve => { timer = setTimeout(() => resolve(false), 1000 + 24 * frame); });
   const ok = await Promise.race([call.then(() => true, () => true), late]);
@@ -622,16 +778,17 @@ async function listen() {
 // How long the run will take, from the frame count and picture size: this browser's own rate from its last run on one
 // worker (on as many threads), or the reference rate (REFERENCE_FPS) until it has one; split across workers,
 // SPLIT_SPEEDUP times as fast, on threads THREADS_SPEEDUP times (unless it has a rate of its own on them).
-function estimateText(video, workers, threads = 1) {
-  const { width, height, frames } = video;
+// frames: the run's (a resumed run's rest), else the video's.
+function estimateText(video, workers, threads = 1, frames = video.frames) {
+  const { width, height } = video;
   const { rate, own } = rateFor(workers, threads);
   const from = own ? 'this browser\'s last run' : 'a reference run of Sintel\'s trailer';
-  return `Estimate: about ${duration(estimateSeconds(video, workers, threads))} for ${frames} frames at ` +
+  return `Estimate: about ${duration(estimateSeconds(video, workers, threads, frames))} for ${frames} frames at ` +
     `${width}x${height} (${(rate / (width * height)).toFixed(0)} frames per second` +
     `${workers > 1 ? ` with ${workers} workers` : ''}${threads > 1 ? ` on ${threads} threads` : ''}, from ${from}).`;
 }
 
-function estimateSeconds({ width, height, frames }, workers = 1, threads = 1) {
+function estimateSeconds({ width, height, frames: shown }, workers = 1, threads = 1, frames = shown) {
   return frames * width * height / rateFor(workers, threads).rate;
 }
 
@@ -742,26 +899,46 @@ function fail(message) {
   error.textContent = message;
 }
 
-function show(r, seconds, workers, threads) {
+// restored: the kept record of a stopped run shown again (restore), not a run of this visit.
+function show(r, seconds, workers, threads, restored = null) {
   setState(r.stopped ? 'stopped' : 'done');
-  const rate = `${(r.frameCount / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}` +
+  // A resumed run read its rest's frames (and those it scored again from a keyframe), not the stopped part's: its speed
+  // and its times real time are of those (as the shot statistics' Run).
+  const ran = r.frameCount - resumeFrom, ranSeconds = ran * r.frameRate.den / r.frameRate.num;
+  const rate = `${(ran / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`;
-  const read = r.frameCount * r.frameRate.den / r.frameRate.num;
-  shown = {
+  const read = r.frameCount * r.frameRate.den / r.frameRate.num, at = `${timecode(read)}, frame ${count(r.frameCount)} ` +
+    `of ${count(opened.frames)}`;
+  shown = restored ? {
+    text: `Stopped at ${at}, kept in this browser since ${new Date(restored.saved).toLocaleString()}: Resume goes on ` +
+      'from there, Detect starts over',
+    title: `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, scored before; the scores stay in this ` +
+      'browser (IndexedDB) until the run is finished, another one is stopped, or Forget',
+  } : {
     text: r.stopped
-      ? `Stopped at ${timecode(read)}, frame ${count(r.frameCount)} of ${count(opened.frames)}, after ` +
-        `${seconds.toFixed(1)} s (${rate})`
-      : `Done in ${seconds.toFixed(1)} s, ${rate} (${(read / seconds).toFixed(1)} times real time)`,
-    title: `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, in ${seconds.toFixed(3)} s; ${estimate}`,
+      ? `Stopped at ${at}, after ${seconds.toFixed(1)} s (${rate}): Resume goes on from there`
+      : `Done in ${seconds.toFixed(1)} s, ${rate} (${(ranSeconds / seconds).toFixed(1)} times real time)` +
+        `${resumeFrom > 0 || resumeAt > 0 ? `, resumed ${resumedFrom()}` : ''}`,
+    title: `${count(ran)} frames, ${ranSeconds.toFixed(3)} s of video, in ${seconds.toFixed(3)} s` +
+      `${resumeAt > resumeFrom ? `: from frame ${count(resumeFrom)}, the keyframe before the stop, where the rest ` +
+        'scores again for the frames that need those before them' : ''}; ${estimate}`,
   };
   say(listening ? `${shown.text} · measuring the sound…` : shown.text, shown.title);
   // A run of a few seconds is mostly start-up: too short to measure this browser's speed by; a split run's speed is
   // its workers', not this browser's on one.
-  if (seconds >= 5 && workers === 1) storeRate(r.frameCount * opened.width * opened.height / seconds, threads);
-  emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, '') });
+  if (!restored && seconds >= 5 && workers === 1) storeRate(ran * opened.width * opened.height / seconds, threads);
+  emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, ''), from: resumeFrom,
+    restored: !!restored });
   clearShots();
   for (const shot of r.shots) addShot(shot);
   result.hidden = false;
+}
+
+// Where a resumed run went on: the frame its stopped part had got to, and the keyframe before it its rest scored again
+// from (Api's Kept: the last range start at or before the last frame scored), when that is earlier.
+function resumedFrom() {
+  return `from frame ${count(resumeAt || resumeFrom)}` +
+    `${resumeAt > resumeFrom ? ` (rescored from its keyframe, frame ${count(resumeFrom)})` : ''}`;
 }
 
 // The shot playing, a caption under the video: the last shot starting at or before the playhead, if the playhead is
@@ -775,6 +952,10 @@ function clearShots() {
 }
 
 function addShot(shot) {
+  // A resumed run tells the stopped part's last shot again, to where it ends: it replaces the one cut short.
+  if (shot.shot <= shots.length) {
+    shots.length = starts.length = ends.length = shot.shot - 1;
+  }
   shots.push(shot);
   starts.push(secondsOf(shot.startTimecode));
   ends.push(secondsOf(shot.endTimecode));
@@ -839,6 +1020,11 @@ video.addEventListener('error', () => {
 });
 form.onsubmit = e => { e.preventDefault(); start(); };
 stopButton.onclick = stop;
+resumeButton.onclick = () => start('resume');
+forgetButton.onclick = () => {
+  forget();
+  if (state === 'stopped') say(`${shown.text.replace(/: Resume goes on.*$/, '')} · forgotten`, shown.title);
+};
 pauseButton.onclick = pauseOrResume;
 // The demo clip, next to the page (pages.yml), run as if it had been picked.
 demoButton.onclick = async () => {
@@ -847,8 +1033,9 @@ demoButton.onclick = async () => {
   try {
     const response = await fetch('demo/sintel-trailer.mp4');
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    await choose(new File([await response.blob()], 'sintel-trailer.mp4', { type: 'video/mp4' }));
-    start();
+    // Its modified time the server's, so that a run of it stopped is the same file's on a later visit.
+    const lastModified = Date.parse(response.headers.get('last-modified')) || 0;
+    if (!await choose(new File([await response.blob()], 'sintel-trailer.mp4', { type: 'video/mp4', lastModified }))) start();
   } catch (e) {
     fail(`The demo clip didn't download: ${e.message}`);
   }

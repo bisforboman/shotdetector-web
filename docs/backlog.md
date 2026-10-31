@@ -33,33 +33,25 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
-- Resume after Stop, across visits
-  - Why: the owner asked (2026-10-26) to resume a run after stopping it, with the stopped part's stats shown in
-    between. ShotDetector's `ScoreRange` says "the range ends where the frames stop", so a stopped run is a range that
-    ended early. Scoring a second range from where it stopped and calling `Merge` on both gives exactly the result for
-    the whole video. `RangeScores.ToBytes` makes the stopped part's scores storable, so a later visit can resume too.
-  - Where: built with the workers row, on the same `ScoreRangeAsync` and `Merge`:
-    - **At Stop:** `Merge` of the ranges so far shows the result for the part read (find out from ShotDetector's source
-      that `Merge` takes ranges that end before the video does, as the workers decision's Stop already assumes).
-    - **Resume:** a range from the last frame read (decoding from the keyframe before it and dropping frames up to the
-      one before), then `Merge` over all ranges.
-    - **Kept in the browser:** the scores' bytes in IndexedDB, keyed by the file's name, size and modified time and by
-      the options, behind try/catch; "Resume" offered when the same file and options come back, and forgotten on a
-      finished run or a click.
-    - **Live shots:** `ScoreRange` tells no shots (`OnShot` isn't honoured there: shots are decided in `Merge`), so a
-      one-worker run built this way would lose its live table. Ask upstream for `OnShot` on a range starting at frame 0
-      (its shots up to the range's end are what `Detect` would tell), with the owner's OK to file it. Until it ships,
-      a run on `DetectAsync` keeps no scores to merge, so resuming it would mean scoring its start again: run one-worker
-      runs through `ScoreRangeAsync` with progress but no live table, or leave them unresumable. Measure both and put
-      the choice to the owner in the PR.
-  - Done when: `tools/app-check.mjs` stops at a frame on every sample, resumes, and gets exactly the full run's CSVs;
-    the same across a page reload in headless Chromium and Firefox; screenshots in the PR.
-  - Not: nothing sent anywhere (the scores stay in the browser); no change to the result.
-  - Depends on: "Long videos across several Web Workers".
-  - Status: Open (2026-10-30: unblocked: ShotDetector 3.22.0 has `OnShot` on a range from frame 0 and
-    `ScoreRange`/`ScoreRangeAsync` overloads that continue a stopped run from the earlier `RangeScores`, telling only the
-    shots not yet confirmed ([shotdetector#598](https://github.com/bisforboman/shotdetector/issues/598)), so "Live
-    shots"'s fallback isn't needed; with `OnShot` on the ranges, leave it out of `Merge` or the shots are told twice)
+### The page's UI, after the review of 2026-10-30
+
+A review of the page check's screenshots (`out/page/*.png`) on 2026-10-30 found wrong numbers and misleading text, and
+a layout that leaves holes and says too much. The owner's choice the same day: two pull requests, the fixes first, then
+the polish; decision [2026-10-26-new-ui.md](decisions/2026-10-26-new-ui.md)'s layout (B) stays.
+
+- The page's layout and styling
+  - Why: the details grid (auto-fill, 17rem) leaves a card alone on a row with holes beside it; the shots table spreads
+    five columns over the width with small stills, in a 70vh scroll box that clips its last row even with 8 shots; the
+    picture lane's out-of-range ticks paint it red end to end, the playhead's red; every card opens with 3 to 5 lines
+    of how it is checked; the cuts lane doesn't show which shot is playing.
+  - Where: mostly `style.css`, with `panels/cuts.js`, `panels/picture.js`, `panels/run.js` and the cards' notes; the
+    page check's screenshots at 1280 and 390 px, light and dark, of done, kept and resumed.
+  - Done when: no details row with more than about 100 px of empty height under a card; every shot row visible
+    without an inner scrollbar at 15 shots or fewer; no red in a lane but the playhead; the run card's figures above
+    the fold at 1280x800; the owner has seen the screenshots before and after; the CSVs, JSON and HTML byte for byte.
+  - Not: the layout B stays; no new export; no mark loses what it means (CLAUDE.md "Adding to the page").
+  - Depends on: the row above (it edits the same panels).
+  - Status: In progress (2026-10-30)
 
 ## Waiting
 

@@ -6,7 +6,9 @@
 #           driven by tools/app-check.mjs), its CSVs, JSON and HTML against the native run's;
 #   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
 #           each page isolated by its service worker, PAGE_SAMPLE picked on threads, on the page's worker and on two
-#           workers, the demo on threads paused and resumed, then stopped while paused, then offline, each run's
+#           workers, the demo on threads paused and resumed, then stopped while paused, shown again after a reload and
+#           resumed, then offline, split across two workers stopped and resumed, and in Firefox stopped, reloaded and
+#           resumed (PAGE_CHECK_FIREFOX=skip leaves Firefox out where Playwright has none), each run's
 #           downloaded CSVs, JSON and HTML against the native run's (the samples named are not used: always those two);
 #           the only check of the threaded bundle. Reuses the bundles wasm published in the same call, else publishes
 #           them.
@@ -19,8 +21,8 @@
 #   request, README "Checks". wasm compares the files of the samples it ran, so native may have run more.)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
 #   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm, page
-#   and replace, Playwright and its Chromium for page (npm ci in tools/page-check, then npx playwright install
-#   chromium there; or one require finds), and git with access to github.com for replace.
+#   and replace, Playwright and its Chromium and Firefox for page (npm ci in tools/page-check, then npx playwright
+#   install chromium firefox there; or one require finds), and git with access to github.com for replace.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -131,7 +133,7 @@ if [[ $page == true ]]; then
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" --native out/native || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, then offline, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi

@@ -25,7 +25,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(count)`, the video split at keyframes
   from `Packets` into `FrameRange`s about equal in frames, `ScoreRangeAsync` (one range decoded from its keyframe, the
   packets before it not read, for ShotDetector's `ScoreRangeAsync`), `Merge` and `FromStart` (the ranges that follow
-  each other from the start), `ShownFrames`), `VideoInput.DecoderThreads`
+  each other from the start), `ShownFrames`, `Continue` (a stopped run's `Continuation`: the earlier ranges to keep
+  and the rest's range, from the last range start at or before the last frame scored), `Ranges(count, from)` (the rest
+  split) and `ScoreRangeAsync(earlier, ...)` (the rest, telling its shots)), `VideoInput.DecoderThreads`
   (ManagedCodecs' `H264Decoder.Threads`, frame threading: the same frames; a run that ends early drains the decoder),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
   expose, the audio codec's FFmpeg name among them), `SpsInfo` (the SPS's format and VUI colour
@@ -45,7 +47,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   count: `frameCount` is FFmpeg's nb_frames, null when fragmented) and `audio`: `{ codec, sampleRate,
   channels }` from `VideoInput.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
   frameWindow, minContentVal }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
-  rate, duration, `stopped` and `warnings` as JSON; `VideoInput.DetectAsync`, pausing every 8 frames, `PauseEvery`),
+  rate, duration, `stopped` and `warnings` as JSON; one range from frame 0 scored with `OnShot` and merged without it,
+  `Detect`'s result byte for byte, so that a stopped run leaves scores, pausing every 8 frames, `PauseEvery`),
   `Stop()` (the run's frames end at its next pause: the result for the frames read, `stopped` true) and `Cancel()` (the
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
@@ -73,11 +76,17 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
   (the scores' length, the scores, the range's picture measures); `Api.FrameTypes.cs` `FrameTypes()`: the last run's frames' types from its
   `PictureMeasures`, one character a frame in display order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's
-  `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count)` (`{ frames, ranges:
-  [{ firstFrame, endFrame }] }`), `ScoreRange(optionsJson, count, index)` (a promise of `{ frames, stopped }`; progress,
-  pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()` (its `RangeScores` as bytes), `Merge(optionsJson,
-  bytes, lengths)` (the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; a
-  `ShotDetectionException` as "The ranges didn't merge: ...", on which the page detects again with one worker).
+  `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count, from)` (`{ frames, ranges:
+  [{ firstFrame, endFrame }] }`, from 0 or a stopped run's rest's first frame), `ScoreRange(optionsJson, count, index,
+  from)` (a promise of `{ frames, stopped }`; progress, pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()`
+  (its `RangeScores` as bytes), `Merge(optionsJson, kept, bytes, lengths)` (a stopped run's kept bytes, empty for none,
+  then the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; the kept bytes
+  alone the stopped run's result again; a `ShotDetectionException` as "The ranges didn't merge: ...", on which the page
+  detects again with one worker); `Api.Resume.cs` a stopped run resumed (decision
+  `2026-10-30-resume-across-visits.md`): `Kept()` (the last run's ranges from the start and picture measures, a `Blob`
+  of `KeptRun.ToBytes`, its first int the frame the rest starts at, -1 for none) and `Resume(optionsJson, kept)`
+  (`Detect` going on from them, the rest's shots told; kept bytes that don't resume as "The stopped run didn't resume:
+  ...", on which the page detects from the start).
   `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
   the file in slices of a megabyte). The threaded bundle (`-p:WasmEnableThreads=true`, `THREADS`; decision
   `2026-10-30-threads.md`), published into `wwwroot/threads/_framework/` by `tools/check.sh`'s `publish_app`, runs a
@@ -93,7 +102,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   and `release`: while held the promise stays unresolved, so the run waits there, README "Pausing a run");
   `wwwroot/versions.js` fills the footer's version slots from `Versions()` (not a panel); `wwwroot/threads.js` the
   threaded runtime on the page's thread, a `ThreadedRunner` that speaks `worker.js`'s messages (only `Open`, `Detect`,
-  `ScenesCsv`, `StatsCsv`, stop, cancel, pause, resume), abandoned rather than terminated; `wwwroot/sw.js` the service
+  `Resume`, the last run's result, stop, cancel, pause, resume), abandoned rather than terminated; `wwwroot/sw.js` the service
   worker: COOP/COEP on every response (cross-origin isolation, which the threads need) and the page offline, network
   first. The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
@@ -105,7 +114,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   answer), the demo, the shot playing as the caption under the video (told as the `playing` event), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
   range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
-  page's worker; `serve()` registers `sw.js` and reloads a first visit once) and the sound's worker; the events panels listen to, `call(name, ...args)` and `card(title, {
+  page's worker; `serve()` registers `sw.js` and reloads a first visit once), the sound's worker, and a stopped run kept
+  in IndexedDB (`KEPT`, one record: the file by name, size and modified time, the options, `Kept()`'s Blob; shown again
+  at once when its file is picked, Resume and Forget beside Detect, a rest over `SPLIT_SECONDS` split); the events panels listen to, `call(name, ...args)` and `card(title, {
   place, mark, markTitle })`), `timeline.js` (one axis under the `<video>`, the playhead, click to seek, `lane(label,
   draw)`, `x()`, `seek()`) and `panels/`: `cuts.js` (a lane), `ranges.js` (a lane: a split run's range per worker,
   filled as far as it has got, or the line saying why it went back to one worker), `scores.js` (a lane: a `<canvas>` of the run's score column from
@@ -146,7 +157,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   app-check.mjs compares `FrameTypes()` with); `AudioStreamCheck.cs`: `VideoInput.Audio`
   vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
   merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
-  stopped half-way, vs one thread; `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
+  stopped half-way, vs one thread; `ResumeCheck.cs`: the default and all-detector runs on one range stopped twice and
+  resumed, and split, stopped and the rest split again, vs the whole run's CSVs, shots told and picture measures;
+  `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats`, `cropdetect` (per frame and whole) and
@@ -156,7 +169,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
   stats CSV the whole run's rows up to there, its shots the whole run's with the next one cut short), one cancelled,
-  `Detect`'s pauses under 1% of the runs' time, every sample's default run paused half-way (no progress while held,
+  `Detect`'s pauses under 1% of the runs' time, the default and all-detector runs stopped at a third, shown again from
+  their kept bytes, resumed, stopped again and resumed to the end (and stopped split, the rest split again) to the
+  whole run's CSVs, shots and picture, kept bytes of other options not resuming, every sample's default run paused half-way (no progress while held,
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects, and `Picture()` and `FrameTypes()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
@@ -164,7 +179,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, the demo on threads paused and resumed, then stopped while paused, then run again
-  offline from the cache, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
+  offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
+  across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
+  reloaded and resumed, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
   threaded bundle), the picture card's crop and colour bars the native run's, any page or worker error failing it;
   `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
@@ -186,7 +203,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   rebuilding; `2026-10-24-audio.md`: the audio decoded in the worker by ManagedCodecs; `2026-10-25-one-page.md`: one
   timeline and cards, a module per panel; `2026-10-26-workers.md`: long videos across several workers;
   `2026-10-26-new-ui.md`: the page's new UI, B chosen by the owner, built by the backlog row;
-  `2026-10-30-resume-across-visits.md`: resuming a stopped run waits for `OnShot` on a range upstream;
+  `2026-10-30-resume-across-visits.md`: resuming a stopped run, the kept run shown at once, only the last kept, a long
+  rest split, Firefox in CI;
   `2026-10-30-threads.md`: the decoder's threads on the page's thread, isolation by a service worker, the page offline;
   `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg;
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
