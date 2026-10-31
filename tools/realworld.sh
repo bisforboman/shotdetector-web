@@ -39,8 +39,8 @@ FILES=(
   "tears_of_steel_720p.mov|$blender/demo/movies/ToS/tears_of_steel_720p.mov|efa9062d9cdb7a338e40ad530dfdf234806743f29ae6a1a136b97ece4e588e8f||same|light"
   # Elephants Dream, the whole film (Orange Open Movie Project, CC-BY 2.5): 480x270 Main, 11 min, AAC 48 kHz, a 'qt'
   # file whose packets are all 1/24 s but whose track is longer than they are: FFmpeg's average rate 367056/15691
-  # (23.39), so refused as a variable rate today; 104 MB.
-  "elephantsdream-480-h264-st-aac.mov|$blender/ED/elephantsdream-480-h264-st-aac.mov|a7dbacae5fa2bc345dbd7b10588575f3e2bba36012e9a93df5346467053b0634||refused|"
+  # (23.39), off the frames' own grid, so taken as a variable rate (every frame's pts given); 104 MB.
+  "elephantsdream-480-h264-st-aac.mov|$blender/ED/elephantsdream-480-h264-st-aac.mov|a7dbacae5fa2bc345dbd7b10588575f3e2bba36012e9a93df5346467053b0634||same|light"
   # Made from those by the pinned FFmpeg. Caminandes as a fragmented MP4, the streams copied (a fragment a keyframe).
   "caminandes-fragmented.mp4|caminandes_gran_dillama.mp4||@ -c copy -movflags frag_keyframe+empty_moov+default_base_moof|same|"
   # Sintel's 720p trailer turned a quarter (a phone's portrait video: the track matrix, the streams copied).

@@ -24,7 +24,8 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, upright or turned a
+Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant or variable frame rate (a screen
+recording's: every frame at its own pts, as FFmpeg's path takes it, given up front where the rate varies), upright or turned a
 quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
 the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
@@ -32,8 +33,7 @@ pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-1
 in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, a rotation that isn't a
-quarter turn, variable frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; a variable rate and 4:2:2 wait on
-ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
+quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; 4:2:2 waits on ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
 can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
@@ -721,7 +721,7 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
   every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
-  (a quarter turn); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
+  (a quarter turn) and `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
   in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on

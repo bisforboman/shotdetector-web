@@ -2,11 +2,11 @@
 // worker's range, from its first frame to the next one's, filled as far as that worker has got (the shots come only once
 // the ranges merge); a stopped run's ranges stay where each got to. A run on one worker has no lane, but for one line
 // when a split run's ranges didn't merge and it was detected again with one worker, saying why.
-import { on } from '../app.js';
+import { frameSeconds, on } from '../app.js';
 import { lane, x } from '../timeline.js';
 
 let ranges = null;   // the split run's ranges, [{ firstFrame, endFrame, done }], or null
-let rate = 1;        // its frames per second
+let video = null;    // the video it runs on (frameSeconds)
 let fallback = null; // why the run went back to one worker
 
 // The bands in x()'s percentages: drawn again only for a new duration or a new run, their fill moved by progress.
@@ -20,8 +20,9 @@ const rangesLane = lane('Ranges', track => {
   track.replaceChildren(...(ranges ?? []).map((r, i) => {
     const band = document.createElement('div'), fill = document.createElement('div');
     band.className = 'range';
-    band.style.left = x(r.firstFrame / rate);
-    band.style.width = `calc(${x(r.endFrame / rate)} - ${x(r.firstFrame / rate)})`;
+    const from = frameSeconds(video, r.firstFrame), to = frameSeconds(video, r.endFrame);
+    band.style.left = x(from);
+    band.style.width = `calc(${x(to)} - ${x(from)})`;
     band.title = `Worker ${i + 1}: frames ${r.firstFrame} to ${r.endFrame - 1}`;
     fill.className = 'done';
     band.append(fill);
@@ -42,9 +43,9 @@ on('chose', () => {
   rangesLane.show(false);
   rangesLane.draw();
 });
-on('run', ({ video: { frameRate: { num, den } }, ranges: planned, fallback: why }) => {
+on('run', ({ video: v, ranges: planned, fallback: why }) => {
   ranges = planned?.map(r => ({ ...r, done: 0 })) ?? null;
-  rate = num / den;
+  video = v;
   fallback = why;
   rangesLane.show(ranges !== null || fallback !== null);
   rangesLane.draw();

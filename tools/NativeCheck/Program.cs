@@ -169,7 +169,9 @@ return failures == 0 ? 0 : 1;
 // colour tags, the format's duration (as the file path's DetectedVideo.Duration has it).
 static YuvVideo Oracle(string path)
 {
-    var probe = FrameReader.MediaProbe.Probe(path);
+    // Every video packet's pts too: FFmpeg's frames' labels (ShotDetector's FrameInputTests give them, sorted, as
+    // YuvVideo.FrameTimestamps).
+    var probe = FrameReader.MediaProbe.Probe(path, new FrameReader.ProbeOptions { PacketTimestamps = true });
     var info = probe.Video!;
     string colorSpace, colorRange;
     using (var first = new FrameReader.FrameDecoder(path, new FrameReader.FrameDecoderOptions { Autorotate = false }))
@@ -197,6 +199,7 @@ static YuvVideo Oracle(string path)
         Duration = probe.Duration is { } d
             ? TimeSpan.FromTicks((long)Math.Round(double.Parse((d.Ticks / 10 * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond))
             : null,
+        FrameTimestamps = probe.PacketTimestamps is { } pts ? [.. pts.Select(p => p ?? long.MinValue).Order()] : null,
         Codec = info.Codec,
         Container = probe.Container,
     };
@@ -221,6 +224,21 @@ static List<string> Differences(YuvVideo ours, YuvVideo ffmpeg)
     Check("frame count", ours.FrameCount, ffmpeg.FrameCount);
     Check("duration", ours.Duration, ffmpeg.Duration);
     Check("rotation", ours.Rotation, ffmpeg.Rotation);
+    // Every frame's pts where the rate varies (the core gives them only then): FFmpeg's packets' pts, sorted; where it
+    // gives none, FFmpeg's must be within half a frame of the average rate's grid, ShotDetector's check without them.
+    if (ours.FrameTimestamps is { } given)
+    {
+        if (ffmpeg.FrameTimestamps is not { } probed || !given.SequenceEqual(probed))
+            d.Add($"frame timestamps: {given.Count} given, not FFmpeg's {ffmpeg.FrameTimestamps?.Count} packets' pts");
+    }
+    else if (ffmpeg.FrameTimestamps is { Count: > 0 } probed)
+    {
+        double rate = ffmpeg.FrameRate.Num / (double)ffmpeg.FrameRate.Den, tb = ffmpeg.TimeBase!.Value.Num / (double)ffmpeg.TimeBase.Value.Den;
+        int off = Enumerable.Range(0, probed.Count).FirstOrDefault(k => !(Math.Abs(((probed[k] - probed[0]) * tb) - (k / rate)) <= 0.5 / rate), -1);
+        if (off >= 0)
+            d.Add($"frame timestamps: none given, while FFmpeg's frame {off} is off the average rate's grid");
+    }
+
     Check("codec", ours.Codec, ffmpeg.Codec);
     Check("container", ours.Container, ffmpeg.Container);
     return d;

@@ -2,7 +2,7 @@
 // while a run goes, the part of the file it has read shaded (a stopped or lost run's stays, up to where it stopped).
 // Behind the ticks, each shot is a span: the one playing (app.js's 'playing') shaded, its number on it where the span is
 // wide enough to hold it, and its number and times in its tooltip.
-import { on } from '../app.js';
+import { frameSeconds, on } from '../app.js';
 import { lane, secondsOf, timecode, x } from '../timeline.js';
 
 const LABEL_PX = 22; // the narrowest span that shows its shot's number
@@ -60,8 +60,8 @@ function clear() {
 
 on('chose', clear);
 on('run', clear);
-on('progress', ({ video: { frameRate: { num, den } }, done }) => {
-  read = done * den / num;
+on('progress', ({ video, done }) => {
+  read = frameSeconds(video, done);
   scanned.style.width = x(read);
 });
 on('shot', ({ shot }) => {
@@ -82,10 +82,10 @@ on('shot', ({ shot }) => {
   cutsLane.track.append(tick(s.start));
 });
 // The result's shots, which are the ones told while it ran; a stopped run's, the part read.
-on('done', ({ result }) => {
+on('done', ({ video, result }) => {
   shots = result.shots.map(told);
   cuts = shots.filter(s => s.shot > 1).map(s => s.start);
-  read = result.stopped ? result.frameCount * result.frameRate.den / result.frameRate.num : 0;
+  read = result.stopped ? frameSeconds(video, result.frameCount) : 0;
   cutsLane.draw();
 });
 on('playing', ({ shot }) => {

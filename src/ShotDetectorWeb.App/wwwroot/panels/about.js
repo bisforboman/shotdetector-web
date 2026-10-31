@@ -47,7 +47,9 @@ on('opened', ({ video: v }) => {
     ['Video', CODECS[v.codec] ?? v.codec, `codec: ${v.codec}`],
     ['Size', size(v), `width: ${v.width}, height: ${v.height} (as decoded)`],
     ['Rotation', rotation(v.rotation), `rotation: ${v.rotation} (degrees counterclockwise, ffprobe's)`],
-    ['Frame rate', `${Number(rate.toFixed(3))} fps`, `frameRate: ${num}/${den}`],
+    ['Frame rate', v.frameTimestamps ? `Variable, ${Number(rate.toFixed(3))} fps on average` : `${Number(rate.toFixed(3))} fps`,
+      `frameRate: ${num}/${den} (FFmpeg's avg_frame_rate)${v.frameTimestamps ? '; frameTimestamps: every frame\'s pts, ' +
+        'as the frames are detected at their own times' : ''}`],
     ['Pixel format', PIXEL_FORMATS[v.pixelFormat] ?? v.pixelFormat, `pixelFormat: ${v.pixelFormat}`],
     ['Colour space', v.colorSpace === '' ? 'Not tagged' : COLOR_SPACES[v.colorSpace] ?? v.colorSpace, `colorSpace: "${v.colorSpace}"`],
     ['Range', v.fullRange ? 'Full (0–255)' : 'Limited (16–235)', `fullRange: ${v.fullRange}`],
@@ -62,7 +64,9 @@ on('opened', ({ video: v }) => {
     dd.title = title;
     list.append(dt, dd);
   }
-  raw.querySelector('pre').textContent = JSON.stringify(v, null, 2);
+  // Every frame's pts (a variable rate's) on one line, not one a line.
+  raw.querySelector('pre').textContent = JSON.stringify(v, (key, value) => key === 'frameTimestamps' && value ?
+    `[${value.length} pts: ${value.slice(0, 4).join(', ')}, …, ${value.at(-1)}]` : value, 2);
   section.hidden = false;
 });
 

@@ -6,7 +6,7 @@
 // blackdetect and cropdetect, exactly (README, Checks): the card's mark says "measured". The colour bars are found by
 // their definition (no FFmpeg filter finds them), checked on samples made with FFmpeg's smptebars and smptehdbars; what
 // the page works out (the mean over the run, the bars' widths, a lane point over several frames) says so in its tooltip.
-import { call, card, on } from '../app.js';
+import { call, card, frameSeconds, on } from '../app.js';
 import { lane, seek, timecode, x } from '../timeline.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -27,7 +27,7 @@ section.hidden = true;
 
 const pictureLane = lane('Picture', track => {
   if (!picture) return track.replaceChildren();
-  const { summary, video } = picture, seconds = f => f * video.frameRate.den / video.frameRate.num;
+  const { summary, video } = picture, seconds = f => frameSeconds(video, f);
   track.replaceChildren(svg(summary, seconds),
     ...summary.black.map(s => mark('black', s, seconds, `Black: ${timecode(seconds(s.firstFrame))} to ` +
       `${timecode(seconds(s.endFrame))}, as blackdetect reports it from ${s.start} s to ${s.end} s`)),
@@ -41,10 +41,12 @@ pictureLane.label.title = 'Each frame\'s luma (signalstats\' YMIN to YMAX as a b
   'range (BRNG), as tall as the share of the frame out of range on a log scale (0.01% to all of it)';
 pictureLane.show(false);
 
-// The lane's points as an SVG over the run's frames, in x()'s percentages: x is the point, y the luma from 255 (top)
-// to 0 above the ticks' band.
+// The lane's points as an SVG over the run's frames, in x()'s percentages: x the time (point i from its first frame's
+// to the next point's: at a variable rate the points are as wide as their frames last), y the luma from 255 (top) to 0
+// above the ticks' band.
 function svg({ frames, points: { framesPerPoint, min, mean, max, brng } }, seconds) {
-  const n = min.length, s = document.createElementNS(SVG, 'svg');
+  const n = min.length, s = document.createElementNS(SVG, 'svg'), total = seconds(frames) || 1;
+  const at = i => (seconds(Math.min(i * framesPerPoint, frames)) / total * n).toFixed(4);
   s.setAttribute('viewBox', `0 0 ${n} 1`);
   s.setAttribute('preserveAspectRatio', 'none');
   s.setAttribute('aria-hidden', 'true');
@@ -52,12 +54,13 @@ function svg({ frames, points: { framesPerPoint, min, mean, max, brng } }, secon
   s.style.width = x(seconds(frames));
   const y = v => ((1 - BAND) * (1 - v / 255)).toFixed(4);
   let band = `M0 ${y(max[0] ?? 0)}`;
-  for (let i = 0; i < n; i++) band += `H${i + 1}V${y(max[i + 1] ?? max[i])}`;
-  for (let i = n - 1; i >= 0; i--) band += `V${y(min[i])}H${i}`;
+  for (let i = 0; i < n; i++) band += `H${at(i + 1)}V${y(max[i + 1] ?? max[i])}`;
+  for (let i = n - 1; i >= 0; i--) band += `V${y(min[i])}H${at(i)}`;
+  const middle = i => ((Number(at(i)) + Number(at(i + 1))) / 2).toFixed(4);
   let line = '';
-  for (let i = 0; i < n; i++) line += `${i === 0 ? 'M' : 'L'}${i + 0.5} ${y(mean[i])}`;
+  for (let i = 0; i < n; i++) line += `${i === 0 ? 'M' : 'L'}${middle(i)} ${y(mean[i])}`;
   let ticks = '';
-  for (let i = 0; i < n; i++) if (brng[i] > 0) ticks += `M${i + 0.5} ${(1 - BAND * share(brng[i])).toFixed(4)}V1`;
+  for (let i = 0; i < n; i++) if (brng[i] > 0) ticks += `M${middle(i)} ${(1 - BAND * share(brng[i])).toFixed(4)}V1`;
   s.append(path('levels', `${band}Z`), path('mean', line), path('brng', ticks));
   if (framesPerPoint > 1) s.dataset.framesPerPoint = framesPerPoint;
   return s;
@@ -116,7 +119,7 @@ on('done', async ({ video }) => {
 });
 
 function fill({ summary: p, video }) {
-  const seconds = f => f * video.frameRate.den / video.frameRate.num;
+  const seconds = f => frameSeconds(video, f);
   const at = f => `${clock(seconds(f))}`;
   section.hidden = false;
   if (p.frames === 0) {

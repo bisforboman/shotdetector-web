@@ -115,6 +115,25 @@ got=$(for r in 90 180 270; do
 done)
 [[ $got == '240,320,90, 320,240,-180, 240,320,-90, ' ]] || { echo "rotated samples: coded size, rotation are '$got'" >&2; exit 1; }
 
+# A variable frame rate, as a screen recording or a phone's (backlog "Variable frame rate"): three() of 2 s shots at 25 fps,
+# every frame after frame 60 lasting twice as long (-fps_mode vfr keeps the timestamps), so a cut falls in each half;
+# libx264's B-frames, an edit list. And a fragmented copy (an empty 'moov': the durations in each 'trun'). ShotDetector
+# takes them at every frame's pts (YuvVideo.FrameTimestamps), FFmpeg's average rate 1250/79 (150 frames in 9.48 s).
+vfr="setpts='if(lt(N,60),N,60+(N-60)*2)/25/TB'"
+enc -filter_complex "$(three 320x240 25 2),$vfr" -fps_mode vfr -c:v libx264 -pix_fmt yuv420p "$out/vfr-320x240.mp4"
+enc -i "$out/vfr-320x240.mp4" -c copy -movflags frag_keyframe+empty_moov "$out/vfr-fragmented-320x240.mp4"
+# What they must be: packets of two durations (one frame and two, in 1/12800), the frames' pts 512 apart up to frame 60
+# and 1024 after it, the average rate, and nb_frames (none with the empty 'moov').
+got=
+for s in vfr vfr-fragmented; do
+  got+="$("$fp" -v error -select_streams v:0 -show_entries packet=duration -of csv=p=0 "$out/$s-320x240.mp4" | sort -un | tr '\n' ,)"
+  got+="$("$fp" -v error -select_streams v:0 -show_entries frame=pts -of csv=p=0 "$out/$s-320x240.mp4" |
+    awk 'NR > 1 {print (NR <= 61 ? "a" : "b") ($1 - p)} {p = $1}' | sort | uniq -c | awk '{printf "%s%s,", $2, $1}')"
+  got+="$("$fp" -v error -select_streams v:0 -show_entries stream=avg_frame_rate,nb_frames -of csv=p=0 "$out/$s-320x240.mp4") "
+done
+want='512,1024,a51260,b102489,1250/79,150 512,1024,a51260,b102489,1250/79,N/A '
+[[ $got == "$want" ]] || { echo "vfr samples: packet durations, frame steps, avg_frame_rate, nb_frames are '$got', not '$want'" >&2; exit 1; }
+
 # MJPEG in AVI (decision 2026-10-30-mjpeg-avi.md): 4:2:0, which FFmpeg's decoder gives as yuvj420p (a JPEG is full range,
 # tagged BT.601), every frame a keyframe. One without audio; one at 29.97 fps with PCM audio longer than the video, which
 # doesn't count for FFmpeg's format duration (a PCM stream in AVI has none); one with MP3 longer than the video, which
@@ -206,11 +225,10 @@ $got")
   echo "$s: $(probe v:0 stream=nb_frames | cut -d= -f2) frames at 24 fps, 854x480, $size bytes."
 fi
 
-# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2, a variable frame rate.
+# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/reject/yuv422p.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p10le "$out/reject/yuv420p10.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.mp4"
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=2 -vf "setpts='if(lt(N,25),N,25+(N-25)*2)/25/TB'" -fps_mode vfr -c:v libx264 -pix_fmt yuv420p "$out/reject/vfr.mp4"
 # MJPEG that isn't 4:2:0: 4:4:4 and 4:2:2 (most cameras'), which ShotDetector's frame source doesn't take yet; an AVI
 # with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
 # which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.

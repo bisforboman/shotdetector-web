@@ -7,11 +7,11 @@
 #   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
 #           each page isolated by its service worker, PAGE_SAMPLE picked on threads, on the page's worker and on two
 #           workers, samples/mjpeg-320x240-25.avi picked (its picture at the playhead and its stills the file's JPEGs),
-#           then a rotated sample on threads and on two workers, the demo on threads paused and resumed, then stopped
-#           while paused, shown again after a reload and resumed, then offline, split across two workers stopped and
-#           resumed, and in Firefox stopped, reloaded and resumed (PAGE_CHECK_FIREFOX=skip leaves Firefox out where
-#           Playwright has none), each run's downloaded CSVs, JSON and HTML against the native run's (the samples named
-#           are not used: always those);
+#           then a rotated and a variable-rate sample, each on threads and on two workers, the demo on threads paused
+#           and resumed, then stopped while paused, shown again after a reload and resumed, then offline, split across
+#           two workers stopped and resumed, and in Firefox stopped, reloaded and resumed (PAGE_CHECK_FIREFOX=skip
+#           leaves Firefox out where Playwright has none), each run's downloaded CSVs, JSON and HTML against the native
+#           run's (the samples named are not used: always those);
 #           the only check of the threaded bundle. Reuses the bundles wasm published in the same call, else publishes
 #           them.
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
@@ -129,18 +129,18 @@ fi
 if [[ $page == true ]]; then
   # A short sample with audio and keyframes enough for two ranges, the demo clip as pages.yml makes it, and an AVI (its
   # picture the file's own JPEGs); then what those don't have, each picked on threads and on two workers: a rotated
-  # video.
+  # video, a variable frame rate.
   sample=${PAGE_SAMPLE:-samples/with-audio-320x240-25.mp4}
   demo=samples/sintel_trailer-480p.mp4
   avi=samples/mjpeg-320x240-25.avi
-  more=(samples/rotated-90-320x240-25.mp4)
+  more=(samples/rotated-90-320x240-25.mp4 samples/vfr-320x240.mp4)
   for f in "$sample" "$demo" "$avi" "${more[@]}"; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
   if [[ $wasm == false ]]; then publish_app; fi
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" "$avi" --native out/native "${more[@]}" || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, an AVI's picture and stills from its JPEGs, a rotated video on threads and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, an AVI's picture and stills from its JPEGs, a rotated and a variable-rate video on threads and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi

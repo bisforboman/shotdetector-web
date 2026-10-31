@@ -7,7 +7,9 @@
 // - blackdetect with d=0 and with its default 2 s: the same spans, their times to the digits FFmpeg prints (-copyts:
 //   the stream's own pts, as ours);
 // - the colour bars, which no FFmpeg filter finds, by their definition: on the samples whose last shot is smptehdbars
-//   (make-samples.sh's three(), the interlaced ones woven, the rotated ones upright), one span, the last shot's frames (from the default run's last cut); on the fades sample
+//   (make-samples.sh's three(), the interlaced ones woven, the rotated ones upright, the
+//   variable-rate ones at their own timestamps), one span, the last shot's frames (from the default run's last cut; decoded frame 100 on for
+//   the variable-rate ones, whose cuts are numbered by time at the average rate); on the fades sample
 //   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
 // joined, their measures must be the whole run's, byte for byte. Each sample's summary (the App's Picture() JSON) goes
@@ -140,10 +142,13 @@ static class PictureCheck
             name.StartsWith("full-range-", StringComparison.Ordinal) || name.StartsWith("start-offset-", StringComparison.Ordinal) ||
             name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
             name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal) ||
-            name.StartsWith("rotated-", StringComparison.Ordinal);
+            name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal);
         if (three)
         {
-            int last = result.Cuts.Count > 0 ? (int)result.Cuts[^1].FrameNum : -1;
+            // The variable-rate samples' last shot is decoded frame 100 on (two shots of 50 before it): the cut's FrameNum
+            // is scenedetect's number for its time at the average rate (5.6 s at 1250/79 fps: 89), not the frame's index.
+            int last = name.StartsWith("vfr-", StringComparison.Ordinal) ? 100
+                : result.Cuts.Count > 0 ? (int)result.Cuts[^1].FrameNum : -1;
             if (spans.Count != 1 || spans[0].FirstFrame != last || spans[0].EndFrame != ours.Count)
                 problems.Add($"colour bars {found}, not the last shot's frames {last}-{ours.Count - 1}");
             return $"{found} (the last shot)";

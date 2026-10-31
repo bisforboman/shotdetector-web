@@ -11,7 +11,8 @@ namespace ShotDetectorWeb;
 /// <see cref="SpsInfo"/>) and ManagedCodecs' <see cref="Mp4Demuxer"/>, decoded by its <see cref="H264Decoder"/>.
 /// </summary>
 /// <remarks>
-/// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, upright or turned by
+/// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant or variable frame rate (every frame's pts given
+/// up front, <see cref="YuvVideo.FrameTimestamps"/>, where the rate varies), upright or turned by
 /// a quarter turn (<see cref="YuvVideo.Rotation"/>, the frames as decoded): progressive, or
 /// interlaced coded as MBAFF frames (the frames as decoded, woven: deinterlacing waits on ShotDetector#614); anything else
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
@@ -38,8 +39,6 @@ public sealed class Mp4Input : VideoInput
         // the walk below.
         if (header.Timescale == 0 || (!header.Fragmented && (header.SampleCount == 0 || header.TotalDuration <= 0)))
             throw new UnsupportedVideoException("The video track has no samples.");
-        if (!header.Fragmented)
-            CheckConstantRate(header);
 
         var sps = SpsInfo.FromAvcConfig(header.AvcConfig.Span);
         if (sps.ChromaFormatIdc != 1 || sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8)
@@ -68,7 +67,7 @@ public sealed class Mp4Input : VideoInput
         var timeBase = new FrameReader.Rational(1, checked((int)header.Timescale));
         var packets = new VideoPackets.Builder(timeBase, (int)Math.Min(header.SampleCount, Array.MaxLength));
         var samples = new SampleDurations();
-        long? duration = FormatDuration(demuxer, packets, samples);
+        long? duration = FormatDuration(demuxer, packets, samples, header.Fragmented ? null : header.TotalDuration);
         Packets = packets.Build();
 
         // FFmpeg's average rate is mov.c's nb_frames_for_fps over duration_for_fps: every sample of 'stts' and of each
@@ -78,8 +77,6 @@ public sealed class Mp4Input : VideoInput
         {
             if (samples.Count == 0 || samples.Total <= 0)
                 throw new UnsupportedVideoException("The video track has no samples.");
-            if (samples.Varies)
-                throw new UnsupportedVideoException(VariableRate);
             (sampleCount, totalDuration) = (samples.Count, samples.Total);
         }
 
@@ -90,11 +87,12 @@ public sealed class Mp4Input : VideoInput
         string colorSpace = matrix is int m && m < MatrixNames.Length ? MatrixNames[m] : "";
 
         var rate = ManagedCodecs.Rational.Reduce(header.Timescale * sampleCount, totalDuration);
+        var fps = new Fps(rate.Numerator, rate.Denominator);
         Video = new YuvVideo
         {
             Width = width,
             Height = height,
-            FrameRate = new Fps(rate.Numerator, rate.Denominator),
+            FrameRate = fps,
             PixelFormat = fullRange ? "yuvj420p" : "yuv420p",
             ColorSpace = colorSpace,
             FullRange = fullRange,
@@ -105,6 +103,7 @@ public sealed class Mp4Input : VideoInput
             FrameCount = header.SampleCount > 0 ? header.SampleCount : null,
             Duration = DurationOf(duration),
             Rotation = rotation,
+            FrameTimestamps = VariableRate(Packets, firstPts, timeBase, fps),
             Codec = "h264",
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
         };
@@ -155,8 +154,12 @@ public sealed class Mp4Input : VideoInput
     /// latest stream end, video and audio, as the edit lists present them; null without packets. ShotDetector reports it
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
     /// result. Adds each video packet to <paramref name="packets"/> and its duration to <paramref name="samples"/> on the way.
+    /// The video's end is its start plus FFmpeg's stream duration: the samples' total (<paramref name="videoTotal"/>, the
+    /// 'stts' one; else the walk's, a fragmented file's 'trun' samples, its track_end), cut where the edit list ends
+    /// (mov.c's mov_read_stts and mov_fix_index: the least of the two). The last shown packet's end can be later: at a
+    /// variable rate, a packet lasts its decode-order delta, not its frame's.
     /// </summary>
-    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples)
+    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples, long? videoTotal)
     {
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPacketInfo())
@@ -196,6 +199,13 @@ public sealed class Mp4Input : VideoInput
 
         if (spans.Count == 0)
             return null;
+        if (demuxer.Video is { } shown && spans.TryGetValue(shown.StreamIndex, out var videoSpan))
+        {
+            long total = videoTotal ?? samples.Total;
+            if (total > 0 && videoSpan.Start + total < videoSpan.End)
+                spans[shown.StreamIndex] = videoSpan with { End = videoSpan.Start + total };
+        }
+
         long first = long.MaxValue, last = long.MinValue, longest = long.MinValue;
         foreach (var (start, end, tb) in spans.Values)
         {
@@ -277,49 +287,42 @@ public sealed class Mp4Input : VideoInput
     }
 
     /// <summary>
-    /// Every sample lasts as long as the others, but the last (its duration is often the track's remainder): ShotDetector
-    /// checks the frames' timestamps as they come, this says so before decoding.
+    /// Every shown frame's pts in presentation order (the packets' that aren't discarded, sorted: what FFmpeg labels the
+    /// frames with) when the frames don't come at the average rate, for ShotDetector's
+    /// <see cref="YuvVideo.FrameTimestamps"/> (a variable frame rate, which it then takes as the file path does); null
+    /// when every frame is within half a frame of where the average rate puts it from the first, the constant-rate check
+    /// ShotDetector makes without them (VideoReader.CheckConstantRate), so a constant-rate video is described as before.
     /// </summary>
-    static void CheckConstantRate(Mp4Header header)
+    static long[]? VariableRate(VideoPackets packets, long firstPts, FrameReader.Rational timeBase, Fps rate)
     {
-        var entries = header.TimeToSample;
-        int checkedEntries = entries.Count > 1 && entries[^1].Count == 1 ? entries.Count - 1 : entries.Count;
-        for (int i = 1; i < checkedEntries; i++)
+        var pts = new List<long>(packets.Count);
+        for (int i = 0; i < packets.Count; i++)
         {
-            if (entries[i].Delta != entries[0].Delta)
-                throw new UnsupportedVideoException(VariableRate);
+            if ((packets.Flags[i] & PacketFlags.Discard) == 0)
+                pts.Add(packets.Pts[i]);
         }
+
+        pts.Sort();
+        double seconds = timeBase.Num / (double)timeBase.Den, perSecond = rate.Value;
+        for (int k = 0; k < pts.Count; k++)
+        {
+            double from = (pts[k] - firstPts) * seconds, expected = k / perSecond;
+            if (!(Math.Abs(from - expected) <= 0.5 / perSecond))
+                return [.. pts];
+        }
+
+        return null;
     }
 
-    const string VariableRate = "The video has a variable frame rate: only a constant frame rate is supported so far.";
-
-    /// <summary>
-    /// The video packets' count and total duration, and whether any lasts otherwise than the first, the last excepted (as
-    /// <see cref="CheckConstantRate"/> excepts the last 'stts' entry): a fragmented file's 'trun' samples, as the walk
-    /// gives them.
-    /// </summary>
+    /// <summary>The video packets' count and total duration: a fragmented file's 'trun' samples, as the walk gives them.</summary>
     sealed class SampleDurations
     {
-        long _first = -1, _previous = -1;
-
         public long Count { get; private set; }
 
         public long Total { get; private set; }
 
-        public bool Varies { get; private set; }
-
         public void Add(long duration)
         {
-            // The packet before this one is not the last: it counts for the check.
-            if (_previous >= 0)
-            {
-                if (_first < 0)
-                    _first = _previous;
-                else if (_previous != _first)
-                    Varies = true;
-            }
-
-            _previous = duration;
             Count++;
             Total += duration;
         }
