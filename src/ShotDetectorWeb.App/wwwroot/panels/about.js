@@ -17,8 +17,12 @@ const CODECS = {
   h264: 'H.264 (AVC)', aac: 'AAC', mp3: 'MP3', opus: 'Opus', ac3: 'Dolby Digital (AC-3)', eac3: 'Dolby Digital Plus (E-AC-3)',
   flac: 'FLAC', alac: 'Apple Lossless (ALAC)', vorbis: 'Vorbis', dts: 'DTS', amr_nb: 'AMR-NB', amr_wb: 'AMR-WB',
 };
-// The pixel formats VideoInput gives (8-bit 4:2:0 only, so far: yuvj420p for MJPEG).
-const PIXEL_FORMATS = { yuv420p: '4:2:0, 8 bits', yuvj420p: '4:2:0, 8 bits, full range' };
+// The pixel formats VideoInput gives (8-bit 4:2:0 and 4:2:2, 10-bit 4:2:0, so far: yuvj420p or yuvj422p for MJPEG; at
+// 10 bits the range is fullRange's alone).
+const PIXEL_FORMATS = {
+  yuv420p: '4:2:0, 8 bits', yuvj420p: '4:2:0, 8 bits, full range', yuv422p: '4:2:2, 8 bits',
+  yuvj422p: '4:2:2, 8 bits, full range', yuv420p10le: '4:2:0, 10 bits',
+};
 
 const section = card('About this file', {
   mark: 'core',
@@ -54,7 +58,10 @@ on('opened', ({ video: v }) => {
       `${FIELD_ORDERS[v.fieldOrder]?.[1] ?? '?'}), what Deinterlace auto goes by`],
     ['Pixel format', PIXEL_FORMATS[v.pixelFormat] ?? v.pixelFormat, `pixelFormat: ${v.pixelFormat}`],
     ['Colour space', v.colorSpace === '' ? 'Not tagged' : COLOR_SPACES[v.colorSpace] ?? v.colorSpace, `colorSpace: "${v.colorSpace}"`],
-    ['Range', v.fullRange ? 'Full (0–255)' : 'Limited (16–235)', `fullRange: ${v.fullRange}`],
+    ['Range', range(v), `fullRange: ${v.fullRange}`],
+    ['Chroma siting', v.chromaLocation == null ? 'Not given (centre)' : CHROMA_LOCATIONS[v.chromaLocation] ?? v.chromaLocation,
+      `chromaLocation: ${v.chromaLocation == null ? 'null' : `"${v.chromaLocation}"`} (ffprobe's chroma_location; ` +
+      'what a 10-bit video\'s conversion goes by)'],
     ['Frames', v.frames.toLocaleString('en'), `frames: ${v.frames} (shown); frameCount: ${v.frameCount} (FFmpeg's nb_frames)`],
     ['Duration', v.duration == null ? 'Not known' : clock(v.duration), `duration: ${v.duration}`],
     ['Audio', v.audio == null ? 'No audio' : audio(v.audio), v.audio == null ? 'audio: null' :
@@ -71,6 +78,19 @@ on('opened', ({ video: v }) => {
     `[${value.length} pts: ${value.slice(0, 4).join(', ')}, …, ${value.at(-1)}]` : value, 2);
   section.hidden = false;
 });
+
+// FFmpeg's chroma locations (av_chroma_location_name) as a viewer knows them.
+const CHROMA_LOCATIONS = {
+  left: 'Left (co-sited horizontally)', center: 'Centre', topleft: 'Top left (co-sited)', top: 'Top',
+  bottomleft: 'Bottom left', bottom: 'Bottom',
+};
+
+// The range's code values at the video's depth.
+function range({ fullRange, pixelFormat }) {
+  const tenBit = pixelFormat.endsWith('10le');
+  if (fullRange) return tenBit ? 'Full (0–1023)' : 'Full (0–255)';
+  return tenBit ? 'Limited (64–940)' : 'Limited (16–235)';
+}
 
 // The stream's field order (FFmpeg's, as ShotDetector's FrameReader names it): in a viewer's words, and ffprobe's.
 const FIELD_ORDERS = {

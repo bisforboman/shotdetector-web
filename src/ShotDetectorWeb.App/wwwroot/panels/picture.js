@@ -113,7 +113,7 @@ on('done', async ({ video }) => {
   }
   if (mine !== asked || video !== opened) return; // a new run or file meanwhile
   picture = { summary: JSON.parse(json), video };
-  pictureLane.show(picture.summary.frames > 0);
+  pictureLane.show(picture.summary.frames > 0 && !picture.summary.notMeasured);
   pictureLane.draw();
   fill(picture);
 });
@@ -122,6 +122,10 @@ function fill({ summary: p, video }) {
   const seconds = f => frameSeconds(video, f);
   const at = f => `${clock(seconds(f))}`;
   section.hidden = false;
+  if (p.notMeasured) {
+    section.append(paragraph(`The picture wasn't measured: ${p.notMeasured}`));
+    return;
+  }
   if (p.frames === 0) {
     section.append(paragraph('No frames were read.'));
     return;
