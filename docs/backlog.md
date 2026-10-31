@@ -44,7 +44,11 @@ in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on
 ManagedCodecs#138's optional part too, in ManagedCodecs 0.4.0 (#211, 2026-10-30). Those filed on 2026-10-30,
 [shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597) and
 [#598](https://github.com/bisforboman/shotdetector/issues/598), shipped in ShotDetector 3.22.0 the same day: their rows
-are in Next again.
+are in Next again. [#608](https://github.com/bisforboman/shotdetector/issues/608),
+[#609](https://github.com/bisforboman/shotdetector/issues/609) and
+[#614](https://github.com/bisforboman/shotdetector/issues/614) shipped in ShotDetector 3.23.0 (2026-10-31), and
+ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the three rows below, worked by one session one after
+another, a pull request each (the owner's choice, 2026-10-31).
 
 - Rotation
   - Why: phones record rotated; the FFmpeg path turns frames upright.
