@@ -1196,4 +1196,7 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     on the page the download carries them (page check).
   - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647); the titles
     kept with a kept run (backlog, "Chapter titles kept with the kept run").
-  - Status: Done (2026-10-31: STATUS)
+  - Status: Done (2026-10-31: natively every sample's chapters at 10 and 30 s and shot changes the FFmpeg path's, within
+    YouTube's rules; AOT under Node 2925 of 2925 files identical; the page check's downloads the native run's, the demo's
+    chapters at 10 s carrying a title typed. Chromium drops a click now and then when downloads follow each other within
+    milliseconds: the page check clicks a second time)

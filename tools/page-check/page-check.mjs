@@ -427,7 +427,7 @@ async function compare(page, what, name, run, stoppedAt = null) {
       fail(`${what}: no ${label} to download`);
       continue;
     }
-    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    const download = await clicked(page, link);
     const expectedName = `${stem(name)}.${ext}`;
     if (download.suggestedFilename() !== expectedName) {
       fail(`${what}: the ${label} downloads as ${download.suggestedFilename()}, not ${expectedName}`);
@@ -454,6 +454,14 @@ async function compare(page, what, name, run, stoppedAt = null) {
     }
   }
   if (stoppedAt === null) await compareChapters(page, what, name, run);
+}
+
+// A link's download. Chromium drops a click now and then when downloads come one after another within milliseconds
+// (seen 2026-10-31 on the seventh timeline file, the shot changes, and on the chapters' link): a second click, as a
+// person would make, downloads it.
+async function clicked(page, link) {
+  const first = await Promise.all([page.waitForEvent('download', { timeout: 5000 }), link.click()]).then(([d]) => d, () => null);
+  return first ?? (await Promise.all([page.waitForEvent('download'), link.click()]))[0];
 }
 
 // The YouTube chapters (Api's YouTubeChapters, ShotDetector's Timeline's) at the page's default of 30 s and at
