@@ -33,6 +33,20 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, the shots as JSON and HTML and the editors' timeline files
 stay the only output the exactness check speaks for.
 
+- YouTube chapters on the run card (issue [#84](https://github.com/bisforboman/shotdetector-web/issues/84), the second
+  slice of [docs/ideas/editor-exports-and-launch.md](ideas/editor-exports-and-launch.md); the owner's choices,
+  2026-10-31: on the page only, at least 30 s by default, editable)
+  - Why: a description's chapter list is what a YouTube uploader would take from the cuts; no library writes it.
+  - Where: the core's `YouTubeChapters` (each chapter at a cut rounded down to the second, at least the minimum apart
+    and before the end, three or none with a reason; YouTube's rules: the first at 00:00, at least three, each at least
+    10 s), `Api.Chapters.cs` with its twin in `Api.Threads.cs` and its name in `threads.js`, a row in `panels/run.js`
+    with the minimum's field and the download, marked the page's own in its tooltip; NativeCheck's `ChaptersCheck.cs`
+    (YouTube's rules on every run, hand-made cases), app-check.mjs and the page check against the native run's.
+  - Done when: `tools/check.sh native wasm page` passes with the chapters at 10 and 30 s the native run's on every
+    sample and run, the hand-made cases agreeing.
+  - Not: titles (placeholders for the uploader), ShotDetector's CLI, the launch.
+  - Status: In progress (2026-10-31)
+
 ### Performance
 
 The performance pass's rows are all done ([backlog-done.md](backlog-done.md)).

@@ -1,11 +1,13 @@
 // The run, a card beside the video: its figures large (how many shots so far while it goes, then the shots, the cuts,
 // the length read and the options it ran with), and the downloads, the scene and stats CSVs as scenedetect writes them
 // and the shots as ShotDetector's JSON and scenedetect's HTML page (Api's ShotsJson and ShotsHtml, asked for here once
-// the run is done), named after the file; and for editors, the shots in scenedetect's timeline formats (Api's
-// TimelineFile: an EDL, FCPXML, FCP7 XML, OTIO, an x264 QP file and Aegisub keyframes), which name the file at the root, as the browser
-// doesn't know its folder: the editor relinks it. A stopped run's are the result for the part read, and its figures say
-// where it stopped. A run lost with its worker (one that didn't answer a stop) says where it had got to and has no downloads
-// (.NET and the result went with the worker).
+// the run is done), named after the file; for editors, the shots in scenedetect's timeline formats (Api's TimelineFile:
+// an EDL, FCPXML, FCP7 XML, OTIO, an x264 QP file and Aegisub keyframes), which name the file at the root, as the
+// browser doesn't know its folder: the editor relinks it; and YouTube chapters (Api's YouTubeChapters), the cuts as a
+// video description's chapter list, each at least the minimum typed beside it (30 s to begin with, YouTube's 10 at
+// least): the page's own format, not scenedetect's, which its tooltip says. A stopped run's are the result for the part
+// read, and its figures say where it stopped. A run lost with its worker (one that didn't answer a stop) says where it
+// had got to and has no downloads (.NET and the result went with the worker).
 import { call, card, frameSeconds, on } from '../app.js';
 import { secondsOf, timecode } from '../timeline.js';
 
@@ -34,9 +36,21 @@ section.insertAdjacentHTML('beforeend', `
     <a id="timeline-otio" download>OTIO</a>
     <a id="timeline-qp" download>QP</a>
     <a id="timeline-keyframes" download>Keyframes</a>
+  </p>
+  <p class="downloads chapters" hidden>
+    <span>YouTube chapters of at least</span>
+    <label><input id="chapters-min" type="number" min="10" step="1" value="30" aria-label="Shortest chapter, in seconds"> s:</label>
+    <a id="chapters-txt" download>Chapters</a>
+    <span id="chapters-none"></span>
   </p>`);
 const figures = section.querySelector('.figures'), summary = section.querySelector('#summary');
 const downloads = section.querySelector('.downloads'), editors = section.querySelector('.editors');
+const chapters = section.querySelector('.chapters'), chaptersMin = section.querySelector('#chapters-min');
+const chaptersLink = section.querySelector('#chapters-txt'), chaptersNone = section.querySelector('#chapters-none');
+// The chapters row's tooltip: whose they are and how they are made (YouTubeChapters in the core).
+chapters.title = 'The page\'s own, not scenedetect\'s: the cuts as the chapter list of a YouTube description. Each ' +
+  'chapter starts at a cut, rounded down to the second, at least the minimum after the one before and before the end; ' +
+  'YouTube wants the first at 00:00, at least three, and each at least 10 s. The titles are for you to write.';
 const links = ['#scenes-csv', '#stats-csv', '#shots-json', '#shots-html'].map(id => section.querySelector(id));
 // The editors' files: Api's TimelineFile format, the link, the file's extension, its type and what reads it.
 const TIMELINES = [
@@ -58,6 +72,7 @@ let shots = [];
 let options = null; // the run's, as Api's Detect takes them (null for a default)
 let runs = 0; // counts the runs and files chosen, so a result asked for after one is done isn't shown under the next
 let fileName = ''; // the file chosen's, which the editors' files name
+let chaptered = null; // the run whose chapters are shown: { at, name, part, minimum }, minimum the one shown
 
 const count = n => `${n} ${n === 1 ? 'shot' : 'shots'}`;
 
@@ -88,7 +103,10 @@ function clear() {
     a.removeAttribute('href');
     a.hidden = false;
   }
-  downloads.hidden = editors.hidden = true;
+  downloads.hidden = editors.hidden = chapters.hidden = true;
+  if (chaptersLink.href) URL.revokeObjectURL(chaptersLink.href);
+  chaptersLink.removeAttribute('href');
+  chaptersNone.textContent = '';
   figures.replaceChildren();
   summary.textContent = '';
   shots = [];
@@ -157,7 +175,32 @@ on('done', async ({ video, result: r, name }) => {
       `${['fcpx', 'fcp7', 'otio'].includes(t.format) ? ` ${RELINK}` : ''}`);
   });
   editors.hidden = files.every(f => f === null);
+  chaptered = { at, name, part };
+  await showChapters();
 });
+
+// The chapters of the run done, at the minimum typed (a whole number of seconds, 10 at least), again as it is typed;
+// a minimum already shown is left as it is (typing "15" asks for 10, then 15; deleting back to "1" asks nothing).
+const typedMinimum = () => Math.max(10, Math.round(Number(chaptersMin.value) || 30));
+async function showChapters() {
+  if (chaptered === null || chaptered.at !== runs) return;
+  const { at, name, part } = chaptered;
+  const minimum = typedMinimum();
+  if (chaptered.minimum === minimum) return;
+  chaptered.minimum = minimum;
+  const c = JSON.parse(await call('YouTubeChapters', minimum));
+  if (at !== runs || chaptered.minimum !== minimum) return;
+  if (chaptersLink.href) URL.revokeObjectURL(chaptersLink.href);
+  chaptersLink.removeAttribute('href');
+  chaptersLink.hidden = c.text === null;
+  chaptersNone.textContent = c.notMade ?? '';
+  if (c.text !== null) {
+    link(chaptersLink, c.text, `${name}.chapters.txt`, 'text/plain', `${c.starts.length} chapters of at least ` +
+      `${minimum} s, the lines to paste into the video's description${part}`);
+  }
+  chapters.hidden = false;
+}
+chaptersMin.addEventListener('input', showChapters);
 on('cancelled', ({ video, done, expected }) => {
   const from = shots.length > 0 ? secondsOf(shots.at(-1).endTimecode) : 0, to = frameSeconds(video, done);
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} found`],

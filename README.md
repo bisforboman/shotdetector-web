@@ -112,7 +112,12 @@ defaults through the core's `TimelineFiles`): `<file>.edl` (save-edl, CMX 3600),
 `<file>.keyframes.txt` (save-keyframes, Aegisub's keyframes), checked as the
 CSVs are. The browser never learns the picked file's folder, so they are given its name at the root (`/<name>`): the
 XMLs' and the OTIO's media path is `file:///<name>` or `/<name>`, which the editor relinks to the file where it is
-(scenedetect writes the absolute path it was given; the same string on the FFmpeg path gives the same bytes). A file
+(scenedetect writes the absolute path it was given; the same string on the FFmpeg path gives the same bytes). And
+YouTube chapters (`Api.YouTubeChapters`, the core's `YouTubeChapters`; the page's own format, not scenedetect's): the
+cuts as a description's chapter list, `<file>.chapters.txt`, a line a chapter (`01:23 Chapter 2`, `h:mm:ss` in a
+video an hour long), each chapter at a cut rounded down to the second and at least the minimum typed beside the
+download (30 s to begin with; YouTube's own is 10) after the one before and before the end; YouTube wants the first at
+00:00 and at least three, so with fewer the card says why instead. The titles are for the uploader to write. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -631,7 +636,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV, the shots as JSON and HTML
   (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) and the editors' timeline files
   (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes, both results given the sample's name) must
-  be equal. It also
+  be equal (and Subtitle Edit's shot changes, `TimelineFiles`' `shotchanges`), and the YouTube chapters at 10 and 30 s
+  (`<sample>.<run>.chapters-<minimum>.json`, ShotDetector's `Timeline.YouTubeChapters` and `ChapterStarts`) too, within
+  YouTube's rules (`ChaptersCheck.cs`). It also
   checks that `samples/reject/` is refused, each file with its own message (when opened, or by its run: a size that
   changes midway), and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
@@ -684,8 +691,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   each sample a `Blob` read in slices through the published `blob-read.js` as in the worker (`tools/node-host.mjs`
   gives Node the `FileReaderSync` it lacks);
   its CSVs, its shots as JSON and HTML (`ShotsJson`, `ShotsHtml`) and its timeline files (`TimelineFile`) written to
-  `out/wasm/` and compared with `out/native/` file for file (none missing, none extra), the JSON's shots `Detect`'s;
-  a run paused, split or resumed gives the whole run's timeline files too. It also
+  `out/wasm/` and compared with `out/native/` file for file (none missing, none extra), the JSON's shots `Detect`'s,
+  and its YouTube chapters (`YouTubeChapters`) the same way; a run paused, split or resumed gives the whole run's
+  timeline files and chapters too. It also
   checks that progress reaches the last frame, that the shots told while a run goes (the `shot` import the worker posts
   to the page) are the result's shots exactly, that each run stopped half-way (`Stop`, between `Detect`'s pauses, as
   the worker calls it) gives the whole run's stats rows and shots up to there (Stopping a run), its JSON and HTML its own
@@ -747,7 +755,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   Playwright can't download it: a cloud session). Each whole run must end `done`, its scenes and
   stats CSVs, its shots as JSON and HTML and its timeline files, downloaded from the run's card as a visitor clicks
   them (`out/page/`), must equal the native check's run of the detector picked byte for byte (the timeline files but
-  for the file's name, the demo's `sintel-trailer`, the sample's `sintel_trailer-480p`), the shots table must have a row per shot of
+  for the file's name, the demo's `sintel-trailer`, the sample's `sintel_trailer-480p`; the YouTube chapters at the
+  default 30 s and at 10 s typed in, the native run's, downloaded or their reason shown), the shots table must have a row per shot of
   the CSV, and the picture's card must show the native check's cropdetect crop and colour bars with its lane drawn; the
   demo's sound must be measured. The stopped run must end `stopped` at
   the pause it was held at (up to 8 frames after the frame the status said: backlog, "The frame a paused run is held

@@ -7,8 +7,8 @@
 //   1. a sample set on the file input, detected with the options as the page prefills them, on threads: its scenes and
 //      stats CSVs, its shots as JSON and HTML and the editors' timeline files (EDL, FCPXML, FCP7 XML, OTIO, QP, keyframes)
 //      downloaded from the run's card and compared with the native check's run of that detector byte for byte (the
-//      timeline files but for the file's name: the page gives the picked file's), the shots table one row per shot of
-//      the CSV;
+//      timeline files but for the file's name: the page gives the picked file's), its YouTube chapters at 30 s and 10 s
+//      the native run's, the shots table one row per shot of the CSV;
 //   2. the same sample on the page's worker (?threads=0, as where the page isn't isolated), and split across two
 //      workers (?workers=2): the ranges lane; the same downloads each time;
 //   3. "Try the demo": the clip fetched and run as picked, on threads, paused a quarter of the way in (the bar and the
@@ -451,6 +451,55 @@ async function compare(page, what, name, run, stoppedAt = null) {
       console.log(`${what}: ${expectedName} identical to ${basename(native)}${basename(FILES[name]) === name ? '' : ', its name the page\'s'}`);
     }
   }
+  if (stoppedAt === null) await compareChapters(page, what, name, run);
+}
+
+// The YouTube chapters (Api's YouTubeChapters, the page's own format) at the page's default of 30 s and at YouTube's
+// 10, typed in the field: the native run's chapters-<minimum>.json, its text downloaded as <file>.chapters.txt or,
+// when there is none, its reason shown in its place. The field is left at 30 again.
+async function compareChapters(page, what, name, run) {
+  const field = page.locator('#chapters-min');
+  if (!await field.isVisible()) {
+    fail(`${what}: no YouTube chapters' minimum`);
+    return;
+  }
+  if (await field.inputValue() !== '30') fail(`${what}: the chapters' minimum reads ${await field.inputValue()}, not 30`);
+  for (const minimum of [30, 10]) {
+    const native = join(nativeDir, `${stem(FILES[name])}.${run}.chapters-${minimum}.json`);
+    if (!existsSync(native)) {
+      fail(`${what}: no native chapters ${native} (tools/check.sh native first)`);
+      continue;
+    }
+    const expected = JSON.parse(readFileSync(native, 'utf8'));
+    if (minimum !== 30) await field.fill(String(minimum));
+    // Shown once the row says this minimum's: its reason, or the link's title its count.
+    const shown = await page.waitForFunction(({ text, notMade, count, minimum }) => {
+      const link = document.querySelector('#chapters-txt'), none = document.querySelector('#chapters-none');
+      return text === null
+        ? link.hidden && none.textContent === notMade
+        : !link.hidden && !!link.href && link.title.includes(`${count} chapters of at least ${minimum} s`);
+    }, { text: expected.text, notMade: expected.notMade, count: expected.starts.length, minimum }, { timeout: 10000 })
+      .then(() => true, () => false);
+    if (!shown) {
+      fail(`${what}: the chapters at ${minimum} s aren't shown as ${basename(native)} has them: ` +
+        `${await page.textContent('#run .chapters')}`);
+    } else if (expected.text === null) {
+      console.log(`${what}: no chapters at ${minimum} s, as ${basename(native)}: ${expected.notMade}`);
+    } else {
+      // A click within milliseconds of the link's new blob URL downloaded nothing in Chromium, a second click did
+      // (seen 2026-10-31, after the run's other downloads); a person doesn't click that fast.
+      await page.waitForTimeout(1000);
+      const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#chapters-txt').click()]);
+      const expectedName = `${stem(name)}.chapters.txt`;
+      if (download.suggestedFilename() !== expectedName)
+        fail(`${what}: the chapters download as ${download.suggestedFilename()}, not ${expectedName}`);
+      const saved = join(outDir, `${what.replace(/\W+/g, '-')}.chapters-${minimum}.txt`);
+      await download.saveAs(saved);
+      if (readFileSync(saved, 'utf8') !== expected.text) fail(`${what}: the chapters at ${minimum} s (${saved}) aren't ${basename(native)}'s`);
+      else console.log(`${what}: ${expectedName} at ${minimum} s, ${expected.starts.length} chapters, ${basename(native)}'s`);
+    }
+  }
+  await field.fill('30');
 }
 
 // Pauses the run once its bar reaches from (a fraction): the button reads Resume, and once the run has reached the
