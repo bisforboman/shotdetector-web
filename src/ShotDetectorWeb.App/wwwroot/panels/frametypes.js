@@ -4,8 +4,8 @@
 // gives them after the run, one character a frame in display order. A lane of the timeline, right under the bitrate's:
 // a bar a frame, I tall, P half as tall, B shorter, each in its colour; where frames are narrower than a pixel, a column
 // shows each type it holds. A card with the counts. The types are the core's, checked frame by frame against
-// ffprobe -show_frames (README, Checks): the card's mark says "core"; the spacing and the runs of B-frames are the page's
-// own reading of them, and say so in their tooltips.
+// ffprobe -show_frames (README, Checks): the card's mark says "core"; the longest run of B-frames is the page's own
+// reading of them, and says so in its tooltip.
 import { call, card, on } from '../app.js';
 import { lane, x } from '../timeline.js';
 
@@ -108,10 +108,10 @@ on('done', async ({ video }) => {
   types = { text, video };
   typesLane.show(text.length > 0);
   typesLane.draw();
-  fill(text, video);
+  fill(text);
 });
 
-function fill(text, video) {
+function fill(text) {
   section.hidden = false;
   if (text.length === 0) {
     section.append(paragraph('No frames were read.'));
@@ -121,22 +121,14 @@ function fill(text, video) {
   for (const t of text) counts[t] = (counts[t] ?? 0) + 1;
   const n = t => counts[t] ?? 0;
   const others = text.length - n('I') - n('P') - n('B');
-  // The counts, the core's; then the page's reading: the longest run of B-frames, and the frames from one I frame to
-  // the next.
+  // One line, so the details' columns stay balanced: the counts, the core's; then the page's reading, the longest run
+  // of B-frames (the bitrate's card has the keyframes' spacing).
   let longest = 0;
   for (let f = 0, run = 0; f < text.length; f++) longest = Math.max(longest, run = text[f] === 'B' ? run + 1 : 0);
   section.append(paragraph(`${count(text.length)} frames: ${count(n('I'))} I, ${count(n('P'))} P, ${count(n('B'))} B` +
     `${others > 0 ? `, ${count(others)} of other types` : ''}; `,
   own(longest === 0 ? 'no B-frames' : `at most ${longest} B in a row`,
     'The page\'s own: the longest run of B-frames in display order'), '.'));
-  const starts = [];
-  for (let f = 0; f < text.length; f++) if (text[f] === 'I') starts.push(f);
-  if (starts.length > 1) {
-    const spacing = (starts.at(-1) - starts[0]) / (starts.length - 1);
-    section.append(paragraph(own(`An I frame every ${spacing.toFixed(1)} frames ` +
-      `(${seconds(video, spacing).toFixed(2)} s) on average.`,
-    'The page\'s own: the frames from the first I frame to the last over the I frames between them')));
-  }
 }
 
 const count = n => n.toLocaleString('en');
