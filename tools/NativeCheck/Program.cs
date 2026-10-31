@@ -72,7 +72,24 @@ foreach (string sample in samples)
         var ours = input.Detect(baseOptions);
         var oursTime = watch.Elapsed;
         watch.Restart();
-        var file = ShotDetection.Detect(sample, baseOptions with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new SwscaleYuv420() });
+        // FFmpeg 8.1's x86 SIMD yadif gives a different result on every run over 9 to 16 bits (its C code doesn't, and
+        // FastYuv's Yadif follows the C code: ShotDetector's DetectionOptions.Yadif): a deinterlaced run over more than
+        // 8 bits is compared with FFmpeg's C code, its SIMD off for the run (FFmpeg picks its functions as a filter or
+        // decoder starts).
+        bool cOnly = baseOptions.Deinterlace != DeinterlaceMode.Off && input.Video.PixelFormat.Contains("p10", StringComparison.Ordinal);
+        if (cOnly)
+            FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(0);
+        DetectionResult file;
+        try
+        {
+            file = ShotDetection.Detect(sample, baseOptions with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new SwscaleYuv420() });
+        }
+        finally
+        {
+            if (cOnly)
+                FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(-1);
+        }
+
         var fileTime = watch.Elapsed;
 
         var (scenes, stats) = Runs.Csvs(ours);
@@ -195,12 +212,15 @@ static YuvVideo Oracle(string path)
     var probe = FrameReader.MediaProbe.Probe(path, new FrameReader.ProbeOptions { PacketTimestamps = true });
     var info = probe.Video!;
     string colorSpace, colorRange;
+    string? chromaLocation;
     using (var first = new FrameReader.FrameDecoder(path, new FrameReader.FrameDecoderOptions { Autorotate = false }))
     {
         if (!first.Next())
             throw new InvalidOperationException($"FFmpeg decodes no frame of {path}.");
         colorSpace = first.ColorSpace ?? info.ColorSpace ?? "";
         colorRange = first.ColorRange ?? info.ColorRange ?? "";
+        // The decoder's, as the file path reads it (the first frame's; the stream's can be the container's).
+        chromaLocation = first.ChromaLocation;
     }
 
     return new YuvVideo
@@ -211,6 +231,7 @@ static YuvVideo Oracle(string path)
         PixelFormat = info.PixelFormat!,
         ColorSpace = colorSpace,
         FullRange = colorRange == "pc",
+        ChromaLocation = chromaLocation,
         TimeBase = info.TimeBase,
         StartPts = info.StartPts ?? 0,
         FrameCount = info.FrameCount,
@@ -241,6 +262,7 @@ static List<string> Differences(YuvVideo ours, YuvVideo ffmpeg)
     Check("pixel format", ours.PixelFormat, ffmpeg.PixelFormat);
     Check("colour space", ours.ColorSpace, ffmpeg.ColorSpace);
     Check("full range", ours.FullRange, ffmpeg.FullRange);
+    Check("chroma location", ours.ChromaLocation, ffmpeg.ChromaLocation);
     Check("time base", ours.TimeBase, ffmpeg.TimeBase);
     Check("start pts", ours.StartPts, ffmpeg.StartPts);
     Check("frame count", ours.FrameCount, ffmpeg.FrameCount);

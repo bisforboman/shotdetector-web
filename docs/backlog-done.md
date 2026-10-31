@@ -1212,3 +1212,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-31: AudioCheck agrees on every sample with audio, the integrated loudness and the range now
     0.000 from ebur128's (up to 0.006 and 0.005 with the page's meter), the peaks as before; natively every check
     agrees, AOT under Node 2250 of 2250 files identical)
+
+- 10-bit 4:2:0 and 8-bit 4:2:2
+  - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
+  - Where: first upstream: `YuvFrame` for 16-bit planes and 4:2:2 chroma, and `YuvVideo.PixelFormat` accepting
+    yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
+    the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
+    `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
+  - Status: Done (2026-10-31: `Mp4Input` and `SpsInfo` describe yuv420p10le, yuv422p and yuvj422p as FFmpeg does, the
+    chroma location from the VUI or left (`YuvVideo.ChromaLocation`, checked against FFmpeg's first frame on every
+    sample), `AviInput` yuvj422p; the frames passed through as decoded; five samples (`yuv420p10-*`, `yuv422p-*`,
+    `yuvj422p-*`, `mjpeg-422-*`), the three rejects moved out and 10-bit 4:2:2 and 4:4:4 H.264 refused instead; native,
+    wasm and AOT byte for byte; 4:2:2's picture measures FFmpeg's exactly, 10-bit's not measured (row "Picture
+    measures at 10 bits"); a deinterlaced 10-bit run compared with FFmpeg's C yadif, its SIMD differing run to run;
+    `tools/realworld.sh` had no refused file to move)

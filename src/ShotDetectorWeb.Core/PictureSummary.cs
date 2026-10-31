@@ -16,6 +16,10 @@ namespace ShotDetectorWeb;
 /// <param name="Brng">signalstats' BRNG over the frames.</param>
 /// <param name="Levels">signalstats' YMIN, YAVG and YMAX over the frames.</param>
 /// <param name="Crop">cropdetect's crop with its defaults after the last frame; null for three frames or fewer.</param>
+/// <param name="NotMeasured">
+/// Why the picture wasn't measured (a 10-bit video: <see cref="PictureMeasures.NotMeasured"/>), the rest then empty; null
+/// when it was.
+/// </param>
 public sealed record PictureSummary(
     int Frames,
     bool FullRange,
@@ -24,7 +28,8 @@ public sealed record PictureSummary(
     IReadOnlyList<PictureSpan> Bars,
     PictureBrng Brng,
     PictureLevels Levels,
-    CropArea? Crop)
+    CropArea? Crop,
+    string? NotMeasured = null)
 {
     /// <summary>The most points the lane gets: a frame each up to this many frames, then several.</summary>
     public const int MostPoints = 2000;
@@ -35,6 +40,12 @@ public sealed record PictureSummary(
     public static PictureSummary Of(PictureMeasures m)
     {
         ArgumentNullException.ThrowIfNull(m);
+        if (m.NotMeasured is { } why)
+        {
+            return new PictureSummary(m.Count, m.FullRange, new PicturePoints(1, [], [], [], []), [], [],
+                new PictureBrng(0, 0, null), new PictureLevels(null, null, null), null, why);
+        }
+
         int per = Math.Max(1, (m.Count + MostPoints - 1) / MostPoints);
         int points = (m.Count + per - 1) / per;
         var min = new int[points];

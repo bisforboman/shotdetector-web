@@ -11,9 +11,9 @@ namespace ShotDetectorWeb;
 /// (decision 2026-10-30-mjpeg-avi.md).
 /// </summary>
 /// <remarks>
-/// So far: baseline or extended Huffman JPEG at 4:2:0 (FFmpeg's yuvj420p), every frame a chunk of its own; anything else
-/// throws <see cref="UnsupportedVideoException"/> when opened: 4:2:2 and 4:4:4 JPEG (ShotDetector's frame source takes
-/// 4:2:0 only), and a file whose video chunks are fewer than its header says (a dropped frame, or an OpenDML file over
+/// So far: baseline or extended Huffman JPEG at 4:2:0 or 4:2:2 (FFmpeg's yuvj420p, yuvj422p), every frame a chunk of
+/// its own; anything else throws <see cref="UnsupportedVideoException"/> when opened: 4:4:4 and greyscale JPEG
+/// (ShotDetector's frame source takes 4:2:0 and 4:2:2 only), and a file whose video chunks are fewer than its header says (a dropped frame, or an OpenDML file over
 /// 1 GB, whose later parts ManagedCodecs doesn't read). Audio streams are described, not decoded.
 /// </remarks>
 public sealed class AviInput : VideoInput
@@ -32,16 +32,15 @@ public sealed class AviInput : VideoInput
 
         // The first frame's size and format: a JPEG's chroma subsampling is its own, frame by frame.
         var (width, height, format) = FirstFrame(demuxer, info);
-        if (format != PixelFormat.Yuv420P)
+        if (format is not (PixelFormat.Yuv420P or PixelFormat.Yuv422P))
         {
             string chroma = format switch
             {
-                PixelFormat.Yuv422P => "4:2:2",
                 PixelFormat.Yuv444P => "4:4:4",
                 PixelFormat.Gray8 => "greyscale",
                 _ => format.ToString(),
             };
-            throw new UnsupportedVideoException($"The video is {chroma} JPEG: only 4:2:0 is supported so far (ShotDetector takes 4:2:0 frames only).");
+            throw new UnsupportedVideoException($"The video is {chroma} JPEG: only 4:2:0 and 4:2:2 are supported so far (ShotDetector takes 8-bit 4:2:0 and 4:2:2 frames, and 10-bit 4:2:0).");
         }
 
         // Every chunk's timing and size, its data not read.
@@ -74,16 +73,18 @@ public sealed class AviInput : VideoInput
         if (header.Audio.FirstOrDefault() is { } audio)
             Audio = new AudioStream(audio.Codec, audio.SampleRate, audio.Channels);
 
-        // FFmpeg's MJPEG decoder: a JPEG is full range (yuvj420p), its matrix BT.601 (bt470bg). The rate is the time
-        // base's inverse (avi_read_header's avg_frame_rate), the frame count the header's dwLength.
+        // FFmpeg's MJPEG decoder: a JPEG is full range (yuvj420p, yuvj422p), its matrix BT.601 (bt470bg), its chroma
+        // sited at the centre. The rate is the time base's inverse (avi_read_header's avg_frame_rate), the frame count
+        // the header's dwLength.
         Video = new YuvVideo
         {
             Width = width,
             Height = height,
             FrameRate = new Fps(timeBase.Denominator, timeBase.Numerator),
-            PixelFormat = "yuvj420p",
+            PixelFormat = format == PixelFormat.Yuv422P ? "yuvj422p" : "yuvj420p",
             ColorSpace = "bt470bg",
             FullRange = true,
+            ChromaLocation = "center",
             TimeBase = new FrameReader.Rational(checked((int)timeBase.Numerator), checked((int)timeBase.Denominator)),
             StartPts = Math.Max(firstPts, 0),
             FrameCount = strh.Length,

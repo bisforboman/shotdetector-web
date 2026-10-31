@@ -164,6 +164,38 @@ want="mjpeg,yuvj420p,25/1,114,114,K__,4.560000 mjpeg,yuvj420p,30000/1001,135,135
 [[ $("$fp" -v error -select_streams a -show_entries stream=codec_name,duration -of csv=p=0 "$out/mjpeg-pcm-640x360-2997.avi") == pcm_s16le,N/A ]] \
   || { echo "mjpeg-pcm: the audio isn't PCM without a duration." >&2; exit 1; }
 
+# 10-bit 4:2:0 and 8-bit 4:2:2 H.264 (libx264's High 10 and High 4:2:2; backlog "10-bit 4:2:0 and 8-bit 4:2:2"), which
+# ShotDetector's frame source takes since 3.24.0, and 4:2:2 MJPEG (yuvj422p, most cameras'). 10-bit's conversion
+# interpolates the chroma from where its samples sit (YuvVideo.ChromaLocation): one with no chroma location in its VUI
+# (FFmpeg's H.264 default, left), one with chroma_sample_loc_type 2 (topleft), full range and BT.709. 4:2:2 limited and
+# full range (yuvj422p).
+enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv420p10le "$out/yuv420p10-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv420p10le -chroma_sample_location topleft \
+  -color_range pc -colorspace bt709 -color_primaries bt709 -color_trc bt709 "$out/yuv420p10-full-topleft-bt709-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv422p "$out/yuv422p-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 25 1.5),format=yuvj422p" -c:v libx264 -pix_fmt yuvj422p -color_range pc "$out/yuvj422p-320x240-25.mp4"
+enc -filter_complex "$(three 320x240 25 1.5),format=yuvj422p" -c:v mjpeg -q:v 3 "$out/mjpeg-422-320x240-25.avi"
+# What they must be: from the bitstream (trace_headers: the SPS's chroma_format_idc, bit depths and chroma location
+# flag and type), and from FFmpeg (profile, pix_fmt, range, matrix and the first frame's chroma location).
+got=
+for f in yuv420p10 yuv420p10-full-topleft-bt709 yuv422p yuvj422p; do
+  s="$out/$f-320x240-25.mp4"
+  trace=$("$ff" -hide_banner -i "$s" -c copy -bsf:v trace_headers -f null - 2>&1)
+  for n in chroma_format_idc bit_depth_luma_minus8 bit_depth_chroma_minus8 chroma_loc_info_present_flag chroma_sample_loc_type_top_field; do
+    got+="$(awk -v n="$n" '$5 == n {print $NF}' <<< "$trace" | sort -u | tr '\n' ' ')"
+  done
+  got+="$("$fp" -v error -select_streams v:0 -show_entries stream=profile,pix_fmt,color_range,color_space -of csv=p=0 "$s"),"
+  got+="$("$fp" -v error -select_streams v:0 -read_intervals %+#1 -show_entries frame=chroma_location -of csv=p=0 "$s" | head -1 | tr -d ,)
+"
+done
+got+="$("$fp" -v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt -of csv=p=0 "$out/mjpeg-422-320x240-25.avi")"
+want="1 2 2 0 High 10,yuv420p10le,tv,bt470bg,left
+1 2 2 1 2 High 10,yuv420p10le,pc,bt709,topleft
+2 0 0 0 High 4:2:2,yuv422p,tv,bt470bg,left
+2 0 0 0 High 4:2:2,yuvj422p,pc,bt470bg,left
+mjpeg,yuvj422p"
+[[ $got == "$want" ]] || { printf '10-bit and 4:2:2 samples: chroma_format_idc, bit depths, chroma location, profile, pix_fmt, range, matrix, chroma location are\n%s\nnot\n%s\n' "$got" "$want" >&2; exit 1; }
+
 # Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
 # 0.1), 3 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 15 s of video. The
 # gap is 3 s, not 2, because FFmpeg's AAC encoder spreads the tone's edges into it by a few milliseconds: a 2 s gap
@@ -232,9 +264,13 @@ $got")
   echo "$s: $(probe v:0 stream=nb_frames | cut -d= -f2) frames at 24 fps, 854x480, $size bytes."
 fi
 
-# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2.
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/reject/yuv422p.mp4"
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p10le "$out/reject/yuv420p10.mp4"
+# Refused, each with its own message: 10-bit 4:2:2 and 8-bit 4:4:4 (ShotDetector's frame source takes neither), MPEG-4
+# Part 2.
+rm -f "$out/reject/yuv422p.mp4" "$out/reject/yuv420p10.mp4" "$out/reject/mjpeg-422.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p10le "$out/reject/yuv422p10.mp4"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv444p "$out/reject/yuv444p.mp4"
+got=$(for f in yuv422p10 yuv444p; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.mp4"; done | tr '\n' ' ')
+[[ $got == 'yuv422p10le yuv444p ' ]] || { echo "H.264 rejects: pix_fmt are $got" >&2; exit 1; }
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.mp4"
 # A size that changes midway (320x240, then 352x288 from frame 25: two streams' Annex B concatenated, the second's SPS
 # in band; no B-frames, so the raw stream's timestamps are plain), which Detect(path) scales to the first size and the
@@ -246,16 +282,15 @@ enc -r 25 -i "$out/reject/size.h264" -c copy "$out/reject/size-change.mp4"
 rm "$out/reject/size-a.h264" "$out/reject/size-b.h264" "$out/reject/size.h264"
 got=$("$fp" -v error -show_entries frame=width,height -of csv=p=0 "$out/reject/size-change.mp4" | grep -v ',$' | uniq | tr '\n' ' ')
 [[ $got == '320,240 352,288 ' ]] || { echo "size-change.mp4: its frames' sizes are $got" >&2; exit 1; }
-# MJPEG that isn't 4:2:0: 4:4:4 and 4:2:2 (most cameras'), which ShotDetector's frame source doesn't take yet; an AVI
+# MJPEG at 4:4:4, which ShotDetector's frame source doesn't take yet; an AVI
 # with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
 # which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj444p -c:v mjpeg "$out/reject/mjpeg-444.avi"
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj422p -c:v mjpeg "$out/reject/mjpeg-422.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=2,format=yuvj420p -f lavfi -i sine=d=3 -c:v mjpeg -c:a libmp3lame "$out/reject/mjpeg-dropped-frame.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/h264.avi"
-got=$(for f in mjpeg-444 mjpeg-422; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
+got=$(for f in mjpeg-444; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
 got+=$("$fp" -v error -select_streams v -count_packets -show_entries stream=nb_frames,nb_read_packets -of csv=p=0 "$out/reject/mjpeg-dropped-frame.avi")
-[[ $got == 'yuvj444p yuvj422p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
+[[ $got == 'yuvj444p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
 # Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
 # and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
 # FFmpeg's encoder writes LC only).

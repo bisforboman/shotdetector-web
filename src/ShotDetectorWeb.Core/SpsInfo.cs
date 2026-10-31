@@ -5,8 +5,17 @@ namespace ShotDetectorWeb;
 /// format and colour tags as FFmpeg's decoder reports them. ManagedCodecs' own parser is internal and skips the colour
 /// fields of the VUI, so this reads them.
 /// </summary>
-internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDepthChroma, bool VideoSignalTypePresent, bool FullRange, int? MatrixCoefficients)
+/// <param name="ChromaLocation">
+/// FFmpeg's chroma location (AVChromaLocation: 0 unspecified, 1 left, 2 center, 3 topleft, ...): the VUI's
+/// chroma_sample_loc_type_top_field plus one where it has one (0 for a type over 5), else left, the H.264 default
+/// (libavcodec's h2645_vui.c, and its SPS parser without a VUI).
+/// </param>
+internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDepthChroma, bool VideoSignalTypePresent, bool FullRange, int? MatrixCoefficients,
+    int ChromaLocation = SpsInfo.Left)
 {
+    /// <summary>AVCHROMA_LOC_LEFT.</summary>
+    public const int Left = 1;
+
     /// <summary>The first SPS of an 'avcC' record (ISO/IEC 14496-15, 5.3.3.1).</summary>
     public static SpsInfo FromAvcConfig(ReadOnlySpan<byte> avcC)
     {
@@ -92,6 +101,7 @@ internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDep
 
         bool signalType = false, fullRange = false;
         int? matrix = null;
+        int location = Left;
         if (r.U(1) == 1)
         {
             if (r.U(1) == 1 && r.U(8) == 255)
@@ -109,9 +119,16 @@ internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDep
                     matrix = r.U(8);
                 }
             }
+
+            if (r.U(1) == 1) // chroma_loc_info_present_flag
+            {
+                int top = r.Ue(); // chroma_sample_loc_type_top_field
+                r.Ue(); // chroma_sample_loc_type_bottom_field
+                location = top <= 5 ? top + 1 : 0;
+            }
         }
 
-        return new SpsInfo(chroma, depthLuma, depthChroma, signalType, fullRange, matrix);
+        return new SpsInfo(chroma, depthLuma, depthChroma, signalType, fullRange, matrix, location);
     }
 
     static void SkipScalingList(Bits r, int size)
