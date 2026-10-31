@@ -968,3 +968,20 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     hashes the bytes at every offset against ffprobe's `data_hash`, natively and on wasm; the page check picks
     `mjpeg-320x240-25.avi`: frame 0, the frame after a timeline click and a shot's first frame shown, a still per shot,
     the downloads the native run's)
+
+- Editor exports on the run card (issue [#84](https://github.com/bisforboman/shotdetector-web/issues/84), the first
+  slice of [docs/ideas/editor-exports-and-launch.md](ideas/editor-exports-and-launch.md); the owner's choice,
+  2026-10-31)
+  - Why: editors are the users most likely to come back, and scenedetect's timeline files are what they would use;
+    ShotDetector's `Timeline` already writes them byte for byte as scenedetect does, and adds no assembly to the
+    bundle (no FFmpeg.AutoGen, +17 KB).
+  - Where: the core's `TimelineFiles` (`Timeline.Edl`, `Fcpx`, `Fcp7`, `Otio`, `Qp`, `Keyframes` with their defaults
+    (keyframes included and the file referred to by its name only: the owner's choices), the result
+    given `VideoPath` `/<file name>`), `Api.Timeline.cs`'s `TimelineFile(format, fileName)` with its twin in
+    `Api.Threads.cs` and its name in `threads.js`, a "For editors" row of downloads in `panels/run.js`; NativeCheck,
+    app-check.mjs (whole, paused, split and resumed runs) and the page check's downloads against `Detect(path)`'s.
+  - Done when: `tools/check.sh native wasm aot page` passes with the six files identical to the native run's on
+    every sample and run (the page's but for the file's name).
+  - Not: YouTube chapters, marker lists or the public launch (parked in the note); no path field (the editor relinks).
+  - Status: Done (2026-10-31: the six files identical to the FFmpeg path's on every sample and run natively, 1330 of
+    1330 files on wasm interpreted, and the page's 60 downloads the native run's; AOT in CI)

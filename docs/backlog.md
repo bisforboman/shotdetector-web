@@ -30,24 +30,8 @@ itself", which lists the first release's page, not every page there will be. Sin
 module of its own, so they run side by side once that row has landed. Where a row says "under the player" or "on the
 shots strip", read a lane of the timeline. The waveform, audio measures and bitrate rows keep only their export and
 panel; their core parts are "Audio in the core" under "Now" and "Packets in the core" (done). Whatever the page
-derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
-exactness check speaks for.
-
-- Editor exports on the run card (issue [#84](https://github.com/bisforboman/shotdetector-web/issues/84), the first
-  slice of [docs/ideas/editor-exports-and-launch.md](ideas/editor-exports-and-launch.md); the owner's choice,
-  2026-10-31)
-  - Why: editors are the users most likely to come back, and scenedetect's timeline files are what they would use;
-    ShotDetector's `Timeline` already writes them byte for byte as scenedetect does, and adds no assembly to the
-    bundle (no FFmpeg.AutoGen, +17 KB).
-  - Where: the core's `TimelineFiles` (`Timeline.Edl`, `Fcpx`, `Fcp7`, `Otio`, `Qp`, `Keyframes` with their defaults
-    (keyframes included and the file referred to by its name only: the owner's choices), the result
-    given `VideoPath` `/<file name>`), `Api.Timeline.cs`'s `TimelineFile(format, fileName)` with its twin in
-    `Api.Threads.cs` and its name in `threads.js`, a "For editors" row of downloads in `panels/run.js`; NativeCheck,
-    app-check.mjs (whole, paused, split and resumed runs) and the page check's downloads against `Detect(path)`'s.
-  - Done when: `tools/check.sh native wasm aot page` passes with the six files identical to the native run's on
-    every sample and run (the page's but for the file's name).
-  - Not: YouTube chapters, marker lists or the public launch (parked in the note); no path field (the editor relinks).
-  - Status: In progress (2026-10-31)
+derives for display is labelled as the page's own; the CSVs, the shots as JSON and HTML and the editors' timeline files
+stay the only output the exactness check speaks for.
 
 ## Waiting
 
