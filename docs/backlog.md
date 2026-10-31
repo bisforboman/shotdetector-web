@@ -78,9 +78,12 @@ all done.
     since ShotDetector's ranges refuse yadif, which reads the frames on either side of each; a long broadcast file is
     where both matter most.
   - Where: first upstream, [shotdetector#628](https://github.com/bisforboman/shotdetector/issues/628) (in progress there,
-    2026-10-31: a range's first frame given the one before it, its last the one after); then `Api`'s deinterlaced path
-    (`Whole`) goes, `app.js`'s `planFor` and `NOT_KEPT` with it, the deinterlaced runs join the range, threads and resume
-    checks and app-check's `SPLIT_RUNS`.
+    2026-10-31: a range's first frame given the one before it, its last the one after; with it a public
+    `ShotDetection.RangeFrames(video, options, firstFrame, endFrame)`, the frames a range needs, the owner's choice as the
+    coordinator told it); then `Api`'s deinterlaced path (`Whole`) goes, `VideoInput.Deinterlaces` (a copy of
+    ShotDetector's internal rule) and the ranges' hard-coded margins for `RangeFrames`, `app.js`'s `planFor` and
+    `NOT_KEPT` with them, and the deinterlaced runs join the range, threads and resume checks and app-check's
+    `SPLIT_RUNS`.
   - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
   - Status: Waiting on upstream (shotdetector#628)
 
