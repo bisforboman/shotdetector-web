@@ -125,7 +125,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   say, the playhead `timeline.js`'s own, `held`; `frameAt(t)`, which `shots.js`' stills use too), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
   range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
-  page's worker; `serve()` registers `sw.js` and reloads a first visit once), the sound's worker, and a stopped run kept
+  page's worker; `serve()` registers `sw.js` and reloads a first visit once, the page's worker started only once it won't reload or a file is picked, `startWorker`), the sound's worker, and a stopped run kept
   in IndexedDB (`KEPT`, one record: the file by name, size and modified time, the options, `Kept()`'s Blob; shown again
   at once when its file is picked, Resume and Forget beside Detect, a rest over `SPLIT_SECONDS` split); the events panels listen to, `call(name, ...args)`, `card(title, {
   place, mark, markTitle })` and `frameSeconds(video, frames)` (where a frame starts: its number over the rate, or a

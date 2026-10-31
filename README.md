@@ -266,7 +266,9 @@ top of `app.js`; `?threads=N` in the page's address forces N, 0 or 1 meaning the
 
 GitHub Pages can't set headers, so `sw.js`, the page's service worker, adds them to every response it gives (the
 `coi-serviceworker` trick). A first visit isn't controlled by it yet: it reloads once when the service worker takes
-over, unless a file has been picked by then (threads come with the next visit). Where there is no service worker (some
+over, unless a file has been picked by then (threads come with the next visit). The page's worker, whose runtime
+fetches the worker's bundle, starts only once the page won't reload (or when a file is picked), so that a first visit
+fetches the bundle once. Where there is no service worker (some
 private modes) or the page isn't isolated, every run goes on the page's worker as before. A threaded run that doesn't
 answer a stop can't be terminated as a worker can: it is abandoned, and runs go on the page's worker until a reload.
 

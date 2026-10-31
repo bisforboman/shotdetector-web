@@ -1121,3 +1121,49 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     one worker (ShotDetector's ranges refuse yadif, shotdetector#628), the ranges lane saying why where it would split
     and a stopped one saying it isn't kept to resume; the page check picks the top-field-first sample with auto on
     threads and asked for two workers; the About card gives the field order)
+
+- A first visit downloads the .NET bundle once, not twice
+  - Why: found by the performance pass (backlog-done "Performance pass on the page", 2026-10-31). On a first visit the
+    page starts its worker, whose runtime fetches the worker's bundle (4.8 MB gzipped, 14.6 MB), and registers `sw.js`;
+    once the service worker takes over, the page reloads to become cross-origin isolated (`app.js`, `serve()`), which
+    aborts the bundle half-loaded, and the reloaded page fetches it all again. Measured on the live site from GitHub's
+    runner: 39 to 44 more requests and 4.8 to 5.2 MB more after the reload, interactive at 890 to 950 ms; on a slow
+    connection the first download is mostly wasted, and the bytes count twice on a metered one.
+  - Where: `app.js`: don't start the worker's runtime (`replaceWorker()` at the bottom, after `serve()`) in a document
+    that is about to reload: on a first visit where service workers exist, wait until the page is controlled and
+    isolated, or until `serve()` has decided not to reload (a file picked, a reload already made this session, no
+    service worker, registration failed), then start it. Whether .NET's loader fetching with `no-cache` (every later
+    visit revalidates the 26 files, 304s on Pages) is worth a change too: measure it, and say so in the row either way.
+  - Done when: a first visit to the page, measured as the pass did (the AOT bundle served with Pages' headers, headless
+    Chromium in CI, and the live site after the deploy), fetches each of the worker bundle's files once, and becomes
+    interactive no later than before; the page check passes as it is (isolated, the demo on threads, offline, Firefox),
+    nothing detected or downloaded changing.
+  - Not: no change to the threaded bundle's loading (started when a file is picked, `threads.js` `warm()`), to the
+    service worker's caching, or to what a visit without a service worker does.
+  - After: `app.js`'s `serve()` settles once the page won't reload (controlled, isolated, reloaded once this session
+    already, no service worker, registration or install failed, a file picked by the time it takes over), and only then
+    does the page's worker start (`startWorker`); `choose()` starts it at once, and `call()` waits for it (the footer's
+    `Versions`). A controlled page doesn't wait for `register()`'s update check.
+  - Measured by a throwaway workflow on the branch `claude/perf-bundle-once` (`tools/page-check/perf.mjs`, not on
+    `main`; deleted after), run 41225735347 on GitHub's 4-core runner (AMD EPYC 9V74): the AOT bundle published as
+    `pages.yml` does, served with Pages' headers (gzip, `max-age=600`, ETag, 304s), main's `app.js` against this one,
+    headless Chromium, a fresh profile each, five visits a round; what was fetched counted by the server, interactive
+    the footer's runtime version filled. The worker's bundle: 29 files, 5.3 MB gzipped.
+    - Before: the first visit made 45 requests of the bundle's files in eight runs of ten (16 files twice; 39 and 30 in
+      the other two): the reloaded document's 304s where the first had finished a file, 200s again where it hadn't
+      (9.4 MB, not 5.3, in three runs), interactive at a median of 720 and 638 ms in two rounds (isolated at 108 and
+      116 ms).
+    - After: 29, each once, 5.3 MB, interactive at 596 and 592 ms (isolated at 109 and 106 ms): no later, a little
+      sooner, as the reloaded document's runtime no longer shares the line with the aborted one's.
+    - The live site before the deploy, from the same runner: 48 requests of the bundle's files on a first visit, 19
+      files twice, interactive at a median of 812 ms. After the deploy: see below.
+  - The loader's `no-cache` (`dotnet.js` asks for each file with `cache: 'no-cache'` unless `disableNoCacheFetch`), a
+    revisit within Pages' ten minutes: 26 revalidations, all 304, interactive at a median of 531 ms; with
+    `withConfig({ disableNoCacheFetch: true })` in `worker.js` none, 531 ms; with 40 ms added to each answer (a slower
+    connection), 566 against 531 ms. So at most one round trip, the 304s going in parallel; and the bundle's names
+    aren't fingerprinted (`WasmFingerprintAssets` false: CLAUDE.md, Gotchas), so within ten minutes of a deploy a
+    revisit could mix cached files of the old bundle with new ones, which the loader's integrity check would refuse. No
+    change: `no-cache` stays.
+  - Checks: `tools/check.sh native wasm page aot` passed locally (Firefox skipped: Playwright's download is blocked
+    there; CI's page check runs it), the page check unchanged.
+  - Status: Done (2026-10-31)
