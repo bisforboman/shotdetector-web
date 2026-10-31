@@ -466,10 +466,7 @@ async function compareChapters(page, what, name, run) {
       continue;
     }
     const expected = JSON.parse(readFileSync(native, 'utf8'));
-    if (minimum !== 30) {
-      await field.fill(String(minimum));
-      await field.dispatchEvent('change');
-    }
+    if (minimum !== 30) await field.fill(String(minimum));
     // Shown once the row says this minimum's: its reason, or the link's title its count.
     const shown = await page.waitForFunction(({ text, notMade, count, minimum }) => {
       const link = document.querySelector('#chapters-txt'), none = document.querySelector('#chapters-none');
@@ -484,6 +481,9 @@ async function compareChapters(page, what, name, run) {
     } else if (expected.text === null) {
       console.log(`${what}: no chapters at ${minimum} s, as ${basename(native)}: ${expected.notMade}`);
     } else {
+      // A click within milliseconds of the link's new blob URL downloaded nothing in Chromium, a second click did
+      // (seen 2026-10-31, after the run's other downloads); a person doesn't click that fast.
+      await page.waitForTimeout(1000);
       const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#chapters-txt').click()]);
       const expectedName = `${stem(name)}.chapters.txt`;
       if (download.suggestedFilename() !== expectedName)
@@ -495,7 +495,6 @@ async function compareChapters(page, what, name, run) {
     }
   }
   await field.fill('30');
-  await field.dispatchEvent('change');
 }
 
 // Pauses the run once its bar reaches from (a fraction): the button reads Resume, and once the run has reached the

@@ -72,7 +72,7 @@ let shots = [];
 let options = null; // the run's, as Api's Detect takes them (null for a default)
 let runs = 0; // counts the runs and files chosen, so a result asked for after one is done isn't shown under the next
 let fileName = ''; // the file chosen's, which the editors' files name
-let chaptered = null; // the run whose chapters are shown: { at, name, part }
+let chaptered = null; // the run whose chapters are shown: { at, name, part, minimum }, minimum the one shown
 
 const count = n => `${n} ${n === 1 ? 'shot' : 'shots'}`;
 
@@ -179,13 +179,17 @@ on('done', async ({ video, result: r, name }) => {
   await showChapters();
 });
 
-// The chapters of the run done, at the minimum typed (a whole number of seconds, 10 at least), again on every change.
+// The chapters of the run done, at the minimum typed (a whole number of seconds, 10 at least), again as it is typed;
+// a minimum already shown is left as it is (typing "15" asks for 10, then 15; deleting back to "1" asks nothing).
+const typedMinimum = () => Math.max(10, Math.round(Number(chaptersMin.value) || 30));
 async function showChapters() {
   if (chaptered === null || chaptered.at !== runs) return;
   const { at, name, part } = chaptered;
-  const minimum = Math.max(10, Math.round(Number(chaptersMin.value) || 30));
+  const minimum = typedMinimum();
+  if (chaptered.minimum === minimum) return;
+  chaptered.minimum = minimum;
   const c = JSON.parse(await call('YouTubeChapters', minimum));
-  if (at !== runs || minimum !== Math.max(10, Math.round(Number(chaptersMin.value) || 30))) return;
+  if (at !== runs || chaptered.minimum !== minimum) return;
   if (chaptersLink.href) URL.revokeObjectURL(chaptersLink.href);
   chaptersLink.removeAttribute('href');
   chaptersLink.hidden = c.text === null;
@@ -196,7 +200,7 @@ async function showChapters() {
   }
   chapters.hidden = false;
 }
-chaptersMin.addEventListener('change', showChapters);
+chaptersMin.addEventListener('input', showChapters);
 on('cancelled', ({ video: { frameRate: { num, den } }, done, expected }) => {
   const from = shots.length > 0 ? secondsOf(shots.at(-1).endTimecode) : 0, to = done * den / num;
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} found`],
