@@ -41,11 +41,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   FFmpeg's `pict_type`), `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures from them,
   `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
   (`PictureJson`), which NativeCheck also writes; `TimelineFiles` (a result's shots in scenedetect's timeline formats,
-  ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes` and each one's extension, the
-  result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files);
-  `YouTubeChapters` (the cuts as a YouTube description's chapter list, the page's own format: each at a cut rounded
-  down to the second, at least a minimum apart and before the end, 30 s by default, 10 at least, three or none and a
-  reason; its JSON `{ minimum, starts, text, notMade }`).
+  ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes`, `shotchanges` (Subtitle
+  Edit's, `Timeline.ShotChanges`) and each one's extension, the
+  result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files;
+  and `Chapters(result, minimum)`, the YouTube chapters, `Timeline.YouTubeChapters` and `ChapterStarts`, Timeline's
+  rule (shotdetector#648: a format built from a cut list lives on `Timeline`), 30 s by default, 10 at least, as JSON
+  `{ minimum, starts, text, notMade }`, `notMade` Timeline's reason when fewer than three).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
@@ -67,7 +68,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Shots.Html` without images, the run card's other two downloads, which `run.js` asks for on `done`);
   `Api.Timeline.cs` has `TimelineFile(format, fileName)` (the last run's `TimelineFiles.Write` for the picked file's
   name, the run card's "For editors" downloads, which `run.js` asks for after those); `Api.Chapters.cs`
-  `YouTubeChapters(minimum)` (the last run's `YouTubeChapters` JSON, the run card's chapters row),
+  `YouTubeChapters(minimum)` (the last run's `TimelineFiles.Chapters` JSON, the run card's chapters row),
   `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
@@ -140,7 +141,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads, the CSVs and the shots as JSON and HTML, and
   for editors the EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes of `TimelineFile` for the file `chose` named,
-  and YouTube chapters of `YouTubeChapters` at the minimum typed beside them, their reason when there are none), `shots.js`
+  Subtitle Edit's shot changes, and YouTube chapters of `YouTubeChapters` at the minimum typed beside them, their reason
+  when there are none, a title a chapter typed under Titles, which the download carries), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
   decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
@@ -170,7 +172,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs, the shots as JSON and HTML and the
   timeline files, `TimelineFiles` given the sample's name on both; the YouTube chapters at 10 and 30 s, and
-  `ChaptersCheck.cs`: YouTube's rules on them and hand-made cuts to the lines they must give), and `PacketCheck.cs`: `VideoInput.Packets` vs
+  `ChaptersCheck.cs`: YouTube's rules on them, each start a cut's second), and `PacketCheck.cs`: `VideoInput.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
   types a run keeps vs ffprobe's `frame=pict_type` (its first field only: its csv adds x264's SEI to the first
   frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which

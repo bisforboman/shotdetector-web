@@ -1178,3 +1178,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-10-31: natively every check agrees on every sample, the CSVs, JSON and HTML unchanged;
     size-change.mp4 refused by its run, "The frame size changes (320x240 to 352x288): not supported.". Each frame's
     own colour tags are a gap: ManagedCodecs' frames carry none, backlog "Each frame's own colour tags")
+
+- YouTube chapters: the download, and the chapters' titles edited on the page; Subtitle Edit's shot changes
+  - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
+    shots-to-chapters rule (first at 0:00, at least three, each long enough) and placeholder titles live on ShotDetector's
+    `Timeline`, and the page owns only the UI around it. The standing rule: a file format built from a cut list lives on
+    `Timeline`. Subtitle Edit's shot changes (shotdetector#633) are one more such format.
+  - Where: the run card's chapters row and its checks from the held branch `claude/youtube-chapters` (the minimum's
+    field, NativeCheck's `ChaptersCheck.cs`, app-check.mjs, the page check), the page's own rule
+    (`YouTubeChapters.cs`) deleted for `TimelineFiles.Chapters` (`Timeline.YouTubeChapters` and `ChapterStarts`); a
+    title per chapter typed under Titles, the download written with them; `shotchanges` in `TimelineFiles` and the
+    "For editors" row.
+  - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
+    on the page the download carries them (page check).
+  - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647); the titles
+    kept with a kept run (backlog, "Chapter titles kept with the kept run").
+  - Status: Done (2026-10-31: STATUS)

@@ -204,6 +204,11 @@ video, .frame {
 #run .downloads.editors span, #run .downloads.chapters > span { color: var(--muted); font-size: 0.9rem; }
 #run .downloads.chapters input { width: 4.5em; }
 #run #chapters-none { flex-basis: 100%; }
+#run .chapter-titles summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+#run .chapter-titles ol { list-style: none; margin: 0.25rem 0 0; padding: 0; max-height: 16rem; overflow-y: auto; }
+#run .chapter-titles li { display: flex; gap: 0.5rem; align-items: baseline; margin: 0.15rem 0; }
+#run .chapter-titles li span { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 4em; text-align: right; }
+#run .chapter-titles input { flex: 1; min-width: 0; }
 
 /* The timeline: lane labels on the left, the tracks on one time axis, the playhead across all of them. */
 #timeline { display: flex; font-size: 0.8rem; user-select: none; }

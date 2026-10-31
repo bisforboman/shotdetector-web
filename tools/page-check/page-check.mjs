@@ -417,10 +417,11 @@ async function compare(page, what, name, run, stoppedAt = null) {
   }
   // The editors' timeline files (Api's TimelineFile), each the native run's but for the file's name, which the page
   // gives as the picked file's (the demo's sintel-trailer.mp4, the native check's sample's own). A stopped run's: the
-  // EDL a cut event a shot of the scenes CSV, the QP and keyframes files frame 0 and each later shot's start.
+  // EDL a cut event a shot of the scenes CSV, the QP and keyframes files frame 0 and each later shot's start, the shot
+  // changes each later shot's start.
   for (const [id, ext, label] of [['timeline-edl', 'edl', 'EDL'], ['timeline-fcpxml', 'fcpxml', 'FCPXML'],
     ['timeline-fcp7', 'fcp7.xml', 'FCP7 XML'], ['timeline-otio', 'otio', 'OTIO'], ['timeline-qp', 'qp', 'QP file'],
-    ['timeline-keyframes', 'keyframes.txt', 'keyframes file']]) {
+    ['timeline-keyframes', 'keyframes.txt', 'keyframes file'], ['timeline-shotchanges', 'shotchanges', 'shot changes']]) {
     const link = page.locator(`#${id}`);
     if (!await link.isVisible()) {
       fail(`${what}: no ${label} to download`);
@@ -439,7 +440,8 @@ async function compare(page, what, name, run, stoppedAt = null) {
       if (scenes === null) continue;
       const starts = ext === 'edl'
         ? lines(text).filter(line => /^\d{3}  /.test(line)).length
-        : ext === 'qp' ? lines(text).length : ext === 'keyframes.txt' ? lines(text).length - 2 : null;
+        : ext === 'qp' ? lines(text).length : ext === 'keyframes.txt' ? lines(text).length - 2
+        : ext === 'shotchanges' ? lines(text).length + 1 : null;
       const expected = scenes.length;
       if (starts !== null && starts !== expected) fail(`${what}: the stopped run's ${label} has ${starts} lines for ${expected} shots`);
       else console.log(`${what}: ${expectedName} downloaded${starts !== null ? `, ${starts} lines for the ${expected} shots` : ''}`);
@@ -454,9 +456,10 @@ async function compare(page, what, name, run, stoppedAt = null) {
   if (stoppedAt === null) await compareChapters(page, what, name, run);
 }
 
-// The YouTube chapters (Api's YouTubeChapters, the page's own format) at the page's default of 30 s and at YouTube's
-// 10, typed in the field: the native run's chapters-<minimum>.json, its text downloaded as <file>.chapters.txt or,
-// when there is none, its reason shown in its place. The field is left at 30 again.
+// The YouTube chapters (Api's YouTubeChapters, ShotDetector's Timeline's) at the page's default of 30 s and at
+// YouTube's 10, typed in the field: the native run's chapters-<minimum>.json, its text downloaded as
+// <file>.chapters.txt or, when there is none, its reason shown in its place; then, at 10 s, a title typed for the second
+// chapter, which the download then carries in that line (the rest Timeline's). The field is left at 30 again.
 async function compareChapters(page, what, name, run) {
   const field = page.locator('#chapters-min');
   if (!await field.isVisible()) {
@@ -497,9 +500,31 @@ async function compareChapters(page, what, name, run) {
       await download.saveAs(saved);
       if (readFileSync(saved, 'utf8') !== expected.text) fail(`${what}: the chapters at ${minimum} s (${saved}) aren't ${basename(native)}'s`);
       else console.log(`${what}: ${expectedName} at ${minimum} s, ${expected.starts.length} chapters, ${basename(native)}'s`);
+      if (minimum === 10) await checkTitles(page, what, expected, saved);
     }
   }
   await field.fill('30');
+}
+
+// A title typed for the second chapter (under Titles): the download's second line is its start and that title, the
+// others Timeline's. The title is cleared again.
+async function checkTitles(page, what, expected, saved) {
+  const title = 'Le dragon  arrive';
+  await page.locator('#run .chapter-titles summary').click();
+  const input = page.locator('#run .chapter-titles li').nth(1).locator('input');
+  if (await input.getAttribute('placeholder') !== 'Chapter 2') fail(`${what}: the second chapter's title field reads ${await input.getAttribute('placeholder')}`);
+  await input.fill(title);
+  await page.waitForFunction(() => document.querySelector('#chapters-txt').title.includes('1 titled on the page'), null, { timeout: 10000 })
+    .catch(() => fail(`${what}: the chapters' link doesn't say a title was typed`));
+  await page.waitForTimeout(1000);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#chapters-txt').click()]);
+  const titledFile = saved.replace(/\.txt$/, '.titled.txt');
+  await download.saveAs(titledFile);
+  const want = expected.text.split('\n').map((line, i) => i === 1 ? `${line.slice(0, line.indexOf(' '))} Le dragon arrive` : line).join('\n');
+  if (readFileSync(titledFile, 'utf8') !== want) fail(`${what}: the chapters with a title typed (${titledFile}) aren't ${JSON.stringify(want)}`);
+  else console.log(`${what}: the chapters' download carries the title typed: ${want.split('\n')[1]}`);
+  await input.fill('');
+  await page.locator('#run .chapter-titles summary').click();
 }
 
 // Pauses the run once its bar reaches from (a fraction): the button reads Resume, and once the run has reached the

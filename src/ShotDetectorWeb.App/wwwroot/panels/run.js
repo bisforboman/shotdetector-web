@@ -3,9 +3,11 @@
 // and the shots as ShotDetector's JSON and scenedetect's HTML page (Api's ShotsJson and ShotsHtml, asked for here once
 // the run is done), named after the file; for editors, the shots in scenedetect's timeline formats (Api's TimelineFile:
 // an EDL, FCPXML, FCP7 XML, OTIO, an x264 QP file and Aegisub keyframes), which name the file at the root, as the
-// browser doesn't know its folder: the editor relinks it; and YouTube chapters (Api's YouTubeChapters), the cuts as a
-// video description's chapter list, each at least the minimum typed beside it (30 s to begin with, YouTube's 10 at
-// least): the page's own format, not scenedetect's, which its tooltip says. A stopped run's are the result for the part
+// browser doesn't know its folder: the editor relinks it, and Subtitle Edit's shot changes; and YouTube chapters (Api's
+// YouTubeChapters: ShotDetector's Timeline's rule and lines), the cuts as a video description's chapter list, each at
+// least the minimum typed beside it (30 s to begin with, YouTube's 10 at least), with a title for each typed on the page
+// (Titles, folded under the row: the download carries them, a chapter left empty keeps Timeline's "Chapter n"; kept
+// while the run is shown, by the chapter's start, so a new minimum keeps the titles of the starts it keeps). A stopped run's are the result for the part
 // read, and its figures say where it stopped. A run lost with its worker (one that didn't answer a stop) says where it
 // had got to and has no downloads (.NET and the result went with the worker).
 import { call, card, frameSeconds, on } from '../app.js';
@@ -36,21 +38,28 @@ section.insertAdjacentHTML('beforeend', `
     <a id="timeline-otio" download>OTIO</a>
     <a id="timeline-qp" download>QP</a>
     <a id="timeline-keyframes" download>Keyframes</a>
+    <a id="timeline-shotchanges" download>Shot changes</a>
   </p>
   <p class="downloads chapters" hidden>
     <span>YouTube chapters of at least</span>
     <label><input id="chapters-min" type="number" min="10" step="1" value="30" aria-label="Shortest chapter, in seconds"> s:</label>
     <a id="chapters-txt" download>Chapters</a>
     <span id="chapters-none"></span>
-  </p>`);
+  </p>
+  <details class="chapter-titles" hidden>
+    <summary>Titles</summary>
+    <ol></ol>
+  </details>`);
 const figures = section.querySelector('.figures'), summary = section.querySelector('#summary');
 const downloads = section.querySelector('.downloads'), editors = section.querySelector('.editors');
 const chapters = section.querySelector('.chapters'), chaptersMin = section.querySelector('#chapters-min');
 const chaptersLink = section.querySelector('#chapters-txt'), chaptersNone = section.querySelector('#chapters-none');
-// The chapters row's tooltip: whose they are and how they are made (YouTubeChapters in the core).
-chapters.title = 'The page\'s own, not scenedetect\'s: the cuts as the chapter list of a YouTube description. Each ' +
-  'chapter starts at a cut, rounded down to the second, at least the minimum after the one before and before the end; ' +
-  'YouTube wants the first at 00:00, at least three, and each at least 10 s. The titles are for you to write.';
+const titles = section.querySelector('.chapter-titles'), titleList = titles.querySelector('ol');
+// The chapters row's tooltip: whose they are and how they are made (ShotDetector's Timeline.YouTubeChapters).
+chapters.title = 'ShotDetector\'s, not scenedetect\'s: the cuts as the chapter list of a YouTube description. Shots ' +
+  'merge until a chapter has run the minimum, each cut\'s time rounded up to the second; a last chapter shorter than ' +
+  'that joins the one before. YouTube wants the first at 0:00, at least three, and each at least 10 s. Type the ' +
+  'titles under Titles.';
 const links = ['#scenes-csv', '#stats-csv', '#shots-json', '#shots-html'].map(id => section.querySelector(id));
 // The editors' files: Api's TimelineFile format, the link, the file's extension, its type and what reads it.
 const TIMELINES = [
@@ -66,13 +75,16 @@ const TIMELINES = [
     'shot starts on one'],
   ['keyframes', 'timeline-keyframes', 'keyframes.txt', 'text/plain', 'Aegisub\'s keyframes (format v1), frame 0 and each ' +
     'cut, for timing subtitles to the cuts'],
+  ['shotchanges', 'timeline-shotchanges', 'shotchanges', 'text/plain', 'Subtitle Edit\'s shot changes, each cut\'s time ' +
+    'in seconds (its Import shot changes; ShotDetector\'s, not scenedetect\'s)'],
 ].map(([format, id, extension, type, what]) => ({ format, link: section.querySelector(`#${id}`), extension, type, what }));
 const RELINK = 'It names the file at the root, as the browser doesn\'t know its folder: relink it in the editor.';
 let shots = [];
 let options = null; // the run's, as Api's Detect takes them (null for a default)
 let runs = 0; // counts the runs and files chosen, so a result asked for after one is done isn't shown under the next
 let fileName = ''; // the file chosen's, which the editors' files name
-let chaptered = null; // the run whose chapters are shown: { at, name, part, minimum }, minimum the one shown
+let chaptered = null; // the run whose chapters are shown: { at, name, part, minimum, text }, minimum the one shown
+const typed = new Map(); // the titles typed for the run shown, by the chapter's start in seconds
 
 const count = n => `${n} ${n === 1 ? 'shot' : 'shots'}`;
 
@@ -107,6 +119,9 @@ function clear() {
   if (chaptersLink.href) URL.revokeObjectURL(chaptersLink.href);
   chaptersLink.removeAttribute('href');
   chaptersNone.textContent = '';
+  titles.hidden = true;
+  titleList.replaceChildren();
+  typed.clear();
   figures.replaceChildren();
   summary.textContent = '';
   shots = [];
@@ -171,7 +186,8 @@ on('done', async ({ video, result: r, name }) => {
   TIMELINES.forEach((t, i) => {
     t.link.hidden = files[i] === null;
     if (files[i] === null) return;
-    link(t.link, files[i], `${name}.${t.extension}`, t.type, `The shots as ${t.what}, as scenedetect writes it${part}.` +
+    link(t.link, files[i], `${name}.${t.extension}`, t.type, `The shots as ${t.what}` +
+      `${t.format === 'shotchanges' ? '' : ', as scenedetect writes it'}${part}.` +
       `${['fcpx', 'fcp7', 'otio'].includes(t.format) ? ` ${RELINK}` : ''}`);
   });
   editors.hidden = files.every(f => f === null);
@@ -194,13 +210,53 @@ async function showChapters() {
   chaptersLink.removeAttribute('href');
   chaptersLink.hidden = c.text === null;
   chaptersNone.textContent = c.notMade ?? '';
-  if (c.text !== null) {
-    link(chaptersLink, c.text, `${name}.chapters.txt`, 'text/plain', `${c.starts.length} chapters of at least ` +
-      `${minimum} s, the lines to paste into the video's description${part}`);
-  }
+  chaptered.text = c.text;
+  chaptered.starts = c.starts;
+  showTitles();
   chapters.hidden = false;
 }
 chaptersMin.addEventListener('input', showChapters);
+
+// Timeline's lines with the titles typed: each line is its start ("1:23"), a space and Timeline's placeholder title,
+// which a title typed for that start replaces.
+function titled() {
+  const { text, starts } = chaptered;
+  return text.split('\n').map((line, i) => {
+    const title = typed.get(starts[i])?.trim();
+    return i < starts.length && title ? `${line.slice(0, line.indexOf(' '))} ${title.replace(/\s+/g, ' ')}` : line;
+  }).join('\n');
+}
+function linkChapters() {
+  const { name, part, minimum, starts } = chaptered;
+  if (chaptersLink.href) URL.revokeObjectURL(chaptersLink.href);
+  const named = starts.filter(s => typed.get(s)?.trim()).length;
+  link(chaptersLink, titled(), `${name}.chapters.txt`, 'text/plain', `${starts.length} chapters of at least ` +
+    `${minimum} s, the lines to paste into the video's description${part}` +
+    `${named > 0 ? `, ${named} titled on the page` : ''}`);
+}
+// A field per chapter, its start beside it, Timeline's title its placeholder.
+function showTitles() {
+  titleList.replaceChildren();
+  titles.hidden = chaptered.text === null;
+  if (chaptered.text === null) return;
+  const lines = chaptered.text.split('\n');
+  chaptered.starts.forEach((start, i) => {
+    const li = document.createElement('li'), time = document.createElement('span'), input = document.createElement('input');
+    const line = lines[i], space = line.indexOf(' ');
+    time.textContent = line.slice(0, space);
+    input.type = 'text';
+    input.placeholder = line.slice(space + 1);
+    input.value = typed.get(start) ?? '';
+    input.setAttribute('aria-label', `Title of the chapter at ${time.textContent}`);
+    input.addEventListener('input', () => {
+      typed.set(start, input.value);
+      linkChapters();
+    });
+    li.append(time, input);
+    titleList.append(li);
+  });
+  linkChapters();
+}
 on('cancelled', ({ video, done, expected }) => {
   const from = shots.length > 0 ? secondsOf(shots.at(-1).endTimecode) : 0, to = frameSeconds(video, done);
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} found`],

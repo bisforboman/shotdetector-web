@@ -108,7 +108,7 @@ if [[ $wasm == true ]]; then
   files=0 differ=0 extra=0 missing=0
   for s in "${samples[@]}"; do
     b=out/native/$(basename "${s%.*}")
-    written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html "$b".*.edl "$b".*.fcpxml "$b".*.fcp7.xml "$b".*.otio "$b".*.qp "$b".*.keyframes.txt \
+    written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html "$b".*.edl "$b".*.fcpxml "$b".*.fcp7.xml "$b".*.otio "$b".*.qp "$b".*.keyframes.txt "$b".*.shotchanges \
       "$b".*.chapters-*.json)
     if [[ ${#written[@]} == 0 ]]; then echo "No native CSVs for $s: run tools/check.sh native on it first."; missing=$((missing + 1)); fi
     for n in "${written[@]}"; do
@@ -119,7 +119,7 @@ if [[ $wasm == true ]]; then
     done
   done
   for w in out/wasm/*.csv out/wasm/*.shots.json out/wasm/*.shots.html out/wasm/*.edl out/wasm/*.fcpxml out/wasm/*.fcp7.xml \
-    out/wasm/*.otio out/wasm/*.qp out/wasm/*.keyframes.txt out/wasm/*.chapters-*.json; do
+    out/wasm/*.otio out/wasm/*.qp out/wasm/*.keyframes.txt out/wasm/*.shotchanges out/wasm/*.chapters-*.json; do
     if [[ ! -f out/native/${w#out/wasm/} ]]; then echo "Not written natively: $w"; extra=$((extra + 1)); fi
   done
   summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs, JSON, HTML, timeline and chapter files identical (${#samples[@]} samples)."

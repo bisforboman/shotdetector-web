@@ -4,7 +4,7 @@
 // FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV, the shots as JSON
 // and HTML (Shots.Json, Shots.Html: the page's other downloads) and the editors' timeline files (TimelineFiles: EDL,
 // FCPXML, FCP7 XML, OTIO, QP, Aegisub keyframes, each given the sample's file name) must be equal byte for byte, and the
-// YouTube chapters (YouTubeChapters at 10 and 30 s, the page's own format) too, within YouTube's rules (ChaptersCheck.cs). Writes (a)'s files to --out
+// YouTube chapters (TimelineFiles.Chapters at 10 and 30 s, Timeline's) too, within YouTube's rules (ChaptersCheck.cs). Writes (a)'s files to --out
 // (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check, its
 // frames' types against ffprobe's pict_type (FrameTypeCheck.cs), whole, on four threads and in ranges, ffprobe's going
@@ -98,14 +98,13 @@ foreach (string sample in samples)
             }
         }
 
-        // The YouTube chapters (the page's own format) at YouTube's minimum and the page's default: the FFmpeg path's,
+        // The YouTube chapters (Timeline's) at YouTube's minimum and the page's default: the FFmpeg path's,
         // and within YouTube's rules.
         foreach (int minimum in ChaptersCheck.Minimums)
         {
-            var chapters = YouTubeChapters.From(ours, minimum);
-            string chaptersJson = YouTubeChapters.Json(chapters), fileChaptersJson = YouTubeChapters.Json(YouTubeChapters.From(file, minimum));
+            string chaptersJson = TimelineFiles.Chapters(ours, minimum), fileChaptersJson = TimelineFiles.Chapters(file, minimum);
             File.WriteAllText($"{name}.chapters-{minimum}.json", chaptersJson);
-            var broken = ChaptersCheck.Problems(ours, chapters);
+            var broken = ChaptersCheck.Problems(ours, chaptersJson);
             if (chaptersJson != fileChaptersJson || broken.Count > 0)
             {
                 timelinesDiffer.Add($"chapters {minimum} s{(broken.Count > 0 ? $" ({string.Join("; ", broken)})" : "")}");
@@ -151,7 +150,6 @@ foreach (string sample in samples)
     }
 }
 
-failures += ChaptersCheck.Run();
 failures += PacketCheck.Run(samples, libs, outDir);
 failures += FrameTypeCheck.Run(samples, libs, outDir);
 failures += FieldCheck.Run(samples, libs);

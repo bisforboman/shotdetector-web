@@ -1,5 +1,7 @@
-// YouTube chapters (the core's YouTubeChapters, the run card's chapter list: the page's own format): hand-made cuts
-// against the lines they must give, then every run's chapters (Program.cs writes them) against YouTube's rules.
+// YouTube chapters (TimelineFiles.Chapters: ShotDetector's Timeline.YouTubeChapters and ChapterStarts, the run card's
+// chapter list): every run's chapters (Program.cs writes them, and compares them with the FFmpeg path's) against
+// YouTube's rules and the cuts they start at. Timeline's rule is ShotDetector's to test; this checks what the page gets.
+using System.Text.Json.Nodes;
 using ShotDetector;
 using ShotDetectorWeb;
 
@@ -8,103 +10,54 @@ namespace ShotDetectorWeb.Checks;
 internal static class ChaptersCheck
 {
     /// <summary>The minimums every run's chapters are written at: YouTube's own, and the page's default.</summary>
-    public static readonly int[] Minimums = [YouTubeChapters.YouTubeMinimum, YouTubeChapters.DefaultMinimum];
-
-    /// <summary>The hand-made cases, each the text it must give (null: none, with a reason). Returns the failures.</summary>
-    public static int Run()
-    {
-        int failures = 0;
-        void Case(string name, double[] cuts, double end, int minimum, string? expected)
-        {
-            var c = YouTubeChapters.From(cuts, end, minimum);
-            var problems = Problems(c, cuts, end);
-            if (c.Text != expected)
-                problems.Add($"gave {Show(c.Text ?? c.NotMade)}, not {Show(expected)}");
-            if (problems.Count > 0)
-            {
-                Console.WriteLine($"Chapters, {name}: {string.Join("; ", problems)}");
-                failures++;
-            }
-        }
-
-        // A cut every 4 s for 2 minutes: chapters at the first cut 30 s or more after the one before.
-        double[] every4 = [.. Enumerable.Range(1, 29).Select(i => i * 4.0)];
-        Case("a cut every 4 s, 30 s", every4, 120, 30, "00:00 Chapter 1\n00:32 Chapter 2\n01:04 Chapter 3\n");
-        Case("a cut every 4 s, 10 s", every4, 120, 10,
-            string.Concat(new[] { 0, 12, 24, 36, 48, 60, 72, 84, 96, 108 }.Select((s, i) => $"{s / 60:00}:{s % 60:00} Chapter {i + 1}\n")));
-        // Rounded down to the second: 29.96 is 29, too soon after 0; 30.04 is 30.
-        Case("rounded down", [29.96, 30.04, 61.5], 100, 30, "00:00 Chapter 1\n00:30 Chapter 2\n01:01 Chapter 3\n");
-        // A time base's 23.9999999 for a cut at 24 s is 24.
-        Case("a whole second from below", [11.9999999, 23.9999999], 40, 10, "00:00 Chapter 1\n00:12 Chapter 2\n00:24 Chapter 3\n");
-        // The last chapter too short to the end is dropped, the one before then the last.
-        Case("the last too short", [30, 60, 95], 110, 30, "00:00 Chapter 1\n00:30 Chapter 2\n01:00 Chapter 3\n");
-        // Fewer than three: none.
-        Case("two chapters", [40], 100, 30, null);
-        Case("no cuts", [], 300, 30, null);
-        Case("a short video", [3, 6], 9, 10, null);
-        // An hour or longer: h:mm:ss for every line.
-        Case("an hour", [1200, 2400], 3700, 30, "0:00:00 Chapter 1\n0:20:00 Chapter 2\n0:40:00 Chapter 3\n");
-        Case("under an hour, past ten minutes", [700, 1400], 2000, 30, "00:00 Chapter 1\n11:40 Chapter 2\n23:20 Chapter 3\n");
-        try
-        {
-            YouTubeChapters.From([], 100, 9);
-            Console.WriteLine("Chapters: a minimum of 9 s taken, under YouTube's 10");
-            failures++;
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-        }
-
-        Console.WriteLine(failures == 0 ? "Chapters: the hand-made cases agree." : $"Chapters: {failures} hand-made cases failed.");
-        return failures;
-    }
-
-    /// <summary>A result's chapters against YouTube's rules and the cuts they start at (Program.cs, every run).</summary>
-    public static List<string> Problems(DetectionResult result, YouTubeChapters.Chapters c)
-    {
-        var shots = result.Shots;
-        if (shots.Count == 0)
-            return c.NotMade is null ? ["chapters of no shots"] : [];
-        double origin = shots[0].Start.Seconds;
-        return Problems(c, [.. shots.Skip(1).Select(s => s.Start.Seconds - origin)], shots[^1].End.Seconds - origin);
-    }
+    public static readonly int[] Minimums = [TimelineFiles.YouTubeMinimum, TimelineFiles.DefaultMinimum];
 
     /// <summary>
-    /// YouTube's rules (the first at 00:00, at least three, ascending, each at least the minimum, the last to the end)
-    /// and the page's (each a cut rounded down to the second; a list, or a reason, never both; the text the starts).
+    /// A result's chapters (TimelineFiles.Chapters' JSON) against YouTube's rules (the first at 0:00, at least three,
+    /// ascending, each at least the minimum, the last to the end), the cuts (each start a cut's time rounded up to the
+    /// second) and their text (a line a chapter, its start as YouTube shows it: m:ss, h:mm:ss from an hour on); a list, or a reason.
     /// </summary>
-    static List<string> Problems(YouTubeChapters.Chapters c, IReadOnlyList<double> cuts, double end)
+    public static List<string> Problems(DetectionResult result, string json)
     {
         var p = new List<string>();
-        if ((c.Text is null) == (c.NotMade is null))
+        var c = JsonNode.Parse(json)!.AsObject();
+        int minimum = (int)c["minimum"]!;
+        string? text = (string?)c["text"], notMade = (string?)c["notMade"];
+        var s = c["starts"]!.AsArray().Select(n => (long)n!).ToList();
+        if ((text is null) == (notMade is null))
             p.Add("a list and a reason, or neither");
-        if (c.Text is null)
+        if (text is null)
         {
-            if (c.Starts.Count != 0)
+            if (s.Count != 0)
                 p.Add("starts without a list");
             return p;
         }
 
-        var s = c.Starts;
+        var shots = result.Shots;
+        double origin = shots[0].Start.Seconds, end = shots[^1].End.Seconds - origin;
+        var cuts = shots.Skip(1).Select(shot => (long)Math.Ceiling(Math.Round((shot.Start.Seconds - origin) * 1000) / 1000)).ToHashSet();
         if (s.Count < 3)
             p.Add($"{s.Count} chapters");
         if (s.Count > 0 && s[0] != 0)
-            p.Add("the first not at 00:00");
+            p.Add("the first not at 0:00");
         for (int i = 1; i < s.Count; i++)
         {
-            if (s[i] - s[i - 1] < Math.Max(c.Minimum, YouTubeChapters.YouTubeMinimum))
+            if (s[i] - s[i - 1] < Math.Max(minimum, TimelineFiles.YouTubeMinimum))
                 p.Add($"chapter {i} {s[i] - s[i - 1]} s");
-            if (!cuts.Any(cut => (int)Math.Floor(cut + 1e-6) == s[i]))
+            if (!cuts.Contains(s[i]))
                 p.Add($"chapter {i + 1} at {s[i]} s, no cut's second");
         }
 
-        if (s.Count > 0 && end - s[^1] < c.Minimum)
+        if (s.Count > 0 && end - s[^1] < minimum)
             p.Add($"the last chapter {end - s[^1]:0.###} s to the end");
-        var lines = c.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        if (lines.Length != s.Count || lines.Select((line, i) => line.EndsWith($" Chapter {i + 1}", StringComparison.Ordinal)).Contains(false))
-            p.Add("the lines aren't a chapter each");
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length != s.Count || lines.Where((line, i) => !line.StartsWith(Stamp(s[i]) + " ", StringComparison.Ordinal)).Any())
+            p.Add("the lines aren't a chapter each at its start");
         return p;
     }
 
-    static string Show(string? text) => text is null ? "none" : $"\"{text.Replace("\n", "\\n")}\"";
+    /// <summary>A chapter's start as YouTube shows it: "m:ss", or "h:mm:ss" from an hour on.</summary>
+    static string Stamp(long seconds) => seconds >= 3600
+        ? $"{seconds / 3600}:{seconds / 60 % 60:00}:{seconds % 60:00}"
+        : $"{seconds / 60}:{seconds % 60:00}";
 }
