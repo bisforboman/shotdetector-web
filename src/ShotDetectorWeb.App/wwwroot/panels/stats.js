@@ -3,7 +3,7 @@
 // per minute and how long the run took against the length it read. They are the page's own figures, worked out here
 // from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run. The shot playing is
 // app.js's caption under the video, and the shots table marks its row.
-import { card, on } from '../app.js';
+import { card, frameSeconds, on } from '../app.js';
 import { secondsOf, seek } from '../timeline.js';
 
 const section = card('Shot statistics', {
@@ -38,13 +38,13 @@ function add(shot) {
 
 on('chose', clear);
 on('run', clear);
-on('done', ({ video: { frameRate: { num, den } }, result, seconds, from, restored }) => {
+on('done', ({ video, result, seconds, from, restored }) => {
   clear();
   for (const shot of result.shots) add(shot);
   if (shots.length === 0) return;
   // A stopped run shown again ran in an earlier visit; a resumed one read the video from its rest's first frame (the
   // status line's times real time is of the same frames).
-  fill(restored ? null : seconds, (result.frameCount - from) * den / num, result.stopped);
+  fill(restored ? null : seconds, frameSeconds(video, result.frameCount) - frameSeconds(video, from), result.stopped);
   section.hidden = false;
 });
 

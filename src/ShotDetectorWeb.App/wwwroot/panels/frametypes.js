@@ -6,7 +6,7 @@
 // shows each type it holds. A card with the counts. The types are the core's, checked frame by frame against
 // ffprobe -show_frames (README, Checks): the card's mark says "core"; the longest run of B-frames is the page's own
 // reading of them, and says so in its tooltip.
-import { call, card, on } from '../app.js';
+import { call, card, frameSeconds, on } from '../app.js';
 import { lane, x } from '../timeline.js';
 
 // Each type's bar: its share of the lane's height and its colour (a custom property of the track). The rarer types
@@ -47,8 +47,10 @@ function draw(track) {
   canvas.width = Math.round(width * ratio);
   canvas.height = Math.round(height * ratio);
   const w = canvas.width, h = canvas.height;
-  // Where frame f starts, in the canvas's pixels: x() is a percentage of the track's width, linear from 0.
-  const perFrame = text.length > 0 ? parseFloat(x(seconds(video, text.length))) / 100 / text.length * w : 0;
+  // Where frame f starts, in the canvas's pixels: x() is a percentage of the track's width, linear from 0; perFrame the
+  // frames' mean width, which decides between a bar a frame and columns.
+  const start = f => parseFloat(x(frameSeconds(video, f))) / 100 * w;
+  const perFrame = text.length > 0 ? start(text.length) / text.length : 0;
   const style = getComputedStyle(track), ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, w, h);
   const fill = (t, from, wide) => {
@@ -61,7 +63,7 @@ function draw(track) {
     // A bar a frame, a pixel apart once they are wide enough to tell.
     const gap = perFrame >= 3 * ratio ? Math.round(ratio) : 0;
     for (let f = 0; f < text.length; f++) {
-      const from = Math.round(f * perFrame), to = Math.round((f + 1) * perFrame);
+      const from = Math.round(start(f)), to = Math.round(start(f + 1));
       fill(text[f], from, Math.max(1, to - from - gap));
     }
     return;
@@ -69,7 +71,7 @@ function draw(track) {
   // Several frames a column: each type there, the tallest behind.
   const columns = new Map();
   for (let f = 0; f < text.length; f++) {
-    const c = Math.floor(f * perFrame);
+    const c = Math.floor(start(f));
     let held = columns.get(c);
     if (!held) columns.set(c, held = new Set());
     held.add(text[f] in BARS ? text[f] : 'P');
@@ -78,8 +80,6 @@ function draw(track) {
     for (const [c, held] of columns) if (held.has(t)) fill(t, c, 1);
   }
 }
-
-const seconds = ({ frameRate }, frames) => frames * frameRate.den / frameRate.num;
 
 function clear() {
   asked++;

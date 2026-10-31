@@ -45,6 +45,9 @@
 //                                                                shot it is in (null outside the shots known), and
 //                                                                whether the video is paused
 //   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns
+//   frameSeconds(video, frames) where frame number `frames` (counted from 0 as decoded: a range's, a span's) starts,
+//                       in seconds from the video's start: frames over the rate, or at a variable rate the frame's own
+//                       pts (Open's frameTimestamps), past the last frame on at the average rate
 //   card(title, { place, mark, markTitle }) a card for the panel to fill, in its place: 'run' beside the video (the run
 //                       and what goes with it), 'below' under the timeline, full width (the shots), 'details' (the
 //                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
@@ -918,10 +921,10 @@ function show(r, seconds, workers, threads, restored = null) {
   setState(r.stopped ? 'stopped' : 'done');
   // A resumed run read its rest's frames (and those it scored again from a keyframe), not the stopped part's: its speed
   // and its times real time are of those (as the shot statistics' Run).
-  const ran = r.frameCount - resumeFrom, ranSeconds = ran * r.frameRate.den / r.frameRate.num;
+  const ran = r.frameCount - resumeFrom, ranSeconds = frameSeconds(opened, r.frameCount) - frameSeconds(opened, resumeFrom);
   const rate = `${(ran / seconds).toFixed(0)} frames per second${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`;
-  const read = r.frameCount * r.frameRate.den / r.frameRate.num, at = `${timecode(read)}, frame ${count(r.frameCount)} ` +
+  const read = frameSeconds(opened, r.frameCount), at = `${timecode(read)}, frame ${count(r.frameCount)} ` +
     `of ${count(opened.frames)}`;
   shown = restored ? {
     text: `Stopped at ${at}, kept in this browser since ${new Date(restored.saved).toLocaleString()}: Resume goes on ` +
@@ -1061,15 +1064,31 @@ function showPicture(jpeg, frame) {
   picture.hidden = false;
 }
 
+// frameSeconds (above): each variable-rate video's frames' times in seconds, worked out once.
+const frameTimes = new WeakMap();
+export function frameSeconds(video, frames) {
+  const ts = video.frameTimestamps, step = video.frameRate.den / video.frameRate.num;
+  if (!ts || ts.length === 0) return frames * step;
+  let times = frameTimes.get(video);
+  if (!times) {
+    const { num, den } = video.timeBase;
+    frameTimes.set(video, times = Float64Array.from(ts, p => (p - video.startPts) * num / den));
+  }
+  const i = Math.floor(frames);
+  if (i < 0) return frames * step;
+  return i < times.length ? times[i] + (frames - i) * ((times[i + 1] ?? times[i] + step) - times[i])
+    : times.at(-1) + (frames - times.length + 1) * step;
+}
+
 // The video's length on the axis: Open's duration, or its frames over its rate.
 const lengthOf = v => v.duration ?? v.frames * v.frameRate.den / v.frameRate.num;
 
 // The toolbar's line on the file: its size, and once opened the description's first facts, the picture's size as it is
 // shown (a rotated video's upright).
 function facts(f, v) {
-  const rate = Number((v.frameRate.num / v.frameRate.den).toFixed(3));
+  const rate = `${Number((v.frameRate.num / v.frameRate.den).toFixed(3))} fps${v.frameTimestamps ? ' on average' : ''}`;
   const [w, h] = Math.abs(v.rotation) % 180 === 90 ? [v.height, v.width] : [v.width, v.height];
-  return [megabytes(f.size), `${w}×${h}`, `${rate} fps`, `${lengthOf(v).toFixed(1)} s`,
+  return [megabytes(f.size), `${w}×${h}`, rate, `${lengthOf(v).toFixed(1)} s`,
     v.audio ? v.audio.codec.toUpperCase() : 'no audio'].join(' · ');
 }
 

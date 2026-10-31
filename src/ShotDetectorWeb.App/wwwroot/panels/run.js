@@ -6,7 +6,7 @@
 // doesn't know its folder: the editor relinks it. A stopped run's are the result for the part read, and its figures say
 // where it stopped. A run lost with its worker (one that didn't answer a stop) says where it had got to and has no downloads
 // (.NET and the result went with the worker).
-import { call, card, on } from '../app.js';
+import { call, card, frameSeconds, on } from '../app.js';
 import { secondsOf, timecode } from '../timeline.js';
 
 const section = card('This run', {
@@ -122,11 +122,11 @@ on('shot', ({ shot }) => {
 on('done', async ({ video, result: r, name }) => {
   clear();
   const rate = r.frameRate.num / r.frameRate.den, n = r.shots.length, cuts = Math.max(n - 1, 0);
-  const fps = `${Number(rate.toFixed(3))} fps`;
+  const fps = `${Number(rate.toFixed(3))} fps${video.frameTimestamps ? ' on average' : ''}`;
   if (r.stopped) {
     show([String(n), `${n === 1 ? 'shot' : 'shots'}, the last ending where the run stopped`],
       [String(cuts), cuts === 1 ? 'cut' : 'cuts'],
-      [timecode(r.frameCount / rate), `stopped at: frame ${r.frameCount.toLocaleString('en')} of ` +
+      [timecode(frameSeconds(video, r.frameCount)), `stopped at: frame ${r.frameCount.toLocaleString('en')} of ` +
         `${video.frames.toLocaleString('en')} read`, `Stopped at frame ${r.frameCount} of ${video.frames}, at ${fps}`],
       ran());
     summary.textContent = `${count(n)} in the ${r.frameCount} frames read. The CSVs are the ones for that part of the video.`;
@@ -158,8 +158,8 @@ on('done', async ({ video, result: r, name }) => {
   });
   editors.hidden = files.every(f => f === null);
 });
-on('cancelled', ({ video: { frameRate: { num, den } }, done, expected }) => {
-  const from = shots.length > 0 ? secondsOf(shots.at(-1).endTimecode) : 0, to = done * den / num;
+on('cancelled', ({ video, done, expected }) => {
+  const from = shots.length > 0 ? secondsOf(shots.at(-1).endTimecode) : 0, to = frameSeconds(video, done);
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} found`],
     [timecode(to), `lost at: frame ${done.toLocaleString('en')}${expected > 0 ? ` of ${expected.toLocaleString('en')}` : ''}`],
     ran());

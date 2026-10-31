@@ -8,7 +8,7 @@
 // moved, and a shot's first frame is often still black from a fade in). An AVI, which no browser plays, has its stills
 // from its own JPEGs (app.js's frameAt: the packet at that time, cut from the file), decoded by the browser all the same
 // (backlog "The picture of an AVI on the page").
-import { card, frameAt, on } from '../app.js';
+import { card, frameAt, frameSeconds, on } from '../app.js';
 import { secondsOf, seek, timecode } from '../timeline.js';
 
 const section = card('Shots', {
@@ -69,7 +69,7 @@ const source = document.createElement('video');
 source.muted = true;
 source.preload = 'auto';
 // file: which file the stills are of, so that a late seek of the last one is dropped
-let url = null, frameSeconds = 0, file = 0;
+let url = null, oneFrame = 0, file = 0;
 const stills = new Map(); // the time a still was taken at -> its canvas
 const wanted = new Set(); // the cells in view without their still, in the order they came into view
 const seen = new IntersectionObserver(entries => {
@@ -86,7 +86,7 @@ function stillCell(cell, shot) {
   const box = cell.appendChild(document.createElement('div'));
   box.className = 'thumb';
   const middle = (secondsOf(shot.startTimecode) + secondsOf(shot.endTimecode)) / 2;
-  const at = frameSeconds ? (Math.floor(middle / frameSeconds) + 0.5) * frameSeconds : middle;
+  const at = oneFrame ? (Math.floor(middle / oneFrame) + 0.5) * oneFrame : middle;
   cell.dataset.at = at;
   const kept = stills.get(at);
   if (kept) box.append(kept);
@@ -170,8 +170,9 @@ on('chose', ({ file: chosen }) => {
   if (url) URL.revokeObjectURL(url);
   source.src = url = URL.createObjectURL(chosen);
 });
-on('opened', ({ video: { frameRate: { num, den }, width, height } }) => {
-  frameSeconds = den / num;
+on('opened', ({ video: { frameRate: { num, den }, frameTimestamps, width, height } }) => {
+  // At a variable rate a frame lasts its own time: the middle as it is.
+  oneFrame = frameTimestamps ? 0 : den / num;
   table.style.setProperty('--still-aspect', `${width} / ${height}`);
 });
 on('run', clear);
@@ -191,8 +192,8 @@ on('done', ({ result }) => {
   clear();
   for (const shot of result.shots) addRow(shot);
 });
-on('cancelled', ({ video: { frameRate: { num, den } }, done }) => {
-  const from = last ? secondsOf(last.endTimecode) : 0, to = done * den / num;
+on('cancelled', ({ video, done }) => {
+  const from = last ? secondsOf(last.endTimecode) : 0, to = frameSeconds(video, done);
   if (to > from) addUnfinished(from, to);
 });
 
