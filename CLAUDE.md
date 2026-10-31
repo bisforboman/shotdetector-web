@@ -183,6 +183,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
   reloaded and resumed, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
   threaded bundle), the picture card's crop and colour bars the native run's, the layout (no hole under a details card, the shots unscrolled up to 15, no red in a lane but the playhead, the run's figures in the first screen, nothing wider than the window) with screenshots at 1280 and 390 px, light and dark, of the demo done, kept and resumed, any page or worker error failing it;
+  `tools/realworld.sh`: the real-world check (README "Real world"): Blender films pinned by SHA-256 and variants the
+  pinned FFmpeg makes of them (fragmented, rotated, 1080i25), each expected "same" or "refused", the native check and
+  the AOT bundle under Node on them (`app-check.mjs --light` on the long ones: the default and all-detector runs,
+  whole and split), into `out/realworld/`;
   `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per
@@ -196,7 +200,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   publish's `wwwroot/` plus FastYuv's license,
   `.nojekyll` and the demo clip (`demo/sintel-trailer.mp4`: Sintel's trailer, downloaded pinned by the same SHA-256 as
   `ci.yml` and made by `tools/make-samples.sh`, the file the checks run), checked for the two LGPL files and the clip,
-  deployed to https://bisforboman.github.io/shotdetector-web/ only if all of it passes.
+  deployed to https://bisforboman.github.io/shotdetector-web/ only if all of it passes. `.github/workflows/realworld.yml`: the
+  real-world check nightly and by hand (never on a pull request, not required), the AOT bundle published once, a job
+  per group of files.
 - `docs/backlog.md`: the work, in priority order, each row self-contained (Why, Where, Done when, Not, Status);
   `docs/backlog-done.md`: finished rows; `docs/decisions/`: design questions with their choices and answers
   (`2026-10-24-the-page.md`: how the page is built; `2026-10-24-fastyuv-replaceable.md`: FastYuv replaced by
@@ -224,7 +230,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   as MBAFF frames (woven as decoded, not deinterlaced; field pictures unchecked: no sample); 4:2:0 MJPEG in AVI
   (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
   constructor with a message saying what. Widening it means a sample for it in
-  make-samples.sh and the checks passing on it.
+  make-samples.sh and the checks passing on it, and its real-world file in `tools/realworld.sh` moved from "refused"
+  to "same" (Elephants Dream for a variable rate, Sintel's rotated trailer for rotation).
 - A new sample isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg tags its
   test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - Before pushing: run what the change could break, not everything: CI picks the checks from the pull request's files

@@ -740,6 +740,8 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
   `_framework/ShotDetector.FastYuv.wasm`, `threads/_framework/ShotDetector.FastYuv.wasm` and
   `licenses/ShotDetector.FastYuv/COPYING.LGPL` as files of their own, and
   deploys it to GitHub Pages only if all of that passed. `workflow_dispatch` does the same for `main` by hand.
+- **Every night, and by hand** (`.github/workflows/realworld.yml`, never on a pull request, not required by `main`):
+  the real-world check below.
 
 So wasm interpreted on every sample, the one place that proves nothing of FFmpeg is touched on every sample's path,
 runs once a day rather than on each pull request; the AOT build, what visitors run, is checked on every sample on
@@ -751,6 +753,33 @@ colour; a stream starting at 1.4 s (an empty edit); an edit list ending before t
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
 measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does); nine files
 to refuse (four of them AVIs: 4:2:2 and 4:4:4 JPEG, a dropped frame, H.264); and three whose audio isn't measured.
+
+### Real world
+
+The samples each isolate one thing; real files mix them. `tools/realworld.sh` runs the native check, whole, and the
+page's AOT bundle under Node (`app-check.mjs`) on real files, against the same FFmpeg path, byte for byte, and the
+bundle's files against the native run's (the owner's choice, 2026-10-31; shotdetector has its own, `realworld.yml` and
+`tools/realworld.py`):
+
+```
+export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # its ffmpeg makes the variants
+tools/realworld.sh list                     # the files, each "same" or "refused", and "light" for the long ones
+tools/realworld.sh download [name...]       # into samples/realworld/, each SHA-256 checked, cached files too
+tools/realworld.sh check [wasm] [name...]   # BUNDLE=<a published wwwroot>, or it publishes the App AOT
+```
+
+The files are Blender Foundation films under CC-BY from download.blender.org, the one host of openly licensed video the
+cloud sessions reach, pinned by SHA-256 (of the file kept, a zip's member's): Sintel's 720p trailer (52 s, High, AAC),
+Big Buck Bunny at 320x180 (the whole film, 10 min, Baseline, AAC without an edit list), Caminandes: Gran Dillama
+(2.5 min, 1080p High, AAC), Tears of Steel at 720p (12 min, in a QuickTime file, MP3) and Elephants Dream at 480p (11
+min, a variable rate: refused today). For what no openly licensed real file we reach has, the pinned FFmpeg makes
+variants of them, as it makes the demo clip: Caminandes fragmented (streams copied), Sintel's trailer rotated a quarter
+(copied; refused until rotation lands) and a minute of Caminandes as 1080i25 MBAFF with AAC. A file expected refused
+must be refused with an `UnsupportedVideoException`; once its row widens the scope the nightly run says "Not refused",
+and the row moves it to "same". On the files over three minutes (Big Buck Bunny, Tears of Steel) the bundle runs only
+the default and every-detector runs, whole and split (`--light`): stop, pause and resume, which don't depend on the
+file, stay with the samples. `realworld.yml` publishes the bundle once, then runs a job per group of files, each
+cached; Tears of Steel's takes the longest, about three hours. What it finds goes to the backlog.
 
 ## WebCodecs
 
