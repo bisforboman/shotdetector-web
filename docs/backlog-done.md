@@ -1190,4 +1190,6 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     weights in ManagedCodecs' AAC order; `Loudness.cs` deleted, its `Loudness` record kept in `Mp4Audio.cs` so the page's
     `loudness` JSON keeps its shape.
   - Done when: `AudioCheck.cs` passes against ebur128 within its tolerances, and the page's JSON is unchanged in shape.
-  - Status: Done (2026-10-31: STATUS)
+  - Status: Done (2026-10-31: AudioCheck agrees on every sample with audio, the integrated loudness and the range now
+    0.000 from ebur128's (up to 0.006 and 0.005 with the page's meter), the peaks as before; natively every check
+    agrees, AOT under Node 2250 of 2250 files identical)
