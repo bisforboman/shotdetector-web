@@ -105,8 +105,8 @@ of any size runs: the worker gets the `File` itself, and .NET reads it in slices
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
 run, else `REFERENCE_FPS` at the top of `app.js`); Stop ends the run where it has got to and shows the result for the
 part read, its shots and both CSVs, as a finished run's, labelled "stopped at", and a run with other options then
-starts at once on the opened file (Stopping a run, below). A long video is split across several workers, its shots
-shown once their ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not a video this
+starts at once on the opened file (Stopping a run, below). A long video is split across several workers, the first
+range's shots shown as they are found and the rest once the ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not a video this
 page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
 `pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
 `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
@@ -190,7 +190,12 @@ the packets before it walked with their data skipped as opening does, and gives 
 merge compares). Each worker's scores come back as bytes (`Api.RangeBytes`, `RangeScores.ToBytes`, about 97 bytes a
 frame for the adaptive detector), and the page's own worker merges them (`Api.Merge`), after which the CSVs come as
 from a one-worker run. Meanwhile the timeline's Ranges lane shows each worker's range and how far it has got; the
-shots come once the ranges merge (ShotDetector decides shots there). A run on one worker keeps its live shots.
+first range's shots come as its worker (the page's own) finds them, as a one-worker run's, ShotDetector telling a
+range from frame 0's shots since 3.22.0; the rest come once the ranges merge (ShotDetector decides them there), and the
+merge tells only the shots the first range didn't, the first range's last again from its number on (it ended at the
+range's end). On the two-hour control the first shot came at the merge, 5 to 7 s before the end of a 221 to 406 s
+run, before this (backlog "Performance pass on the page"). A resumed run's rest has no range from frame 0: its shots
+come at the merge.
 
 Stop stops every worker at its next pause; each range ends where its worker got to, and the ranges from the start
 merge for as long as each reaches into the next one's first frame, so the result is the one for the video up to where

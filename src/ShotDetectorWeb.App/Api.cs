@@ -37,6 +37,7 @@ public static partial class Api
         _input = null;
         _result = null;
         _picture = null;
+        _toldInFirstRange = null;
         _file?.Dispose();
         _file = file;
         return Opened(DamagedPrefixed(() => VideoInput.Open(() => new BlobStream(file))));
@@ -78,6 +79,7 @@ public static partial class Api
         _result = null;
         _picture = null;
         _kept = null;
+        _toldInFirstRange = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
@@ -225,14 +227,22 @@ public static partial class Api
     }
 
     // Not Progress<T>: that would post to a synchronization context and could tell a shot after Detect returned.
-    sealed class JsShots : IProgress<Shot>
+    // told: each shot's JSON added as it is told (a split run's first range's, for Merge: MergedShots).
+    sealed class JsShots(List<string>? told = null) : IProgress<Shot>
     {
         public void Report(Shot value)
         {
-            using var json = JsonDocument.Parse(Shots.Json([value]));
-            string shot = json.RootElement[0].GetRawText();
+            string shot = ShotJson(value);
+            told?.Add(shot);
             Host.Post(() => ShotFound(shot));
         }
+    }
+
+    /// <summary>One shot as an object of <see cref="Shots.Json"/>'s array: what <see cref="ShotFound"/> tells.</summary>
+    static string ShotJson(Shot value)
+    {
+        using var json = JsonDocument.Parse(Shots.Json([value]));
+        return json.RootElement[0].GetRawText();
     }
 }
 

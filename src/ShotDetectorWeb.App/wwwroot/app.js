@@ -22,7 +22,10 @@
 //                                                                too, its 'done' a stopped run's
 //                        'progress' { video, done, expected }    frames done and expected (0 when unknown), one worker
 //                        'range'    { video, index, done, of }   a split run's range: its frames done, of how many
-//                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it
+//                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it (a split
+//                                                                run's first range's as it scores, the rest at the
+//                                                                merge); one told again replaces those from its number
+//                                                                on (a resumed run's last, the first range's last)
 //                        'done'     { video, result, seconds, name, from, restored }   the run's result (Api's
 //                                                                Detect, its CSVs as scenesCsv, a string, and statsCsv,
 //                                                                a Blob of text/csv); name: the file's, without its

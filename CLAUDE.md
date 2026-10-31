@@ -79,7 +79,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `PictureMeasures`, one character a frame in display order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's
   `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count, from)` (`{ frames, ranges:
   [{ firstFrame, endFrame }] }`, from 0 or a stopped run's rest's first frame), `ScoreRange(optionsJson, count, index,
-  from)` (a promise of `{ frames, stopped }`; progress, pauses, `Stop` and `Cancel` as `Detect`'s) and `RangeBytes()`
+  from)` (a promise of `{ frames, stopped }`; progress, pauses, `Stop` and `Cancel` as `Detect`'s; a range from frame 0
+  tells its shots as `Detect` does, the merge then only the rest) and `RangeBytes()`
   (its `RangeScores` as bytes), `Merge(optionsJson, kept, bytes, lengths)` (a stopped run's kept bytes, empty for none,
   then the ranges' bytes one after another: `Detect`'s JSON, `stopped` when they don't reach the end; the kept bytes
   alone the stopped run's result again; a `ShotDetectionException` as "The ranges didn't merge: ...", on which the page
