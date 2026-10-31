@@ -90,14 +90,20 @@ that waited on them are open.
   - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
   - Status: Waiting on upstream (ManagedCodecs#252, filed 2026-10-31)
 
-- 10-bit 4:2:0 and 8-bit 4:2:2
-  - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
-  - Where: first upstream: `YuvFrame` for 16-bit planes and 4:2:2 chroma, and `YuvVideo.PixelFormat` accepting
-    yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
-    the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
-    `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
-  - Status: In progress (2026-10-31; shipped upstream in ShotDetector 3.24.0,
-    [shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627))
+- Picture measures at 10 bits
+  - Why: a 10-bit video (yuv420p10le, in scope since the row "10-bit 4:2:0 and 8-bit 4:2:2") keeps only its frames'
+    types: `PictureMeter` counts 8-bit values, while FFmpeg's `signalstats` reports YMIN, YAVG and YMAX in 10-bit code
+    values and BRNG against 64 to 940 (chroma 64 to 960), `blackdetect`'s threshold and `cropdetect`'s limit (24/255 of
+    1023) scale with the depth, and the colour bars' definition needs its 10-bit levels. So the page's picture card says
+    why it isn't measured (`PictureMeasures.NotMeasured`) and shows no lane, rather than figures FFmpeg wouldn't give.
+  - Where: `PictureMeasures.cs` (16-bit samples in `PictureMeter`'s passes; YMIN and YMAX kept as 16 bits, so
+    `ToBytes` changes again; the thresholds by depth, from FFmpeg 8.1's sources), `PictureSummary` (the depth, for the
+    page's scale), `panels/picture.js` (the lane's luma axis 0 to 1023, the card's thresholds), `PictureCheck.cs` (the
+    10-bit samples compared as the others, no longer skipped).
+  - Done when: `PictureCheck` passes on `samples/yuv420p10-*.mp4` exactly as on the 8-bit samples, and the page check
+    shows a 10-bit sample's picture lane.
+  - Not: anything of the detection (its CSVs are already byte for byte).
+  - Status: Open (found 2026-10-31, widening the scope to 10 bits)
 
 - YouTube chapters: the download, and the chapters' titles edited on the page
   - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
@@ -117,8 +123,8 @@ that waited on them are open.
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
 since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlaced (`Yadif`), not yet in ranges
-(shotdetector#628); since 3.24.0 10-bit 4:2:0 and 8-bit 4:2:2 (#627) and each frame's own colour tags (#626), a frame
-of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
+(shotdetector#628); since 3.24.0 10-bit 4:2:0 and 8-bit 4:2:2 (#627, in scope here: backlog-done) and each frame's own colour tags (#626),
+a frame of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
 

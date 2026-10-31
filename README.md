@@ -24,18 +24,22 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant or variable frame rate (a screen
+Supported so far: **8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 (High, High 4:2:2, High 10) in an MP4, fragmented or not, at a constant or variable frame rate (a screen
 recording's: every frame at its own pts, as FFmpeg's path takes it, given up front where the rate varies), upright or turned a
 quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
 the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default, or deinterlaced by yadif when the page's Deinterlace option says so (`auto`: where the
 field order says interlaced, as `--deinterlace auto`; on one worker, not resumed, until ShotDetector's ranges take it,
 shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
-`docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
-in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
+`docs/decisions/2026-10-30-interlaced.md`). A 10-bit video's samples go to ShotDetector as decoded (16-bit
+little-endian words, yuv420p10le), its chroma location the SPS's (left without one, FFmpeg's H.264 default), which its
+conversion interpolates from; its picture isn't measured yet, its frames' types are (backlog, "Picture measures at 10
+bits"). **And 4:2:0 or 4:2:2 MJPEG
+in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
-`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, a rotation that isn't a
-quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; 4:2:2 waits on ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). A frame size that changes midway is refused by
+`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, greyscale, 10-bit 4:2:2 or more than
+10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
+`docs/decisions/2026-10-30-scope-widening.md`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
 matrix or range that changes midway in band isn't seen: every frame is converted with the first SPS's (backlog,
@@ -521,7 +525,8 @@ path's. ManagedCodecs doesn't expose all of it, so the library reads it itself. 
 | FrameCount | 'stts' sample count (FFmpeg's nb_frames; an edit list that ends early doesn't change it; null in a fragmented file with an empty 'moov', the 'moov' box's samples alone where it has some) |
 | TimeBase | 1 / the 'mdhd' timescale |
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
-| ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); full range is yuvj420p |
+| ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); the SPS's chroma format and bit depth: yuv420p, yuv422p or yuv420p10le, full range yuvj420p or yuvj422p at 8 bits |
+| ChromaLocation | the SPS's VUI chroma_sample_loc_type_top_field (FFmpeg's location is it plus one), else left, FFmpeg's H.264 default; ShotDetector uses it for 10-bit only |
 | Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
 In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which ManagedCodecs' `AviDemuxer` doesn't expose):
@@ -532,7 +537,7 @@ In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which Managed
 | FrameRate, TimeBase | the video 'strh''s dwRate/dwScale, reduced (FFmpeg's avg_frame_rate is the time base's inverse) |
 | FrameCount | the video 'strh''s dwLength (FFmpeg's nb_frames); a file with fewer chunks is refused |
 | StartPts | the first packet's pts |
-| ColorSpace, FullRange, PixelFormat | bt470bg, full range, yuvj420p: FFmpeg's MJPEG decoder for every 4:2:0 JPEG |
+| ColorSpace, FullRange, PixelFormat, ChromaLocation | bt470bg, full range, yuvj420p or yuvj422p (the JPEG's sampling), center: FFmpeg's MJPEG decoder |
 | Duration | the longest stream's: the video's dwLength, and a VBR audio stream's (dwSampleSize 0: MP3, AAC); a PCM or ADPCM stream has none for FFmpeg |
 
 `VideoInput.Packets` lists the video track's packets as FFmpeg's demuxer gives them, in decode order, edit list applied
@@ -608,7 +613,10 @@ colour bars, which no FFmpeg filter finds, are found by their definition (SMPTE'
 BT.601 or BT.709). It costs about 2% of a run: 0.12 ms a frame natively and 0.27 ms on the AOT bundle under Node at
 854x480, where a run takes 4.7 and 12 ms a frame. A split run's ranges each measure their own frames and send them
 with their scores (`RangeBytes`); `Merge` joins them (`PictureMeasures.Join`), byte for byte the whole run's. A
-stopped run's are the frames it read. On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
+stopped run's are the frames it read. 8-bit 4:2:2 is measured as 4:2:0 is, a chroma row under each luma row (signalstats'
+`vsub`), checked the same way; a 10-bit video's frames keep their types only (`PictureMeasures.NotMeasured`, the
+summary's `notMeasured`, the page's card saying why): FFmpeg's filters count 10-bit values there with their own
+thresholds (backlog, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
 (CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
 
 ## Checks
@@ -807,8 +815,12 @@ The samples (tools/make-samples.sh) each isolate something the description must 
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
-measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does); eight files
-to refuse (four of them AVIs: 4:2:2 and 4:4:4 JPEG, a dropped frame, H.264; one MP4 whose size changes midway); and three whose audio isn't measured.
+measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does; 4:2:2);
+10-bit 4:2:0 (no chroma location in the VUI, and topleft with full range and BT.709) and 8-bit 4:2:2 (limited and full
+range) H.264; seven files to refuse (three of them AVIs: 4:4:4 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
+H.264; one MP4 whose size changes midway); and three whose audio isn't measured. A deinterlaced run over 10 bits is
+compared with FFmpeg's yadif with its SIMD off (FFmpeg 8.1's x86 SIMD yadif differs from run to run there; FastYuv's
+`Yadif`, the core's, follows its C code).
 
 ### Real world
 

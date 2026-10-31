@@ -19,7 +19,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `src/ShotDetectorWeb.Core` (net10.0, AOT-compatible): `VideoInput` (abstract: `VideoInput.Open` picks the container by
   the first bytes; what never looks at the container, below, is its; decision `2026-10-30-mjpeg-avi.md`) with
   `Mp4Input` and `AviInput` (MJPEG in AVI: `AviDemuxer`, `MjpegDecoder`, `AviHeader` for each stream's 'strh'/'strf':
-  the audio's codec, rate, channels and VBR length; refuses 4:2:2/4:4:4 JPEG and a file with fewer chunks than its
+  the audio's codec, rate, channels and VBR length; refuses 4:4:4 and greyscale JPEG and a file with fewer chunks than its
   header's dwLength) each describing its file and decoding its frames. `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
   `DetectAsync`: the frames as an asynchronous source that awaits the caller every N frames and ends early when told;
   `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(count)`, the video split at keyframes
@@ -243,12 +243,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 H.264 in MP4 (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
+- Scope so far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 in MP4 (yuv420p, yuv422p, yuv420p10le, and yuvj420p/yuvj422p at full range; `YuvVideo.ChromaLocation` the SPS's or left; a 10-bit run's picture not measured, its frame types kept) (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
   shown packets' pts sorted, given where the frames leave the average rate's grid), upright or a quarter turn (`YuvVideo.Rotation`, the
   display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
   as MBAFF frames (`YuvVideo.FieldOrder` and each frame's flags from ManagedCodecs, deinterlaced by FastYuv's `Yadif` when
-  the run asks, on one worker; field pictures refused: no sample); 4:2:0 MJPEG in AVI
-  (yuvj420p, bt470bg), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
+  the run asks, on one worker; field pictures refused: no sample); 4:2:0 or 4:2:2 MJPEG in AVI
+  (yuvj420p or yuvj422p, bt470bg, center), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
   constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it, and its real-world file in `tools/realworld.sh` moved from "refused"
   to "same" (Elephants Dream for a variable rate).
@@ -323,3 +323,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames (its window
   after them) is `None`, a cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold
   detector ends a fade-out the stop falls in with a cut (`PostProcess`), as at a file's end.
+- FFmpeg 8.1's x86 SIMD yadif gives a different result on every run over 9 to 16 bits (ShotDetector's
+  `DetectionOptions.Yadif` docs; its C code doesn't, and FastYuv's `Yadif`, the core's, follows the C code): NativeCheck
+  runs the FFmpeg path of a deinterlaced 10-bit run with `av_force_cpu_flags(0)` (seen 2026-10-31: every stats row
+  differed with SIMD on, none off).
