@@ -11,7 +11,8 @@ namespace ShotDetectorWeb;
 /// <see cref="SpsInfo"/>) and ManagedCodecs' <see cref="Mp4Demuxer"/>, decoded by its <see cref="H264Decoder"/>.
 /// </summary>
 /// <remarks>
-/// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive, or
+/// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, upright or turned by
+/// a quarter turn (<see cref="YuvVideo.Rotation"/>, the frames as decoded): progressive, or
 /// interlaced coded as MBAFF frames (the frames as decoded, woven: deinterlacing waits on ShotDetector#614); anything else
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
 /// <see cref="InvalidDataException"/>.
@@ -32,8 +33,7 @@ public sealed class Mp4Input : VideoInput
         var header = Mp4Header.Read(stream);
         if (header.SampleEntry is not ("avc1" or "avc3"))
             throw new UnsupportedVideoException($"The video is '{header.SampleEntry}', not H.264 ('avc1'): only H.264 is supported so far.");
-        if (header.Transformed)
-            throw new UnsupportedVideoException("The video is rotated or flipped (its track matrix): not supported yet.");
+        int rotation = Rotation(header);
         // A fragmented file's samples are in its 'moof' boxes (its 'moov' may have some, or none): they are counted on
         // the walk below.
         if (header.Timescale == 0 || (!header.Fragmented && (header.SampleCount == 0 || header.TotalDuration <= 0)))
@@ -104,9 +104,27 @@ public sealed class Mp4Input : VideoInput
             // samples in it (ShotDetector takes the length from the duration without it, as OpenCV).
             FrameCount = header.SampleCount > 0 ? header.SampleCount : null,
             Duration = DurationOf(duration),
+            Rotation = rotation,
             Codec = "h264",
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
         };
+    }
+
+    /// <summary>
+    /// The display rotation as ShotDetector's file path takes it from FFmpeg (VideoReader: the display matrix's angle
+    /// rounded to a whole degree, its remainder by 360; flips ignored): a quarter turn, or the video is refused, as the file
+    /// path refuses it.
+    /// </summary>
+    static int Rotation(Mp4Header header)
+    {
+        if (header.Rotation is not double angle)
+            return 0;
+        if (double.IsNaN(angle))
+            throw new UnsupportedVideoException("The video's display matrix has no rotation (it scales a side to nothing): not supported.");
+        int rotation = (int)Math.Round(angle) % 360;
+        if (rotation % 90 != 0)
+            throw new UnsupportedVideoException($"The video is rotated by {rotation} degrees: only quarter turns are supported.");
+        return rotation;
     }
 
     /// <summary>Opens an MP4 file on disk.</summary>

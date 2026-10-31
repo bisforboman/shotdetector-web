@@ -68,15 +68,6 @@ are in Next again. [#608](https://github.com/bisforboman/shotdetector/issues/608
 ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the three rows below, worked by one session one after
 another, a pull request each (the owner's choice, 2026-10-31).
 
-- Rotation
-  - Why: phones record rotated; the FFmpeg path turns frames upright.
-  - Where: first upstream, [shotdetector#608](https://github.com/bisforboman/shotdetector/issues/608)
-    (`YuvVideo.Rotation`); then `Mp4Header` reads the `tkhd` matrix's angle as `av_display_rotation_get`, quarter turns
-    only, samples at 90, 180 and 270, `PictureMeter`'s crop and colour bars in the upright frame's coordinates (the
-    owner's choice, decision 2026-10-30-scope-widening.md).
-  - Done when: the native, wasm and page checks pass on the rotated samples byte for byte.
-  - Status: Waiting on upstream (shotdetector#608, filed 2026-10-30)
-
 - Variable frame rate
   - Why: screen recordings and phones; the FFmpeg path takes it at the frames' own timestamps.
   - Where: first upstream, [shotdetector#609](https://github.com/bisforboman/shotdetector/issues/609) (no grid check,
@@ -132,15 +123,16 @@ file out of `samples/reject/`, and passes the native check.
     `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
   - Status: Maybe (needs ShotDetector)
 
-- The picture of an AVI on the page
-  - Why: no browser plays MJPEG in AVI, so an AVI's page shows a line where the video would be and its shots' table no
-    stills (decision `2026-10-30-mjpeg-avi.md`, the owner's choice 3). Each MJPEG packet is a JPEG the browser shows.
-  - Where: an export of a packet's bytes (`Api.Frame(index)`, `VideoInput.Packets` says where); the player an `<img>` of
-    the packet at the playhead when the `<video>` can't play, no sound; `panels/shots.js`'s stills from the same.
-  - Done when: picking `samples/mjpeg-320x240-25.avi` in the page check shows the frame at the playhead and a still per
-    shot, and the downloads are the native run's.
-  - Not: no transcoding, no decoding of the JPEGs in .NET for the picture (the browser's own JPEG decoder).
-  - Status: Maybe
+- An AVI's JPEGs without Huffman tables
+  - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
+    FFmpeg's and ManagedCodecs' decoders supply but a browser's JPEG decoder doesn't; the page's picture and stills of
+    such a file (backlog-done "The picture of an AVI on the page") would then be missing (the stills say "didn't show").
+    ffmpeg's encoder writes the tables, so no sample has the case yet.
+  - Where: `make-samples.sh` (a sample with the DHT stripped, checked with a JPEG parser); the page inserting the
+    standard tables before the first SOS when a JPEG has none (bytes copied, no decoding).
+  - Done when: the page check shows that sample's picture and stills.
+  - Not: decoding in .NET for the picture.
+  - Status: Maybe (found 2026-10-31)
 
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and

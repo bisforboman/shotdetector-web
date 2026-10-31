@@ -5,8 +5,10 @@
 // its row marked, kept in view while the video plays. Each shot's row starts with a still of its middle frame: the
 // browser's decode, not ShotDetector's, from a hidden <video> of the panel's own on the same file, taken as rows come
 // into the table's view, live shots included, one seek at a time (the owner's choices, 2026-10-29: the player isn't
-// moved, and a shot's first frame is often still black from a fade in).
-import { card, on } from '../app.js';
+// moved, and a shot's first frame is often still black from a fade in). An AVI, which no browser plays, has its stills
+// from its own JPEGs (app.js's frameAt: the packet at that time, cut from the file), decoded by the browser all the same
+// (backlog "The picture of an AVI on the page").
+import { card, frameAt, on } from '../app.js';
 import { secondsOf, seek, timecode } from '../timeline.js';
 
 const section = card('Shots', {
@@ -114,15 +116,36 @@ async function take() {
   if (wanted.size) take(); // cells that came into view as the last seek ended
 }
 
-// The frame at a time in the hidden video, on a canvas; null when the browser can't show it.
+// The frame at a time, on a canvas: the file's own JPEG there (an AVI's), else the hidden video's; null when the
+// browser can't show it.
 async function grab(at) {
+  const jpeg = await frameAt(at);
+  if (jpeg) return fromJpeg(jpeg);
   if (source.readyState < HTMLMediaElement.HAVE_METADATA && !await settled(source, 'loadedmetadata')) return null;
   source.currentTime = at;
   if (!await settled(source, 'seeked') || !source.videoWidth) return null;
+  const canvas = stillCanvas(source.videoWidth, source.videoHeight);
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function fromJpeg(jpeg) {
+  let image;
+  try {
+    image = await createImageBitmap(jpeg);
+  } catch {
+    return null;
+  }
+  const canvas = stillCanvas(image.width, image.height);
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  image.close();
+  return canvas;
+}
+
+function stillCanvas(width, height) {
   const scale = devicePixelRatio || 1, canvas = document.createElement('canvas');
   canvas.width = Math.round(STILL_WIDTH * scale);
-  canvas.height = Math.round(STILL_WIDTH * scale * source.videoHeight / source.videoWidth);
-  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  canvas.height = Math.round(STILL_WIDTH * scale * height / width);
   return canvas;
 }
 

@@ -28,9 +28,12 @@ public static partial class Api
 /// <see cref="VideoPackets"/> for the page, by column: packet <c>i</c>'s pts (<see cref="Pts"/>, in
 /// <see cref="TimeBase"/>: its time in seconds is pts × num / den, ffprobe's pts_time) and size in bytes
 /// (<see cref="Sizes"/>); the keyframes' and the discarded packets' indexes (ffprobe's K and D: an edit list's packets,
-/// decoded but not shown), in order, rather than a flag per packet.
+/// decoded but not shown), in order, rather than a flag per packet; and where each packet's data starts in the file
+/// (<see cref="Offsets"/>, <see cref="VideoPackets.Offsets"/>), for an AVI, whose MJPEG packets are each a JPEG the page
+/// cuts from the picked file and the browser shows (backlog "The picture of an AVI on the page"); null for an MP4.
 /// </summary>
-sealed record PacketsResponse(FrameReader.Rational TimeBase, long[] Pts, int[] Sizes, int[] Keyframes, int[] Discarded)
+sealed record PacketsResponse(FrameReader.Rational TimeBase, long[] Pts, int[] Sizes, int[] Keyframes, int[] Discarded,
+    long[]? Offsets)
 {
     public static PacketsResponse From(VideoPackets p)
     {
@@ -44,7 +47,8 @@ sealed record PacketsResponse(FrameReader.Rational TimeBase, long[] Pts, int[] S
                 discarded.Add(i);
         }
 
-        return new(p.TimeBase, p.Pts.ToArray(), p.Sizes.ToArray(), [.. keyframes], [.. discarded]);
+        return new(p.TimeBase, p.Pts.ToArray(), p.Sizes.ToArray(), [.. keyframes], [.. discarded],
+            p.Offsets.IsEmpty ? null : p.Offsets.ToArray());
     }
 }
 

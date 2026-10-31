@@ -42,11 +42,28 @@ export function setDuration(seconds) {
   redraw();
 }
 
-// Moves the video to a time: from a click on the timeline, or a panel's (a shot's row plays from there).
+// The playhead's time: the video's; or, for a file the browser can't play (an AVI: its picture is the file's own JPEG
+// at the playhead, app.js), the page's own, which only seek() moves (held()).
+let still = null;
+export const playheadTime = () => still ?? (video.currentTime || 0);
+
+// Whether the playhead is the page's own (true: from 0) or the video's again (false: a new file).
+export function held(on) {
+  still = on ? 0 : null;
+  follow();
+}
+
+// Moves the video to a time: from a click on the timeline, or a panel's (a shot's row plays from there). A held playhead
+// moves itself, and tells the video's listeners as a seek would ('seeking').
 export function seek(at, { play = false } = {}) {
+  if (still !== null) {
+    still = at;
+    video.dispatchEvent(new Event('seeking'));
+    return;
+  }
   video.currentTime = at;
   follow(); // now, not at the video's 'seeking'
-  if (play) video.play().catch(() => {}); // a browser that can't play the file still shows where it is
+  if (play) video.play().catch(() => {});
 }
 
 // A timecode as ShotDetector prints them (HH:MM:SS.mmm) in seconds, and back.
@@ -92,7 +109,7 @@ function clock(t, step) {
 
 // The playhead and the slider's value follow the video.
 function follow() {
-  const t = video.currentTime || 0;
+  const t = playheadTime();
   playhead.style.left = x(t);
   playhead.hidden = duration === 0;
   tracks.setAttribute('aria-valuenow', t.toFixed(3));
@@ -110,7 +127,7 @@ tracks.addEventListener('click', e => {
 // The keyboard's way to the same: arrows a second (with Shift ten), Home and End.
 tracks.addEventListener('keydown', e => {
   if (duration === 0) return;
-  const t = video.currentTime || 0, step = e.shiftKey ? 10 : 1;
+  const t = playheadTime(), step = e.shiftKey ? 10 : 1;
   const to = { ArrowLeft: t - step, ArrowRight: t + step, Home: 0, End: duration }[e.key];
   if (to === undefined) return;
   e.preventDefault();

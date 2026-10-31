@@ -952,3 +952,35 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     only, `Mp4Audio`'s of the audio only, its `AudioDataStream` gone; the checks unchanged, native, wasm and AOT. On the
     two-hour control natively opening allocates 49.6 MB instead of 404 and a run reads 229.9 MB instead of 345.7; the
     wasm heap's peak and the bytes read from the `Blob` as before: README "What the heap holds")
+
+- The picture of an AVI on the page
+  - Why: no browser plays MJPEG in AVI, so an AVI's page shows a line where the video would be and its shots' table no
+    stills (decision `2026-10-30-mjpeg-avi.md`, the owner's choice 3). Each MJPEG packet is a JPEG the browser shows.
+  - Where: an export of a packet's bytes (`Api.Frame(index)`, `VideoInput.Packets` says where); the player an `<img>` of
+    the packet at the playhead when the `<video>` can't play, no sound; `panels/shots.js`'s stills from the same.
+  - Done when: picking `samples/mjpeg-320x240-25.avi` in the page check shows the frame at the playhead and a still per
+    shot, and the downloads are the native run's.
+  - Not: no transcoding, no decoding of the JPEGs in .NET for the picture (the browser's own JPEG decoder).
+  - Status: Done (2026-10-31: `VideoPackets.Offsets`, where the AVI walk's one read of each chunk's data starts, in
+    `Packets()` as `offsets`; the page cuts each JPEG from the picked `File` there, not through an `Api.Frame(index)`
+    export, which would wait behind a run on the page's worker (the owner's choice that day); the player an `<img>` of
+    the frame at the playhead, the playhead the page's own; the shots' stills from the same JPEGs. The packet check
+    hashes the bytes at every offset against ffprobe's `data_hash`, natively and on wasm; the page check picks
+    `mjpeg-320x240-25.avi`: frame 0, the frame after a timeline click and a shot's first frame shown, a still per shot,
+    the downloads the native run's)
+
+- Rotation
+  - Why: phones record rotated; the FFmpeg path turns frames upright.
+  - Where: first upstream, [shotdetector#608](https://github.com/bisforboman/shotdetector/issues/608)
+    (`YuvVideo.Rotation`); then `Mp4Header` reads the `tkhd` matrix's angle as `av_display_rotation_get`, quarter turns
+    only, samples at 90, 180 and 270, `PictureMeter`'s crop and colour bars in the upright frame's coordinates (the
+    owner's choice, decision 2026-10-30-scope-widening.md).
+  - Done when: the native, wasm and page checks pass on the rotated samples byte for byte.
+  - Status: Done (2026-10-31: ShotDetector 3.23.0's `YuvVideo.Rotation` (shotdetector#608, #615); `Mp4Header.Rotation`
+    from the 'tkhd' matrix after the 'mvhd' one as mov.c, the angle as `av_display_rotation_get`, `Mp4Input` taking a
+    quarter turn and refusing any other; three samples, 90, 180 and 270 (FFmpeg's 90, -180, -90), coded turned and
+    letterboxed on four different widths, their rotation and coded size checked with ffprobe; the native check's
+    rotation field, every run, the ranges, threads, resume and the picture (crop `288:176:8:22` and the colour bars in
+    the upright picture) the FFmpeg path's; the page check picks the 90 one on threads and on two workers; the
+    About card says how the video is shown; `FrameTypeCheck` without `-show_frames`, whose display matrix side data
+    ffprobe prints over lines)
