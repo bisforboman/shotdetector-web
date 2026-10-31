@@ -1175,4 +1175,6 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     first, then chapters and shot changes, then the loudness meter, a pull request each).
   - Where: Directory.Packages.props, README "Packages", CLAUDE.md; a sample whose size changes midway
     (`samples/reject/size-change.mp4`), refused by its run in NativeCheck and app-check.mjs.
-  - Status: Done (2026-10-31: STATUS_PLACEHOLDER)
+  - Status: Done (2026-10-31: natively every check agrees on every sample, the CSVs, JSON and HTML unchanged;
+    size-change.mp4 refused by its run, "The frame size changes (320x240 to 352x288): not supported.". Each frame's
+    own colour tags are a gap: ManagedCodecs' frames carry none, backlog "Each frame's own colour tags")
