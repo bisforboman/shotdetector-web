@@ -68,6 +68,10 @@ exactness check speaks for.
     span; (2) a split run's first range telling its shots as it finds them; (3) the threaded runtime started when a
     file is picked or the demo fetched, not at the click; (4) the threaded run's growing renderer, found and fixed or
     reported upstream.
+  - After, measured together in run 41191247215 (`claude/perf-measure-all`, the three fixes merged): (1) the cuts lane
+    17 ms of the page's thread in the split run's last seconds, from 3.7 / 5.2 s; (2) the split control's first shot
+    at 2.4 s, from 216 / 399 s; (3) on threads the threaded bundle's files were in 0.6 s after the file was picked,
+    and the long file's first progress came at 1.5 s, the threaded bundle no longer fetched after the click.
   - Done when: the four are each a pull request with its before and after, the checks as CLAUDE.md's "Before pushing"
     says (the results byte for byte).
   - Not: no change to what is detected or to the downloads; nothing bought with exactness.
