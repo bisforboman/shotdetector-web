@@ -5,7 +5,7 @@ namespace ShotDetectorWeb.Checks;
 /// <summary>
 /// The threads check (README, "Checks"; decision 2026-10-30-threads.md): ManagedCodecs' decoder on
 /// <see cref="Threads"/> threads (<see cref="VideoInput.DecoderThreads"/>, as the page's threaded runtime decodes) must
-/// give every sample's run with every detector (<see cref="Runs.All"/>' last; all of them read the same frames) the
+/// give every sample's run with every detector (<see cref="Runs.Every"/>; all of them read the same frames) the
 /// one-thread run's CSVs, which the main check wrote, byte for byte; so must its ranges scored and merged
 /// (<see cref="VideoInput.ScoreRangeAsync"/>, as RangeCheck), and the run stopped half-way the one-thread run stopped
 /// there (its frames ended early, the decoder's pictures still in flight drained).
@@ -18,7 +18,7 @@ internal static class ThreadsCheck
     public static int Run(IEnumerable<string> samples, string outDir)
     {
         int failures = 0;
-        var (run, options) = Runs.All[^1];
+        var (run, options) = Runs.Every;
         Console.WriteLine();
         Console.WriteLine($"| Sample | {Threads} decoder threads ({run}) | Ranges | Stopped half-way |");
         Console.WriteLine("| --- | --- | --- | --- |");

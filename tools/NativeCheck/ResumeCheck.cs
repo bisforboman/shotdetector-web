@@ -4,7 +4,7 @@ namespace ShotDetectorWeb.Checks;
 
 /// <summary>
 /// The resume check (README, "Checks"; backlog "Resume after Stop, across visits"): for each sample, the adaptive run
-/// (<see cref="Runs.All"/>' first, the page's default) and the run with every detector (its last), each scored as the
+/// (<see cref="Runs.All"/>' first, the page's default) and the run with every detector (<see cref="Runs.Every"/>), each scored as the
 /// page's one-worker run scores (one range from frame 0) and stopped at the first pause past a third of the frames, its
 /// scores carried as bytes (as the page keeps them in IndexedDB), resumed from there (<see cref="VideoInput.Continue"/>,
 /// the earlier ranges given to <see cref="VideoInput.ScoreRangeAsync(IReadOnlyList{RangeScores}, FrameRange, int, Func{int, ValueTask{bool}}, DetectionOptions?, CancellationToken, PictureMeter?)"/>),
@@ -26,7 +26,7 @@ internal static class ResumeCheck
         Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- |");
         foreach (string sample in samples)
         {
-            foreach (var (run, options) in new[] { Runs.All[0], Runs.All[^1] })
+            foreach (var (run, options) in new[] { Runs.All[0], Runs.Every })
             {
                 string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
                 try

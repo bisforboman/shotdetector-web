@@ -85,10 +85,14 @@ enc -filter_complex "$(three 320x240 50 1.5),$weave,setfield=bff" -c:v libx264 -
   -pix_fmt yuv420p "$out/interlaced-bff-320x240-25.mp4"
 enc -filter_complex "$(three 320x240 50 1.5),$weave" -c:v libx264 -x264-params fake-interlaced=1 -pix_fmt yuv420p \
   "$out/interlaced-fake-320x240-25.mp4"
+# And the top-field-first one without its SEI (filter_units drops every SEI NAL unit, the picture timing's among them):
+# the field order and each frame's top_field_first then come from the field order counts, interlaced_frame from the
+# MBAFF coding (decision 2026-10-30-interlaced.md), what yadif's parity and --deinterlace auto go by.
+enc -i "$out/interlaced-tff-320x240-25.mp4" -c copy -bsf:v filter_units=remove_types=6 "$out/interlaced-nosei-320x240-25.mp4"
 # What they must be, from the bitstream (trace_headers: every SPS's frame_mbs_only_flag and mb_adaptive_frame_field_flag,
 # every slice's field_pic_flag: frames, never field pictures) and from FFmpeg (the stream's field order, each frame's
 # interlaced_frame,top_field_first), at 25 fps.
-for f in tff:0:1:0:tt:1,1 bff:0:1:0:bb:1,0 fake:0:0:0:progressive:0,0; do
+for f in tff:0:1:0:tt:1,1 bff:0:1:0:bb:1,0 fake:0:0:0:progressive:0,0 nosei:0:1:0:tt:1,1; do
   IFS=: read -r name mbs mbaff field order flags <<< "$f"
   s="$out/interlaced-$name-320x240-25.mp4"
   trace=$("$ff" -hide_banner -i "$s" -c copy -bsf:v trace_headers -f null - 2>&1)
@@ -97,6 +101,9 @@ for f in tff:0:1:0:tt:1,1 bff:0:1:0:bb:1,0 fake:0:0:0:progressive:0,0; do
   got+="$("$fp" -v error -select_streams v:0 -show_entries stream=field_order,avg_frame_rate -of csv=p=0 "$s") "
   got+=$("$fp" -v error -select_streams v:0 -show_entries frame=interlaced_frame,top_field_first -of csv=p=0 "$s" | cut -d, -f1,2 | sort -u | tr '\n' ' ')
   want="$mbs $mbaff $field $order,25/1 $flags "
+  # The SEI kept or not: one in each picture of libx264's interlaced encodes, none in nosei's.
+  sei=$(grep -c "Supplemental Enhancement Information" <<< "$trace" || true)
+  if [[ $name == nosei ]]; then (( sei == 0 )) || want+="(no SEI, not $sei)"; else (( sei > 0 )) || want+="(SEI, not none)"; fi
   [[ $got == "$want" ]] || { echo "$s: frame_mbs_only, MBAFF, field_pic, rate, field order, frame flags are '$got', not '$want'." >&2; exit 1; }
 done
 

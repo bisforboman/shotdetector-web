@@ -10,7 +10,9 @@ internal static class Runs
 {
     /// <summary>
     /// Each of the five detectors with scenedetect's defaults, the adaptive detector with its window and minimum
-    /// content_val changed (the page's two adaptive settings, issue #50), and all five in one run, every one with stats.
+    /// content_val changed (the page's two adaptive settings, issue #50), and all five in one run, every one with stats;
+    /// then deinterlaced (yadif, the page's Deinterlace option): the default detector with <c>--deinterlace auto</c>
+    /// (an interlaced field order only: the interlaced samples), and all five with <c>on</c> (every sample).
     /// </summary>
     public static readonly (string Name, DetectionOptions Options)[] All =
     [
@@ -25,7 +27,17 @@ internal static class Runs
             Detectors = [new(DetectorKind.Adaptive), new(DetectorKind.Content), new(DetectorKind.Threshold), new(DetectorKind.Histogram), new(DetectorKind.Hash)],
             CollectStats = true,
         }),
+        ("deinterlace-auto", new DetectionOptions { Detector = DetectorKind.Adaptive, Deinterlace = DeinterlaceMode.Auto, CollectStats = true }),
+        ("deinterlace-on", new DetectionOptions
+        {
+            Detectors = [new(DetectorKind.Adaptive), new(DetectorKind.Content), new(DetectorKind.Threshold), new(DetectorKind.Histogram), new(DetectorKind.Hash)],
+            Deinterlace = DeinterlaceMode.On,
+            CollectStats = true,
+        }),
     ];
+
+    /// <summary>The run with every detector, not deinterlaced: the one the range, threads and resume checks split.</summary>
+    public static (string Name, DetectionOptions Options) Every => All.Single(r => r.Name == "all");
 
     /// <summary>The scene list CSV (as scenedetect list-scenes writes it) and the stats CSV (scenedetect -s).</summary>
     public static (string Scenes, string Stats) Csvs(DetectionResult result) =>

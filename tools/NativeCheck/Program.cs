@@ -107,6 +107,8 @@ foreach (string sample in samples)
             problems.Add($"duration {ours.Video.Duration} vs {file.Video.Duration}");
         if ((ours.Video.ProcessedWidth, ours.Video.ProcessedHeight) != (file.Video.ProcessedWidth, file.Video.ProcessedHeight))
             problems.Add("processed size");
+        if ((ours.Video.FieldOrder, ours.Video.Deinterlaced) != (file.Video.FieldOrder, file.Video.Deinterlaced))
+            problems.Add($"field order, deinterlaced {ours.Video.FieldOrder} {ours.Video.Deinterlaced} vs {file.Video.FieldOrder} {file.Video.Deinterlaced}");
         if ((ours.Video.Width, ours.Video.Height, ours.Video.Rotation) != (file.Video.Width, file.Video.Height, file.Video.Rotation))
             problems.Add($"size and rotation {ours.Video.Width}x{ours.Video.Height} {ours.Video.Rotation} vs {file.Video.Width}x{file.Video.Height} {file.Video.Rotation}");
         if (!ours.Cuts.SequenceEqual(file.Cuts))
@@ -134,6 +136,7 @@ foreach (string sample in samples)
 
 failures += PacketCheck.Run(samples, libs, outDir);
 failures += FrameTypeCheck.Run(samples, libs, outDir);
+failures += FieldCheck.Run(samples, libs);
 failures += RangeCheck.Run(samples, outDir);
 failures += ThreadsCheck.Run(samples, outDir);
 failures += ResumeCheck.Run(samples, outDir);
@@ -199,6 +202,7 @@ static YuvVideo Oracle(string path)
         Duration = probe.Duration is { } d
             ? TimeSpan.FromTicks((long)Math.Round(double.Parse((d.Ticks / 10 * (1 / 1_000_000.0)).ToString("F6", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture) * TimeSpan.TicksPerSecond))
             : null,
+        FieldOrder = info.FieldOrder,
         FrameTimestamps = probe.PacketTimestamps is { } pts ? [.. pts.Select(p => p ?? long.MinValue).Order()] : null,
         Codec = info.Codec,
         Container = probe.Container,
@@ -224,6 +228,7 @@ static List<string> Differences(YuvVideo ours, YuvVideo ffmpeg)
     Check("frame count", ours.FrameCount, ffmpeg.FrameCount);
     Check("duration", ours.Duration, ffmpeg.Duration);
     Check("rotation", ours.Rotation, ffmpeg.Rotation);
+    Check("field order", ours.FieldOrder, ffmpeg.FieldOrder);
     // Every frame's pts where the rate varies (the core gives them only then): FFmpeg's packets' pts, sorted; where it
     // gives none, FFmpeg's must be within half a frame of the average rate's grid, ShotDetector's check without them.
     if (ours.FrameTimestamps is { } given)
