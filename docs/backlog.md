@@ -33,26 +33,6 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
-### The page's UI, after the review of 2026-10-30
-
-A review of the page check's screenshots (`out/page/*.png`) on 2026-10-30 found wrong numbers and misleading text, and
-a layout that leaves holes and says too much. The owner's choice the same day: two pull requests, the fixes first, then
-the polish; decision [2026-10-26-new-ui.md](decisions/2026-10-26-new-ui.md)'s layout (B) stays.
-
-- The page's layout and styling
-  - Why: the details grid (auto-fill, 17rem) leaves a card alone on a row with holes beside it; the shots table spreads
-    five columns over the width with small stills, in a 70vh scroll box that clips its last row even with 8 shots; the
-    picture lane's out-of-range ticks paint it red end to end, the playhead's red; every card opens with 3 to 5 lines
-    of how it is checked; the cuts lane doesn't show which shot is playing.
-  - Where: mostly `style.css`, with `panels/cuts.js`, `panels/picture.js`, `panels/run.js` and the cards' notes; the
-    page check's screenshots at 1280 and 390 px, light and dark, of done, kept and resumed.
-  - Done when: no details row with more than about 100 px of empty height under a card; every shot row visible
-    without an inner scrollbar at 15 shots or fewer; no red in a lane but the playhead; the run card's figures above
-    the fold at 1280x800; the owner has seen the screenshots before and after; the CSVs, JSON and HTML byte for byte.
-  - Not: the layout B stays; no new export; no mark loses what it means (CLAUDE.md "Adding to the page").
-  - Depends on: the row above (it edits the same panels).
-  - Status: In progress (2026-10-30)
-
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
