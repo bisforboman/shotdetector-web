@@ -3,7 +3,7 @@
 // shots as JSON and HTML (ShotsJson, ShotsHtml) and the editors' timeline files (TimelineFile) written to the output
 // folder under the names tools/NativeCheck gives its own (tools/check.sh compares the two folders); a run paused, split
 // or resumed gives the whole run's timeline files too. Each
-// file to refuse must be refused when opened. The shots told while a run goes (the 'shot' import, which the worker posts
+// file to refuse must be refused when opened, or by its run. The shots told while a run goes (the 'shot' import, which the worker posts
 // to the page as they come) must be the result's shots, exactly. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
 // through the published blob-read.js (tools/node-host.mjs). Fails if the runs load an assembly of FFmpeg's; says whether one was
 // loaded at all (interpreted: none), the audio pass included.
@@ -245,12 +245,19 @@ for (const file of noAac) {
     console.error(`${basename(file)}: sound not measured: ${audio.notMeasured}`);
 }
 
+// Refused when opened, or, for what only the frames tell (a size that changes midway, shotdetector#625), by the run,
+// the promise rejected with the core's message, which the page shows.
 for (const file of rejects) {
+  let opened = false;
   try {
     Open(fileBlob(file));
-    fail(`${basename(file)}: opened, but it should have been refused.`);
+    opened = true;
+    await Detect(JSON.stringify({}));
+    fail(`${basename(file)}: detected, but it should have been refused.`);
   } catch (e) {
-    console.error(`${basename(file)}: refused: ${e.message}`);
+    console.error(`${basename(file)}: refused ${opened ? 'by its run' : 'when opened'}: ${e.message}`);
+    if (opened && !/not supported/.test(e.message))
+      fail(`${basename(file)}: its run failed, not with the core's refusal: ${e.message}`);
   }
 }
 

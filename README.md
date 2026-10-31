@@ -35,7 +35,11 @@ shotdetector#628); field pictures (PAFF) are refused, having no sample to check 
 in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, a rotation that isn't a
-quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; 4:2:2 waits on ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
+quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; 4:2:2 waits on ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). A frame size that changes midway is refused by
+the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
+refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
+matrix or range that changes midway in band isn't seen: every frame is converted with the first SPS's (backlog,
+"Each frame's own colour tags"). Interlaced (two-field) MJPEG isn't checked: ffmpeg
 can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
@@ -628,7 +632,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) and the editors' timeline files
   (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes, both results given the sample's name) must
   be equal. It also
-  checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
+  checks that `samples/reject/` is refused, each file with its own message (when opened, or by its run: a size that
+  changes midway), and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
@@ -697,7 +702,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   told after the stopped part's the whole run's, and stopped in their second range split, the rest split again from
   the kept bytes' first frame and merged with them, the whole run's too, that kept bytes of other options fail to
   resume with "The stopped run didn't resume: " in front (the page then detects from the start), that `samples/reject/` is refused through
-  `Open`, that `Open`'s `audio` is the track `Audio()` measures (none
+  `Open` (or its `Detect`'s promise rejected with the core's message: a size that changes midway), that `Open`'s `audio` is the track `Audio()` measures (none
 where it says the file has none; for `samples/no-aac/`, the codec in the file's name), that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
   "The file has no audio track." (which the page shows nothing for) for a sample without audio and a reason for each of
@@ -802,8 +807,8 @@ The samples (tools/make-samples.sh) each isolate something the description must 
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
-measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does); nine files
-to refuse (four of them AVIs: 4:2:2 and 4:4:4 JPEG, a dropped frame, H.264); and three whose audio isn't measured.
+measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does); eight files
+to refuse (four of them AVIs: 4:2:2 and 4:4:4 JPEG, a dropped frame, H.264; one MP4 whose size changes midway); and three whose audio isn't measured.
 
 ### Real world
 
@@ -874,8 +879,9 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.23.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
-a rotation, a variable frame rate and deinterlacing there), FrameReader (2.17.1),
+ShotDetector and ShotDetector.FastYuv (3.24.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
+a rotation, a variable frame rate and deinterlacing there, 3.24.0 the first refusing a frame of another size than the
+video's, shotdetector#625), FrameReader (2.18.0),
 ManagedCodecs (0.4.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
@@ -901,12 +907,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.23.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.24.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.23.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.24.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.23.0 -p:FrameReaderVersion=2.17.1
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.24.0 -p:FrameReaderVersion=2.18.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \

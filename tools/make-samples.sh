@@ -236,6 +236,16 @@ fi
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/reject/yuv422p.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p10le "$out/reject/yuv420p10.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.mp4"
+# A size that changes midway (320x240, then 352x288 from frame 25: two streams' Annex B concatenated, the second's SPS
+# in band; no B-frames, so the raw stream's timestamps are plain), which Detect(path) scales to the first size and the
+# frame source refuses (shotdetector#625): Mp4Input opens it, its frames refuse it.
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -bf 0 -pix_fmt yuv420p -f h264 "$out/reject/size-a.h264"
+enc -f lavfi -i mandelbrot=s=352x288:r=25,trim=duration=1 -c:v libx264 -bf 0 -pix_fmt yuv420p -f h264 "$out/reject/size-b.h264"
+cat "$out/reject/size-a.h264" "$out/reject/size-b.h264" > "$out/reject/size.h264"
+enc -r 25 -i "$out/reject/size.h264" -c copy "$out/reject/size-change.mp4"
+rm "$out/reject/size-a.h264" "$out/reject/size-b.h264" "$out/reject/size.h264"
+got=$("$fp" -v error -show_entries frame=width,height -of csv=p=0 "$out/reject/size-change.mp4" | grep -v ',$' | uniq | tr '\n' ' ')
+[[ $got == '320,240 352,288 ' ]] || { echo "size-change.mp4: its frames' sizes are $got" >&2; exit 1; }
 # MJPEG that isn't 4:2:0: 4:4:4 and 4:2:2 (most cameras'), which ShotDetector's frame source doesn't take yet; an AVI
 # with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
 # which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
