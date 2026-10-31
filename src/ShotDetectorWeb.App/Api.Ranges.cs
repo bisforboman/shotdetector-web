@@ -18,6 +18,13 @@ public static partial class Api
 {
     static byte[]? _rangeBytes;
 
+    /// <summary>
+    /// The shots a range from frame 0 told as it scored (<see cref="ScoreRange"/> in the page's own worker, which then
+    /// merges), each as <see cref="ShotFound"/> told it, for <see cref="Merge"/> not to tell them again; null when none
+    /// was scored since the last <see cref="Open"/>, <see cref="Detect"/> or merge.
+    /// </summary>
+    static List<string>? _toldInFirstRange;
+
     /// <summary>What a failed merge's message starts with: the page then detects again with one worker.</summary>
     const string NotMerged = "The ranges didn't merge: ";
 
@@ -39,7 +46,8 @@ public static partial class Api
     /// Scores range <paramref name="index"/> of <see cref="Ranges"/>(<paramref name="count"/>, <paramref name="from"/>) with the page's options, as
     /// <see cref="Detect"/> runs (progress, pauses, <see cref="Stop"/> and <see cref="Cancel"/>): a promise of
     /// <c>{ frames, stopped }</c>, the frames scored from the range's first; its scores' bytes then come from
-    /// <see cref="RangeBytes"/>. A stop ends the range where it got to; one before its first frame leaves it empty.
+    /// <see cref="RangeBytes"/>. A stop ends the range where it got to; one before its first frame leaves it empty. A
+    /// range from frame 0 tells its shots through <see cref="ShotFound"/> as <see cref="Detect"/> does.
     /// </summary>
     [JSExport]
     public static async Task<string> ScoreRange(string optionsJson, int count, int index, int from)
@@ -54,9 +62,13 @@ public static partial class Api
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
-        // No OnShot: the merge tells the shots. Since ShotDetector 3.22.0 a range from frame 0 tells its own too, which
-        // would tell the first range's twice.
-        var options = request.ToOptions(new RangeProgress(range.EndFrame - range.FirstFrame), onShot: null);
+        // A range from frame 0 tells its shots as it finds them, as Detect does (ShotDetector 3.22.0): the page shows a
+        // split run's first shots live. The merge tells the rest (MergedShots); the other ranges tell none, the merge
+        // deciding theirs.
+        if (range.FirstFrame == 0)
+            _toldInFirstRange = [];
+        var options = request.ToOptions(new RangeProgress(range.EndFrame - range.FirstFrame),
+            range.FirstFrame == 0 ? new JsShots(_toldInFirstRange) : null);
         var picture = new PictureMeter(input.Video, range);
         RangeScores? scores = null;
         try
@@ -93,7 +105,8 @@ public static partial class Api
     /// <paramref name="ranges"/>, each <paramref name="lengths"/> long) with the options they were scored with: the ones
     /// that follow each other from the start (<see cref="VideoInput.FromStart"/>), so a stopped run's result is the one
     /// for the frames from the start without a gap. Answers as <see cref="Detect"/> does, <c>stopped</c> when they don't
-    /// reach the video's end, and tells the shots through <see cref="ShotFound"/>. Ranges that don't make up the video's
+    /// reach the video's end, and tells the shots through <see cref="ShotFound"/>, but for those the range from frame 0 told
+    /// already as it scored, in this worker (<see cref="MergedShots"/>). Ranges that don't make up the video's
     /// frames (ShotDetector's <see cref="ShotDetectionException"/>: an overlap frame that differs, damaged bytes; or
     /// damaged picture measures) throw with <see cref="NotMerged"/> in front of the reason. The ranges' picture measures
     /// join from the start the same way (<see cref="PictureMeasures.Join"/>), for the frames the result read. A stopped
@@ -143,7 +156,10 @@ public static partial class Api
             }
 
             merged = VideoInput.FromStart(scores);
-            result = input.Merge(merged, request.ToOptions(new JsProgress(), new JsShots()));
+            // A resumed run's rest has no range from frame 0: the merge tells all of its shots.
+            var told = kept.Length == 0 ? _toldInFirstRange ?? [] : [];
+            _toldInFirstRange = null;
+            result = input.Merge(merged, request.ToOptions(new JsProgress(), new MergedShots(told)));
         }
         catch (Exception e) when (e is ShotDetectionException or InvalidDataException)
         {
@@ -151,6 +167,31 @@ public static partial class Api
         }
 
         return Answered(input, result, merged, PictureMeasures.Join(pictures));
+    }
+
+    /// <summary>
+    /// The merge's shots, told as <see cref="JsShots"/> tells them, but for those the first range told already
+    /// (<paramref name="told"/>, in order from the first): the result's shots from the first that isn't one of them, so
+    /// the page has every shot once, and again from its number on the one the first range told when its frames ended
+    /// (cut short there, as a resumed run's last), as <see cref="Resume"/> tells a stopped run's.
+    /// </summary>
+    sealed class MergedShots(IReadOnlyList<string> told) : IProgress<Shot>
+    {
+        int _same;
+        bool _differed;
+
+        public void Report(Shot value)
+        {
+            string shot = ShotJson(value);
+            if (!_differed && _same < told.Count && told[_same] == shot)
+            {
+                _same++;
+                return;
+            }
+
+            _differed = true;
+            Host.Post(() => ShotFound(shot));
+        }
     }
 
     /// <summary>A range's progress: its frames scored and its own frame count (ScoreRange's expected count is 0).</summary>

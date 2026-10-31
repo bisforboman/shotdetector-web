@@ -79,6 +79,9 @@ for (const arg of rest) {
 const { samples, '--reject': rejects, '--no-aac': noAac, '--native': [nativeDir] } = lists;
 
 let progress = [], told = [], toldAt = [];
+// The shots the range from frame 0 told as it scored (scoreRanges): the page shows them while the run goes; the other
+// ranges tell none.
+let rangeTold = [];
 let wholePicture = null; // the sample's first run's Picture(), which every other whole run's must be
 let wholeTypes = null;   // and its FrameTypes()
 // Detect's pauses (the 'pause' import, pause.js as in the worker): how many, and how long they took in all, and the
@@ -533,14 +536,18 @@ function checkPackets(sample) {
 // stopped at half its frames from range `stopFrom` on (as the page stops every worker at once): each one's bytes.
 async function scoreRanges(options, plan, stopFrom = plan.ranges.length, from = 0) {
   const bytes = [];
+  rangeTold = [];
   for (const [i, { firstFrame, endFrame }] of plan.ranges.entries()) {
     stopAt = i >= stopFrom ? Math.floor((endFrame - firstFrame) / 2) : null;
+    told = [];
     try {
       const scored = JSON.parse(await ScoreRange(JSON.stringify(options), RANGES, i, from));
       if (scored.stopped !== (stopAt !== null)) fail(`range ${i}: stopped ${scored.stopped}`);
     } finally {
       stopAt = null;
     }
+    if (firstFrame === 0) rangeTold = told;
+    else if (told.length > 0) fail(`range ${i} (from frame ${firstFrame}): told ${told.length} shots, not none`);
     bytes.push(RangeBytes());
   }
   return bytes;
@@ -576,7 +583,14 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
     result.stopped !== false || JSON.stringify(result.warnings) !== JSON.stringify(whole.warnings))
     fail(`${name}: ${same ? 'the same CSVs, JSON and HTML' : 'other CSVs, JSON or HTML'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
       `(stopped ${result.stopped}), the whole run's ${whole.shots.length} of ${whole.frameCount}`);
-  if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots the merge told aren't its result's`);
+  // The first range's shots told as it scored, then the merge's, each replacing those from its number on, as the page
+  // shows them: the result's; and the merge doesn't tell again what the first range told and the result has.
+  const page = shown(rangeTold, told);
+  const again = told.length > 0 && JSON.stringify(rangeTold[told[0].shot - 1]) === JSON.stringify(told[0]);
+  if (JSON.stringify(page) !== JSON.stringify(result.shots) || again)
+    fail(`${name}: the shots told (${rangeTold.length} by the first range, ${told.length} by the merge) aren't its result's`);
+  const live = told.length > 0 ? told[0].shot - 1 : rangeTold.length;
+  console.error(`${name}: ${rangeTold.length} shots told by the first range as it scored, the merge's from shot ${live + 1}`);
   if (Picture() !== wholePicture) fail(`${name}: the merged picture measures aren't the whole run's`);
   if (FrameTypes() !== wholeTypes) fail(`${name}: the merged frame types aren't the whole run's`);
   console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
