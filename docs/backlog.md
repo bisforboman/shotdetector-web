@@ -90,21 +90,35 @@ below is left.
   - Not: no yadif or slice-header parsing here (CLAUDE.md: report it there, don't work around it).
   - Status: Waiting on upstream (shotdetector#614 and ManagedCodecs#225, filed 2026-10-30)
 
-## Maybe
-
-Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`, 3.14.0) takes 8-bit 4:2:0 of an even
-height at a constant frame rate, upright, and refuses `Deinterlace` and `Yadif`: most rows below need a change there
-first, named in each. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
-file out of `samples/reject/`, and passes the native check.
-
-
 - 10-bit 4:2:0 and 8-bit 4:2:2
   - Why: ManagedCodecs decodes both; FastYuv converts both (`SwscaleYuv420P10`, its 4:2:2 path) with x86's results.
   - Where: first upstream: `YuvFrame` for 16-bit planes and 4:2:2 chroma, and `YuvVideo.PixelFormat` accepting
     yuv420p10le / yuv422p (and yuvj422p: 4:2:2 MJPEG, most cameras', decision `2026-10-30-mjpeg-avi.md`); then here,
     the chroma and bit-depth check in `Mp4Input` and `AviInput`, three samples (already in `samples/reject/`:
     `yuv422p.mp4`, `yuv420p10.mp4`, `mjpeg-422.avi`).
-  - Status: Maybe (needs ShotDetector)
+  - Status: Waiting on upstream ([shotdetector#627](https://github.com/bisforboman/shotdetector/issues/627), from
+    the frame-source parity audit, 2026-10-31; the shotdetector coordinator is working it)
+
+- YouTube chapters: the download, and the chapters' titles edited on the page
+  - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
+    shots-to-chapters rule (first at 0:00, at least three, each long enough) and placeholder titles live on ShotDetector's
+    `Timeline`, and the page owns only the UI around it. The standing rule: a file format built from a cut list lives on
+    `Timeline`.
+  - Where: after the ShotDetector release with #648 and its package bump: `TimelineFiles` gains the chapters format
+    (one more download in run.js's "For editors" row, checked byte for byte as the others), then a title per chapter
+    edited on the page (with the shots table, kept with the kept run), the download written from the edited titles.
+  - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
+    on the page the download carries them (page check).
+  - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647).
+  - Status: Waiting on upstream ([shotdetector#648](https://github.com/bisforboman/shotdetector/issues/648))
+
+## Maybe
+
+Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
+since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlaced (`Yadif`), not yet in ranges
+(shotdetector#628). What it still lacks is in its `docs/frame-source-parity.md` (issues #625 to #630): a row that needs
+a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
+file out of `samples/reject/`, and passes the native check.
 
 - An AVI's JPEGs without Huffman tables
   - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
@@ -120,7 +134,8 @@ file out of `samples/reject/`, and passes the native check.
 - WebCodecs as a decoder
   - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
     identical results are the point. Decision "Not doing".
-  - Status: Maybe. Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
+  - Status: Maybe (issue #89 asks it again for the files the page refuses, marked not exact; #15, speed, closed into
+    it). Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
     decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
     reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
     question to open
