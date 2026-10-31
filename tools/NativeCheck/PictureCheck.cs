@@ -69,6 +69,24 @@ static class PictureCheck
             problems.Add($"{ours.Count} frames measured, the run read {result.FrameCount}");
         cells.Add($"{ours.Count}");
 
+        // A 10-bit video's frames keep their types only (PictureMeter; backlog "Picture measures at 10 bits"): said so,
+        // and nothing for any other.
+        bool tenBit = input.Video.PixelFormat == "yuv420p10le";
+        if (tenBit != (ours.NotMeasured is not null))
+            problems.Add(ours.NotMeasured is null ? "a 10-bit video measured" : $"not measured: {ours.NotMeasured}");
+        if (ours.NotMeasured is not null)
+        {
+            cells.Add("not measured (10-bit)");
+            cells.Add("");
+            cells.Add("");
+            cells.Add("");
+            cells.Add(Ranges(input, ours, problems));
+            cells.Add($"{time.TotalSeconds:F2} s");
+            File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".picture.json"),
+                JsonSerializer.Serialize(PictureSummary.Of(ours), PictureJson.Default.PictureSummary));
+            return;
+        }
+
         var theirs = Ffmpeg(libs, sample);
         if (theirs.Frames.Count != ours.Count)
             problems.Add($"FFmpeg's filters saw {theirs.Frames.Count} frames");
@@ -142,7 +160,8 @@ static class PictureCheck
             name.StartsWith("full-range-", StringComparison.Ordinal) || name.StartsWith("start-offset-", StringComparison.Ordinal) ||
             name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
             name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal) ||
-            name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal);
+            name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal) ||
+            name.StartsWith("yuv422p-", StringComparison.Ordinal) || name.StartsWith("yuvj422p-", StringComparison.Ordinal);
         if (three)
         {
             // The variable-rate samples' last shot is decoded frame 100 on (two shots of 50 before it): the cut's FrameNum
