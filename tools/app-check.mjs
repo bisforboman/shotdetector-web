@@ -1,8 +1,8 @@
 // The App's exports under Node, as the page's worker calls them (src/ShotDetectorWeb.App/wwwroot/worker.js): each
 // sample opened, then every run of tools/Shared/Runs.cs (RUNS below) detected on it, the scene and stats CSVs and the
-// shots as JSON and HTML (ShotsJson, ShotsHtml) and the editors' timeline files (TimelineFile) written to the output
-// folder under the names tools/NativeCheck gives its own (tools/check.sh compares the two folders); a run paused, split
-// or resumed gives the whole run's timeline files too. Each
+// shots as JSON and HTML (ShotsJson, ShotsHtml), the editors' timeline files (TimelineFile) and the YouTube chapters
+// (YouTubeChapters) written to the output folder under the names tools/NativeCheck gives its own (tools/check.sh compares
+// the two folders); a run paused, split or resumed gives the whole run's timeline files and chapters too. Each
 // file to refuse must be refused when opened, or by its run. The shots told while a run goes (the 'shot' import, which the worker posts
 // to the page as they come) must be the result's shots, exactly. Files go in as the page's do, a Blob read in slices by .NET's BlobStream
 // through the published blob-read.js (tools/node-host.mjs). Fails if the runs load an assembly of FFmpeg's; says whether one was
@@ -123,7 +123,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, TimelineFile, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, TimelineFile, YouTubeChapters, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -142,13 +142,19 @@ const statsText = () => {
 };
 // The editors' timeline files (Api's TimelineFile, the run card's downloads for editors; the core's TimelineFiles): each
 // format and the extension NativeCheck writes it with, the sample's file name given as the page gives the picked file's.
-const TIMELINES = [['edl', 'edl'], ['fcpx', 'fcpxml'], ['fcp7', 'fcp7.xml'], ['otio', 'otio'], ['qp', 'qp'], ['keyframes', 'keyframes.txt']];
+const TIMELINES = [['edl', 'edl'], ['fcpx', 'fcpxml'], ['fcp7', 'fcp7.xml'], ['otio', 'otio'], ['qp', 'qp'], ['keyframes', 'keyframes.txt'],
+  ['shotchanges', 'shotchanges']];
 let fileName = ''; // the opened sample's
 const timelines = () => TIMELINES.map(([format]) => TimelineFile(format, fileName));
+// The YouTube chapters (Api's YouTubeChapters, ShotDetector's Timeline's) at YouTube's minimum and the page's default, as
+// NativeCheck writes them: <run>.chapters-<minimum>.json.
+const CHAPTERS = [10, 30];
+const chapters = () => CHAPTERS.map(minimum => YouTubeChapters(minimum));
 // The last run's shots as JSON and HTML (Api's ShotsJson and ShotsHtml, the page's downloads beside the CSVs) and its
 // timeline files are a whole run's, byte for byte.
-const sameShotFiles = ({ json, html, timelines: whole }) => ShotsJson() === json && ShotsHtml() === html &&
-  timelines().every((text, i) => text === whole[i]);
+const sameShotFiles = ({ json, html, timelines: whole, chapters: wholeChapters }) => ShotsJson() === json &&
+  ShotsHtml() === html && timelines().every((text, i) => text === whole[i]) &&
+  chapters().every((text, i) => text === wholeChapters[i]);
 let runSeconds = 0, pauseSeconds = 0;
 
 mkdirSync(outDir, { recursive: true });
@@ -187,10 +193,11 @@ for (const [i, sample] of samples.entries()) {
     const scenesCsv = ScenesCsv(), statsCsv = await statsText();
     writeFileSync(`${name}.scenes.csv`, scenesCsv);
     writeFileSync(`${name}.stats.csv`, statsCsv);
-    const shotFiles = { json: ShotsJson(), html: ShotsHtml(), timelines: timelines() };
+    const shotFiles = { json: ShotsJson(), html: ShotsHtml(), timelines: timelines(), chapters: chapters() };
     writeFileSync(`${name}.shots.json`, shotFiles.json);
     writeFileSync(`${name}.shots.html`, shotFiles.html);
     TIMELINES.forEach(([, extension], t) => writeFileSync(`${name}.${extension}`, shotFiles.timelines[t]));
+    CHAPTERS.forEach((minimum, c) => writeFileSync(`${name}.chapters-${minimum}.json`, shotFiles.chapters[c]));
     // The JSON download is the shots Detect's JSON gives (each one of Shots.Json's array), only indented.
     if (JSON.stringify(JSON.parse(shotFiles.json)) !== JSON.stringify(result.shots))
       fail(`${basename(sample)} ${run}: ShotsJson's shots aren't the result's`);

@@ -1182,6 +1182,25 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     size-change.mp4 refused by its run, "The frame size changes (320x240 to 352x288): not supported.". Each frame's
     own colour tags are a gap: ManagedCodecs' frames carry none, backlog "Each frame's own colour tags")
 
+- YouTube chapters: the download, and the chapters' titles edited on the page; Subtitle Edit's shot changes
+  - Why: issue #84's chapters. The owner decided on 2026-10-31 (shotdetector#648) that the chapter list, the
+    shots-to-chapters rule (first at 0:00, at least three, each long enough) and placeholder titles live on ShotDetector's
+    `Timeline`, and the page owns only the UI around it. The standing rule: a file format built from a cut list lives on
+    `Timeline`. Subtitle Edit's shot changes (shotdetector#633) are one more such format.
+  - Where: the run card's chapters row and its checks from the held branch `claude/youtube-chapters` (the minimum's
+    field, NativeCheck's `ChaptersCheck.cs`, app-check.mjs, the page check), the page's own rule
+    (`YouTubeChapters.cs`) deleted for `TimelineFiles.Chapters` (`Timeline.YouTubeChapters` and `ChapterStarts`); a
+    title per chapter typed under Titles, the download written with them; `shotchanges` in `TimelineFiles` and the
+    "For editors" row.
+  - Done when: the chapters download equals NativeCheck's `Detect(path)` file for every sample, and with titles typed
+    on the page the download carries them (page check).
+  - Not: the chapter rule on the page; correcting the cuts themselves (#90, which needs shotdetector#647); the titles
+    kept with a kept run (backlog, "Chapter titles kept with the kept run").
+  - Status: Done (2026-10-31: natively every sample's chapters at 10 and 30 s and shot changes the FFmpeg path's, within
+    YouTube's rules; AOT under Node 2925 of 2925 files identical; the page check's downloads the native run's, the demo's
+    chapters at 10 s carrying a title typed. Chromium drops a click now and then when downloads follow each other within
+    milliseconds: the page check clicks a second time)
+
 - FrameReader's `LoudnessMeter` in place of the page's own meter
   - Why: FrameReader 2.18.0's `LoudnessMeter` (shotdetector#646) measures EBU R128 loudness of samples decoded by the
     caller with ebur128's own arithmetic and nothing of FFmpeg, so it runs in the browser; the page's `Loudness.cs` was
