@@ -274,7 +274,8 @@ process.exit(failed ? 1 : 0);
 // decided only on frames past the stop is the one difference allowed: a few frames before it, within the adaptive window
 // and the minimum shot length (FlashFilter's merge decides a cut that late). (The threshold detector would also end a
 // fade-out the stop falls in with a cut, as at a file's end: no sample stops in one.) A deinterlaced run's last row may
-// differ too: yadif deinterlaces the last frame read with itself as the next, as a file's last.
+// differ too: yadif deinterlaces the last frame read with itself as the next, as a file's last; and so the adaptive
+// ratio of the row before the None ones, whose window reaches that frame.
 async function checkStop(sample, video, run, options, whole, wholeStats) {
   const name = `${basename(sample)} ${run} stopped`;
   const half = Math.floor(video.frames / 2);
@@ -349,9 +350,13 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterl
   for (let i = 0; i < Math.max(ours.length, rows); i++) {
     if (ours[i] === theirs[i]) continue;
     const a = ours[i]?.split(','), b = theirs[i]?.split(',');
+    // Deinterlaced: the last frame's row as a file's last, and the adaptive ratio of the row whose window reaches it.
     if (deinterlaced && i === rows - 1 && a && b && a[0] === b[0]) continue;
     const late = a && b && i < rows && i + skipped > n - window && a.length === b.length &&
       a.every((cell, c) => cell === b[c] || (ratios.includes(c) && cell === 'None'));
+    const reaching = deinterlaced && a && b && i < rows && i + skipped > n - window - 1 && a.length === b.length &&
+      a.every((cell, c) => cell === b[c] || ratios.includes(c));
+    if (reaching) continue;
     if (!late) wrong.push(i);
   }
   if (ours.length !== rows || wrong.length > 0)
