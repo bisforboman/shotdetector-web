@@ -53,7 +53,7 @@ stay the only output the exactness check speaks for.
     nothing detected or downloaded changing.
   - Not: no change to the threaded bundle's loading (started when a file is picked, `threads.js` `warm()`), to the
     service worker's caching, or to what a visit without a service worker does.
-  - Status: Open
+  - Status: In progress (2026-10-31)
 
 ## Waiting
 
