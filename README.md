@@ -281,6 +281,14 @@ returns, which V8 frees late while .NET holds the thread). Before the duration p
 the same file took 43 s and peaked the renderer at 1.7 GB. The estimate before the big file's run said 35 min (the
 reference rate scaled by picture size); the next run in the same browser uses its own measured rate.
 
+Measured again on 2026-10-31 on GitHub's 4-core runner (backlog-done "Performance pass on the page"), the control
+made again: a run on one worker grows the renderer steadily, its largest process from 425 to 715 MB on the page's
+worker and from 683 to 869 MB on 4 threads, while a split run stays at about 600 MB after opening. With a full garbage
+collection every 10 s the same runs grew 412 to 472 MB and 662 to 761 MB: nothing leaks. What stays is the run's own
+results in the .NET heap, which grow with the frame count (the threaded runtime's memory 166 to 239 MB over the run;
+below, "What the heap holds"); the rest is garbage, mostly the slices the file is read in, that the browser collects
+late and frees under pressure.
+
 The reference rate (`REFERENCE_FPS`, a first visit's estimate) was measured again on 2026-10-30, after ShotDetector
 3.20.0, ManagedCodecs 0.1.0, FrameReader 2.15.0, pause and resume and the stills per shot: the AOT bundle in headless
 Chromium on the 4-core cloud VM, each run a first visit (a fresh context), the trailer and the two-hour control above
