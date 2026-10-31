@@ -952,3 +952,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     only, `Mp4Audio`'s of the audio only, its `AudioDataStream` gone; the checks unchanged, native, wasm and AOT. On the
     two-hour control natively opening allocates 49.6 MB instead of 404 and a run reads 229.9 MB instead of 345.7; the
     wasm heap's peak and the bytes read from the `Blob` as before: README "What the heap holds")
+
+- Rotation
+  - Why: phones record rotated; the FFmpeg path turns frames upright.
+  - Where: first upstream, [shotdetector#608](https://github.com/bisforboman/shotdetector/issues/608)
+    (`YuvVideo.Rotation`); then `Mp4Header` reads the `tkhd` matrix's angle as `av_display_rotation_get`, quarter turns
+    only, samples at 90, 180 and 270, `PictureMeter`'s crop and colour bars in the upright frame's coordinates (the
+    owner's choice, decision 2026-10-30-scope-widening.md).
+  - Done when: the native, wasm and page checks pass on the rotated samples byte for byte.
+  - Status: Done (2026-10-31: ShotDetector 3.23.0's `YuvVideo.Rotation` (shotdetector#608, #615); `Mp4Header.Rotation`
+    from the 'tkhd' matrix after the 'mvhd' one as mov.c, the angle as `av_display_rotation_get`, `Mp4Input` taking a
+    quarter turn and refusing any other; three samples, 90, 180 and 270 (FFmpeg's 90, -180, -90), coded turned and
+    letterboxed on four different widths, their rotation and coded size checked with ffprobe; the native check's
+    rotation field, every run, the ranges, threads, resume and the picture (crop `288:176:8:22` and the colour bars in
+    the upright picture) the FFmpeg path's; the page check picks the 90 one on threads and on two workers; the
+    About card says how the video is shown; `FrameTypeCheck` without `-show_frames`, whose display matrix side data
+    ffprobe prints over lines)

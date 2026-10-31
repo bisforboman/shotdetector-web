@@ -50,15 +50,6 @@ are in Next again. [#608](https://github.com/bisforboman/shotdetector/issues/608
 ManagedCodecs#225 in 0.4.0 (#231, each frame's interlacing): the three rows below, worked by one session one after
 another, a pull request each (the owner's choice, 2026-10-31).
 
-- Rotation
-  - Why: phones record rotated; the FFmpeg path turns frames upright.
-  - Where: first upstream, [shotdetector#608](https://github.com/bisforboman/shotdetector/issues/608)
-    (`YuvVideo.Rotation`); then `Mp4Header` reads the `tkhd` matrix's angle as `av_display_rotation_get`, quarter turns
-    only, samples at 90, 180 and 270, `PictureMeter`'s crop and colour bars in the upright frame's coordinates (the
-    owner's choice, decision 2026-10-30-scope-widening.md).
-  - Done when: the native, wasm and page checks pass on the rotated samples byte for byte.
-  - Status: Waiting on upstream (shotdetector#608, filed 2026-10-30)
-
 - Variable frame rate
   - Why: screen recordings and phones; the FFmpeg path takes it at the frames' own timestamps.
   - Where: first upstream, [shotdetector#609](https://github.com/bisforboman/shotdetector/issues/609) (no grid check,
