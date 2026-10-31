@@ -33,8 +33,13 @@ internal sealed class Mp4Header
     /// <summary>The 'colr' nclx box's full range flag; null without one (nclc has none).</summary>
     public bool? ColrFullRange { get; private init; }
 
-    /// <summary>Whether the track header's matrix rotates or flips the picture.</summary>
-    public bool Transformed { get; private init; }
+    /// <summary>
+    /// The display matrix's rotation in degrees, counterclockwise, as FFmpeg's <c>av_display_rotation_get</c> computes it
+    /// (ffprobe's rotation before it truncates): from the track header's matrix after the movie header's (mov.c's
+    /// mov_read_tkhd), so flips go with the angle as FFmpeg reads them; null when the matrix is the identity (FFmpeg
+    /// keeps none), NaN when it has no rotation (a zero scale).
+    /// </summary>
+    public double? Rotation { get; private init; }
 
     /// <summary>Whether the file is fragmented ('mvex' in 'moov'): its samples, or some of them, are in 'moof' boxes.</summary>
     public bool Fragmented { get; private init; }
@@ -52,10 +57,14 @@ internal sealed class Mp4Header
         var moov = FindMoov(stream) ?? throw new UnsupportedVideoException("This isn't an MP4 file (no 'moov' box found).");
         bool fragmented = false;
         ReadOnlyMemory<byte>? video = null, audio = null;
+        long[,]? movieMatrix = null;
         foreach (var (type, payload) in Boxes(moov))
         {
             switch (type)
             {
+                case "mvhd" when movieMatrix is null:
+                    movieMatrix = Matrix(payload.Span, payload.Span.Length > 0 && payload.Span[0] == 1 ? 48 : 36);
+                    break;
                 case "mvex":
                     fragmented = true;
                     break;
@@ -138,7 +147,7 @@ internal sealed class Mp4Header
             AvcConfig = avcC,
             ColrMatrix = colrMatrix,
             ColrFullRange = colrFull,
-            Transformed = Child(trak, "tkhd") is { } tkhd && IsTransformed(tkhd.Span),
+            Rotation = Child(trak, "tkhd") is { } tkhd ? DisplayRotation(tkhd.Span, movieMatrix) : null,
             Fragmented = fragmented,
             AudioCodec = audio is { } a ? AudioCodecName(a) : null,
         };
@@ -236,17 +245,57 @@ internal sealed class Mp4Header
     internal static long Rescale(long a, long b, long c) =>
         a >= 0 ? (long)(((Int128)a * b + (c / 2)) / c) : -(long)(((Int128)(-a) * b + (c / 2)) / c);
 
-    /// <summary>Whether a 'tkhd' matrix's a, b, c, d (16.16) differ from the identity: a rotation or flip FFmpeg would apply.</summary>
-    static bool IsTransformed(ReadOnlySpan<byte> tkhd)
+    /// <summary>
+    /// A 'tkhd' or 'mvhd' matrix at <paramref name="at"/>: three rows of a, b, u (16.16, 16.16, 2.30); null when the box
+    /// is too short for one.
+    /// </summary>
+    static long[,]? Matrix(ReadOnlySpan<byte> box, int at)
     {
-        int matrix = tkhd[0] == 1 ? 52 : 40;
-        if (tkhd.Length < matrix + 36)
-            return false;
-        int a = BinaryPrimitives.ReadInt32BigEndian(tkhd[matrix..]);
-        int b = BinaryPrimitives.ReadInt32BigEndian(tkhd[(matrix + 4)..]);
-        int c = BinaryPrimitives.ReadInt32BigEndian(tkhd[(matrix + 12)..]);
-        int d = BinaryPrimitives.ReadInt32BigEndian(tkhd[(matrix + 16)..]);
-        return (a, b, c, d) != (0x10000, 0, 0, 0x10000);
+        if (box.Length < at + 36)
+            return null;
+        var m = new long[3, 3];
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+                m[i, j] = BinaryPrimitives.ReadInt32BigEndian(box[(at + (12 * i) + (4 * j))..]);
+        }
+
+        return m;
+    }
+
+    /// <summary>
+    /// FFmpeg's display rotation of a video track (mov.c's mov_read_tkhd, then libavutil's av_display_rotation_get): the
+    /// track header's matrix times the movie header's, each product shifted by its row's fixed point (16, 16, 30) and
+    /// summed into an int; none when that is the identity; else the angle of its first column against its second.
+    /// </summary>
+    static double? DisplayRotation(ReadOnlySpan<byte> tkhd, long[,]? movie)
+    {
+        if (tkhd.Length == 0 || Matrix(tkhd, tkhd[0] == 1 ? 52 : 40) is not { } track)
+            return null;
+        movie ??= new long[,] { { 1 << 16, 0, 0 }, { 0, 1 << 16, 0 }, { 0, 0, 1 << 30 } };
+        int[] shift = [16, 16, 30];
+        var m = new int[3, 3];
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                int sum = 0;
+                for (int e = 0; e < 3; e++)
+                    sum = unchecked(sum + (int)((track[i, e] * movie[e, j]) >> shift[e]));
+                m[i, j] = sum;
+            }
+        }
+
+        if (m[0, 0] == 1 << 16 && m[0, 1] == 0 && m[0, 2] == 0 && m[1, 0] == 0 && m[1, 1] == 1 << 16 && m[1, 2] == 0 &&
+            m[2, 0] == 0 && m[2, 1] == 0 && m[2, 2] == 1 << 30)
+            return null;
+
+        // av_display_rotation_get on the matrix as FFmpeg stores it, row by row: [0] a, [1] b, [3] c, [4] d.
+        double a = m[0, 0] / 65536.0, b = m[0, 1] / 65536.0, c = m[1, 0] / 65536.0, d = m[1, 1] / 65536.0;
+        double scale0 = double.Hypot(a, c), scale1 = double.Hypot(b, d);
+        if (scale0 == 0 || scale1 == 0)
+            return double.NaN;
+        return -(Math.Atan2(b / scale1, a / scale0) * 180 / Math.PI);
     }
 
     static string HandlerType(ReadOnlyMemory<byte> trak)

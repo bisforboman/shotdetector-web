@@ -23,6 +23,10 @@ public sealed class PictureMeter
 
     readonly int _width, _height, _black;
     readonly bool _fullRange;
+
+    // The clockwise quarter turn that makes the decoded frame upright (ShotDetector's VideoReader.Turn: 0, 90, 180, 270)
+    // and the upright size.
+    readonly int _turn, _uprightWidth, _uprightHeight;
     readonly int _from, _first, _end;
     readonly BarColours _bars;
     int _index;
@@ -48,13 +52,15 @@ public sealed class PictureMeter
         _width = video.Width;
         _height = video.Height;
         _fullRange = video.FullRange;
+        _turn = ((-video.Rotation % 360) + 360) % 360;
+        (_uprightWidth, _uprightHeight) = _turn % 180 == 90 ? (_height, _width) : (_width, _height);
         // blackdetect's pixel_black_th_i, an unsigned int: 16 + 0.1 * 219 = 37.9 is 37, 0.1 * 255 = 25.5 is 25.
         _black = (int)(_fullRange ? PixelBlack * 255 : 16 + PixelBlack * (235 - 16));
         _bars = BarColours.For(_fullRange);
         _from = from;
         _first = first;
         _end = end;
-        Measures = new PictureMeasures(_width, _height, _fullRange,
+        Measures = new PictureMeasures(_uprightWidth, _uprightHeight, _fullRange,
             video.TimeBase ?? throw new ArgumentException("The video has no time base.", nameof(video)), first);
     }
 
@@ -72,7 +78,7 @@ public sealed class PictureMeter
             return;
         var luma = Luma(frame.Y.Span, frame.YStride);
         int brng = luma.OutOfRange + ChromaOutOfRange(frame);
-        var (top, bottom, left, right) = ContentLines(frame.Y.Span, frame.YStride);
+        var (top, bottom, left, right) = _turn == 0 ? ContentLines(frame.Y.Span, frame.YStride) : TurnedContentLines(frame.Y.Span, frame.YStride);
         bool bars = IsBars(frame);
         Measures.Add(frame.Pts, luma.Min, luma.Max, luma.Sum, luma.Black, brng, top, bottom, left, right, bars, type);
     }
@@ -261,6 +267,65 @@ public sealed class PictureMeter
         return ((short)top, (short)bottom, (short)left, (short)right);
     }
 
+    /// <summary>
+    /// <see cref="ContentLines"/> of the upright picture, for a rotated video: whether each decoded row and column has
+    /// content (a line's mean is the same whichever way it is read), then cropdetect's first and last lines in the
+    /// upright picture's order.
+    /// </summary>
+    (short Top, short Bottom, short Left, short Right) TurnedContentLines(ReadOnlySpan<byte> y, int stride)
+    {
+        var rows = new bool[_height];
+        for (int r = 0; r < _height; r++)
+            rows[r] = RowSum(y.Slice(r * stride, _width)) / _width > CropLimit;
+        var columns = new bool[_width];
+        Span<uint> sums = stackalloc uint[16];
+        for (int c0 = 0; c0 < _width; c0 += 16)
+        {
+            int n = ColumnSums(y, stride, c0, sums);
+            for (int j = 0; j < n; j++)
+                columns[c0 + j] = sums[j] / (uint)_height > CropLimit;
+        }
+
+        // The upright picture's lines (cv::rotate's): turned clockwise by 90, its row r is decoded column r and its column
+        // c decoded row H-1-c; by 180, row H-1-r and column W-1-c; by 270, column W-1-r and row c.
+        var (W, H) = (_width, _height);
+        Func<int, bool> uprightRow = _turn switch
+        {
+            90 => r => columns[r],
+            180 => r => rows[H - 1 - r],
+            _ => r => columns[W - 1 - r],
+        };
+        Func<int, bool> uprightColumn = _turn switch
+        {
+            90 => c => rows[H - 1 - c],
+            180 => c => columns[W - 1 - c],
+            _ => c => rows[c],
+        };
+        var (top, bottom) = FirstAndLast(uprightRow, _uprightHeight);
+        var (left, right) = FirstAndLast(uprightColumn, _uprightWidth);
+        return ((short)top, (short)bottom, (short)left, (short)right);
+
+        // As ContentLines: the first line with content short of the last, then the last at or after it (only the last
+        // line when none was).
+        static (int First, int Last) FirstAndLast(Func<int, bool> content, int count)
+        {
+            int first = -1, last = -1;
+            for (int i = 0; i < count - 1 && first < 0; i++)
+            {
+                if (content(i))
+                    first = i;
+            }
+
+            for (int i = count - 1; i >= (first < 0 ? count - 1 : first) && last < 0; i--)
+            {
+                if (content(i))
+                    last = i;
+            }
+
+            return (first, last);
+        }
+    }
+
     static long RowSum(ReadOnlySpan<byte> row)
     {
         var sum = Vector128<uint>.Zero;
@@ -313,9 +378,53 @@ public sealed class PictureMeter
         return n;
     }
 
-    /// <summary>Colour bars, by their definition (<see cref="BarColours"/>): in the rows a quarter and half way down.</summary>
-    bool IsBars(YuvFrame frame) =>
-        _bars.InRow(frame, _width, _height / 4) && _bars.InRow(frame, _width, _height / 2);
+    /// <summary>
+    /// Colour bars, by their definition (<see cref="BarColours"/>): in the upright picture's rows a quarter and half way
+    /// down.
+    /// </summary>
+    bool IsBars(YuvFrame frame) => InRow(frame, _uprightHeight / 4) && InRow(frame, _uprightHeight / 2);
+
+    /// <summary>Whether the upright picture's row <paramref name="row"/> is colour bars: a decoded row, or a rotated video's row read out of the frame.</summary>
+    bool InRow(YuvFrame frame, int row)
+    {
+        int columns = (_uprightWidth + 1) / 2;
+        if (_turn == 0)
+        {
+            return _bars.InRow(frame.Y.Span.Slice(row * frame.YStride), frame.U.Span.Slice((row >> 1) * frame.UStride, columns),
+                frame.V.Span.Slice((row >> 1) * frame.VStride, columns), _width);
+        }
+
+        // The upright row's luma and the chroma row under it, read from the decoded planes as cv::rotate turns them
+        // (TurnedContentLines); a chroma plane is half the size each way, rounded up.
+        ReadOnlySpan<byte> y = frame.Y.Span, u = frame.U.Span, v = frame.V.Span;
+        var (W, H, cw, ch, half) = (_width, _height, (_width + 1) / 2, (_height + 1) / 2, row >> 1);
+        var luma = new byte[_uprightWidth];
+        var blue = new byte[columns];
+        var red = new byte[columns];
+        for (int x = 0; x < _uprightWidth; x++)
+        {
+            luma[x] = _turn switch
+            {
+                90 => y[((H - 1 - x) * frame.YStride) + row],
+                180 => y[((H - 1 - row) * frame.YStride) + (W - 1 - x)],
+                _ => y[(x * frame.YStride) + (W - 1 - row)],
+            };
+        }
+
+        for (int c = 0; c < columns; c++)
+        {
+            int at(int stride) => _turn switch
+            {
+                90 => ((ch - 1 - c) * stride) + half,
+                180 => ((ch - 1 - half) * stride) + (cw - 1 - c),
+                _ => (c * stride) + (cw - 1 - half),
+            };
+            blue[c] = u[at(frame.UStride)];
+            red[c] = v[at(frame.VStride)];
+        }
+
+        return _bars.InRow(luma, blue, red, _uprightWidth);
+    }
 }
 
 /// <summary>
@@ -360,13 +469,10 @@ sealed class BarColours
         return full;
     }
 
-    /// <summary>Whether luma row <paramref name="row"/> (and its chroma row) is the seven bars in one of the sets.</summary>
-    public bool InRow(YuvFrame frame, int width, int row)
+    /// <summary>Whether a luma row <paramref name="y"/> (and its chroma row, <paramref name="u"/> and <paramref name="v"/>) is the seven bars in one of the sets.</summary>
+    public bool InRow(ReadOnlySpan<byte> y, ReadOnlySpan<byte> u, ReadOnlySpan<byte> v, int width)
     {
         int columns = (width + 1) / 2;
-        var y = frame.Y.Span.Slice(row * frame.YStride);
-        var u = frame.U.Span.Slice((row >> 1) * frame.UStride, columns);
-        var v = frame.V.Span.Slice((row >> 1) * frame.VStride, columns);
         Span<sbyte> labels = columns <= 4096 ? stackalloc sbyte[columns] : new sbyte[columns];
         foreach (var set in _sets)
         {
