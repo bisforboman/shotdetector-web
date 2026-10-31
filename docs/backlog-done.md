@@ -897,3 +897,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     cut-short last shot; "Shorter than 2 s: 7, on the timeline." on a line of its own; Forget underlined in the
     error's colour, unfilled. The page check asserts each (Chromium here; Firefox in CI), the downloads identical to
     the native run's)
+
+- The page's layout and styling
+  - Why: the details grid (auto-fill, 17rem) leaves a card alone on a row with holes beside it; the shots table spreads
+    five columns over the width with small stills, in a 70vh scroll box that clips its last row even with 8 shots; the
+    picture lane's out-of-range ticks paint it red end to end, the playhead's red; every card opens with 3 to 5 lines
+    of how it is checked; the cuts lane doesn't show which shot is playing.
+  - Where: mostly `style.css`, with `panels/cuts.js`, `panels/picture.js`, `panels/run.js` and the cards' notes; the
+    page check's screenshots at 1280 and 390 px, light and dark, of done, kept and resumed.
+  - Done when: no details row with more than about 100 px of empty height under a card; every shot row visible
+    without an inner scrollbar at 15 shots or fewer; no red in a lane but the playhead; the run card's figures above
+    the fold at 1280x800; the owner has seen the screenshots before and after; the CSVs, JSON and HTML byte for byte.
+  - Not: the layout B stays; no new export; no mark loses what it means (CLAUDE.md "Adding to the page").
+  - Depends on: the row above (it edits the same panels).
+  - Status: Done (2026-10-31: the details as two balanced CSS columns, About two pairs to a line where wide; the
+    shot statistics beside the shots table, sticky, the table whole up to 15 shots with 8rem stills; the picture
+    lane's out-of-range ticks grey and as tall as their share on a log scale, the black spans hatched, the colour bars
+    as luma steps, the keyframes violet; the cards' notes in their marks' tooltips, the downloads' in their links';
+    the cuts lane a span per shot, the playing one shaded, its number where it fits. The page check's `looks` at
+    1280x800 for the demo done, kept and resumed: 47, 9 and 48 px at most under a details card (main: 656), no inner
+    scroll, no red in a lane but the playhead, the run's figures down to 324 and 379 px, nothing wider than the window
+    or its card; screenshots at 1280 and 390 px, light and dark. The owner saw them before and after and said yes)

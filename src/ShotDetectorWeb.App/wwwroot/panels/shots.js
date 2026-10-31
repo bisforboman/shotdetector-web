@@ -61,7 +61,7 @@ function clear() {
 // The stills. A shot's still is its middle frame, sought half a frame after that frame's start, so that the seek lands
 // inside it whichever way the browser rounds. The canvases are kept by that time for the file: a new run and the
 // result's table after its live rows find theirs taken (a stopped run's last shot, cut short, has a middle of its own).
-const STILL_WIDTH = 96; // the canvas's width in CSS pixels (the cell's at most), drawn at the screen's density
+const STILL_WIDTH = 128; // the canvas's width in CSS pixels (the cell's at most), drawn at the screen's density
 const SEEK_MS = 5000; // a seek that hasn't answered by then gives no still
 const source = document.createElement('video');
 source.muted = true;

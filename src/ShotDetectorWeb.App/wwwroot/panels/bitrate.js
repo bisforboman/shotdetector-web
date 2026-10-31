@@ -15,18 +15,14 @@ let opened = null;  // the YuvVideo they are for
 
 const section = card('Bitrate and keyframes', {
   mark: 'page',
-  markTitle: 'The page\'s arithmetic on the packets: their sizes and keyframe flags are the file\'s, checked against ' +
-    'ffprobe -show_packets; the rates, the spacing and the cuts on keyframes are worked out here',
+  markTitle: 'The page\'s arithmetic on the file\'s video packets, read without decoding: their sizes and keyframe ' +
+    'flags are the file\'s, checked against ffprobe -show_packets; the rates, the spacing and the cuts on keyframes are ' +
+    'worked out here',
 });
 section.id = 'bitrate';
 section.hidden = true;
-const facts = document.createElement('div'), cuts = document.createElement('p'), note = document.createElement('p');
-note.className = 'note';
-const command = document.createElement('code');
-command.textContent = 'ffprobe -show_packets';
-note.append('From the file\'s video packets, without decoding: their sizes and keyframe flags are the file\'s, checked ' +
-  'against ', command, '.');
-section.append(facts, cuts, note);
+const facts = document.createElement('div'), cuts = document.createElement('p');
+section.append(facts, cuts);
 
 // One SVG over the video's span, in x()'s percentages: drawn again only for a new duration, not for a new width.
 const bitrateLane = lane('Bitrate', track => {
