@@ -100,6 +100,21 @@ for f in tff:0:1:0:tt:1,1 bff:0:1:0:bb:1,0 fake:0:0:0:progressive:0,0; do
   [[ $got == "$want" ]] || { echo "$s: frame_mbs_only, MBAFF, field_pic, rate, field order, frame flags are '$got', not '$want'." >&2; exit 1; }
 done
 
+# Rotated, as a phone records (decision 2026-10-30-scope-widening.md): three() coded turned the other way, and a display
+# matrix (-display_rotation on a copy, counterclockwise) that shows it upright again: 90, 180 and 270, which FFmpeg reads
+# as 90, -180 and -90 (av_display_rotation_get). The detectors and the picture's measures see the upright picture: black
+# borders of four widths (left 8, right 24, top 20, bottom 40), so cropdetect's figures tell each side from the others.
+for r in 90:transpose=clock 180:hflip,vflip 270:transpose=cclock; do
+  enc -filter_complex "$(three 288x180 25 1),pad=320:240:8:20,${r#*:}" -c:v libx264 -pix_fmt yuv420p "$out/rotated.tmp.mp4"
+  enc -display_rotation "${r%%:*}" -i "$out/rotated.tmp.mp4" -c copy "$out/rotated-${r%%:*}-320x240-25.mp4"
+  rm "$out/rotated.tmp.mp4"
+done
+got=$(for r in 90 180 270; do
+  "$fp" -v error -select_streams v:0 -show_entries stream=width,height:stream_side_data=rotation -of csv=p=0 \
+    "$out/rotated-$r-320x240-25.mp4" | tr '\n' , ; echo -n ' '
+done)
+[[ $got == '240,320,90, 320,240,-180, 240,320,-90, ' ]] || { echo "rotated samples: coded size, rotation are '$got'" >&2; exit 1; }
+
 # MJPEG in AVI (decision 2026-10-30-mjpeg-avi.md): 4:2:0, which FFmpeg's decoder gives as yuvj420p (a JPEG is full range,
 # tagged BT.601), every frame a keyframe. One without audio; one at 29.97 fps with PCM audio longer than the video, which
 # doesn't count for FFmpeg's format duration (a PCM stream in AVI has none); one with MP3 longer than the video, which
@@ -191,7 +206,7 @@ $got")
   echo "$s: $(probe v:0 stream=nb_frames | cut -d= -f2) frames at 24 fps, 854x480, $size bytes."
 fi
 
-# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2, a variable frame rate, rotation.
+# Refused, each with its own message: 4:2:2, 10 bits, MPEG-4 Part 2, a variable frame rate.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv422p "$out/reject/yuv422p.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p10le "$out/reject/yuv420p10.mp4"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.mp4"
@@ -206,9 +221,6 @@ enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/
 got=$(for f in mjpeg-444 mjpeg-422; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
 got+=$("$fp" -v error -select_streams v -count_packets -show_entries stream=nb_frames,nb_read_packets -of csv=p=0 "$out/reject/mjpeg-dropped-frame.avi")
 [[ $got == 'yuvj444p yuvj422p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/unrotated.tmp.mp4"
-enc -display_rotation 90 -i "$out/reject/unrotated.tmp.mp4" -c copy "$out/reject/rotated.mp4"
-rm "$out/reject/unrotated.tmp.mp4"
 # Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
 # and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
 # FFmpeg's encoder writes LC only).

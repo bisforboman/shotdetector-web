@@ -11,6 +11,10 @@ let cuts = [];  // the cuts' times in seconds
 let shots = []; // the shots known: { shot, start, end, length } in seconds
 let playing = 0; // the shot playing's number, 0 for none
 let read = 0;   // how far the run has read, in seconds (0 once it has read all of it)
+// The track's width in pixels, read once per whole drawing (which the axis's changes, its width too, bring): reading it
+// for each span would lay the page out once per shot, seconds of the page's thread when a split run's merge tells a
+// long film's thousand shots at once (backlog "Performance pass on the page").
+let width = 0;
 const scanned = document.createElement('div');
 scanned.className = 'scanned';
 
@@ -18,7 +22,8 @@ scanned.className = 'scanned';
 // and tick and progress moves the shading.
 const cutsLane = lane('Cuts', track => {
   scanned.style.width = x(read);
-  track.replaceChildren(scanned, ...shots.map(s => span(s, track)), ...cuts.map(tick));
+  width = track.clientWidth;
+  track.replaceChildren(scanned, ...shots.map(span), ...cuts.map(tick));
 });
 
 function tick(at) {
@@ -29,7 +34,7 @@ function tick(at) {
   return t;
 }
 
-function span({ shot, start, end, length }, track) {
+function span({ shot, start, end, length }) {
   const s = document.createElement('span');
   s.className = `shot${shot === playing ? ' current' : ''}`;
   s.dataset.shot = shot;
@@ -37,7 +42,7 @@ function span({ shot, start, end, length }, track) {
   s.style.width = `calc(${x(end)} - ${x(start)})`;
   s.title = `Shot ${shot}: ${timecode(start)} to ${timecode(end)}, ${length.toFixed(3)} s`;
   // x() is a share of the track's width: the span's own width in pixels, for whether its number fits.
-  if (track.clientWidth * (parseFloat(x(end)) - parseFloat(x(start))) / 100 >= LABEL_PX) s.textContent = shot;
+  if (width * (parseFloat(x(end)) - parseFloat(x(start))) / 100 >= LABEL_PX) s.textContent = shot;
   return s;
 }
 
@@ -69,7 +74,9 @@ on('shot', ({ shot }) => {
     return cutsLane.draw();
   }
   shots.push(s);
-  cutsLane.track.insertBefore(span(s, cutsLane.track), scanned.nextSibling);
+  // Drawn while the timeline was hidden: its width once, now.
+  if (width === 0) width = cutsLane.track.clientWidth;
+  cutsLane.track.insertBefore(span(s), scanned.nextSibling);
   if (s.shot === 1) return;
   cuts.push(s.start);
   cutsLane.track.append(tick(s.start));

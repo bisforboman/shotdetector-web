@@ -45,7 +45,8 @@ on('opened', ({ video: v }) => {
   list.replaceChildren();
   for (const [term, text, title] of [
     ['Video', CODECS[v.codec] ?? v.codec, `codec: ${v.codec}`],
-    ['Size', `${v.width} × ${v.height}`, `width: ${v.width}, height: ${v.height}`],
+    ['Size', size(v), `width: ${v.width}, height: ${v.height} (as decoded)`],
+    ['Rotation', rotation(v.rotation), `rotation: ${v.rotation} (degrees counterclockwise, ffprobe's)`],
     ['Frame rate', `${Number(rate.toFixed(3))} fps`, `frameRate: ${num}/${den}`],
     ['Pixel format', PIXEL_FORMATS[v.pixelFormat] ?? v.pixelFormat, `pixelFormat: ${v.pixelFormat}`],
     ['Colour space', v.colorSpace === '' ? 'Not tagged' : COLOR_SPACES[v.colorSpace] ?? v.colorSpace, `colorSpace: "${v.colorSpace}"`],
@@ -64,6 +65,20 @@ on('opened', ({ video: v }) => {
   raw.querySelector('pre').textContent = JSON.stringify(v, null, 2);
   section.hidden = false;
 });
+
+// The picture's size as it is shown: a video turned a quarter (its display matrix) the other way up.
+function size(v) {
+  return Math.abs(v.rotation) % 180 === 90 ? `${v.height} × ${v.width} (turned; coded ${v.width} × ${v.height})`
+    : `${v.width} × ${v.height}`;
+}
+
+// "Upright", "Shown a quarter turn clockwise", ...: the turn that shows the frames as decoded upright (ffprobe's rotation is
+// counterclockwise).
+function rotation(degrees) {
+  const turn = ((-degrees % 360) + 360) % 360;
+  return turn === 0 ? 'Upright' : turn === 180 ? 'Shown upside down' :
+    `Shown a quarter turn ${turn === 90 ? 'clockwise' : 'counterclockwise'}`;
+}
 
 // "AAC, 48 kHz, stereo".
 function audio({ codec, sampleRate, channels }) {

@@ -62,6 +62,15 @@ function start() {
 
 whenHeld(frames => current?.tell({ type: 'held', frames }));
 
+// Starts the threaded runtime ahead of the run that needs it, where it can start (threadsUsable): app.js calls it when a
+// file is picked or the demo fetched, so that its 31 files (5.6 MB gzipped) load and the runtime starts while the
+// visitor sets the options or the clip downloads, not after Detect (backlog "Performance pass on the page": the first
+// progress came 1.1 to 1.6 s later on threads than on the page's worker). A runtime that fails turns threads off, as
+// in a run.
+export function warm() {
+  if (threadsUsable()) start().catch(() => {});
+}
+
 export class ThreadedRunner {
   // threads: the decoder's, VideoInput.DecoderThreads.
   constructor(threads) {

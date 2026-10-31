@@ -175,7 +175,17 @@ on('opened', ({ video: { frameRate: { num, den }, width, height } }) => {
   table.style.setProperty('--still-aspect', `${width} / ${height}`);
 });
 on('run', clear);
-on('shot', ({ shot }) => addRow(shot));
+// A shot told again (a resumed run's last, or a split run's first range's last when the ranges merge) replaces the rows
+// from its number on.
+on('shot', ({ shot }) => {
+  while (body.rows.length >= shot.shot) {
+    const r = body.rows[body.rows.length - 1];
+    seen.unobserve(r.cells[0]);
+    wanted.delete(r.cells[0]);
+    r.remove();
+  }
+  addRow(shot);
+});
 // The result's shots, which are the ones told while it ran: the table is the result's.
 on('done', ({ result }) => {
   clear();

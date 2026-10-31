@@ -100,17 +100,22 @@ on('chose', ({ file }) => {
   clear();
   options = null;
 });
-on('run', ({ options: o, ranges }) => {
+on('run', ({ options: o, ranges, from }) => {
   runs++;
   clear();
   options = o;
   show(['0', 'shots so far'], ran());
-  // A run split across workers decides its shots when their ranges merge (decision 2026-10-26-workers.md).
-  summary.textContent = ranges
-    ? `The shots come once the ${ranges.length} workers' ranges merge.`
-    : 'The shots appear as they are found.';
+  // A run split across workers decides its shots when their ranges merge (decision 2026-10-26-workers.md), but for the
+  // first range's, from frame 0, which come as they are found (a resumed run's rest has no such range).
+  summary.textContent = !ranges ? 'The shots appear as they are found.'
+    : from === 0 ? `The first worker's shots appear as they are found, the rest once the ${ranges.length} workers' ` +
+      'ranges merge.'
+    : `The shots come once the ${ranges.length} workers' ranges merge.`;
 });
 on('shot', ({ shot }) => {
+  // A shot told again (a resumed run's last, or a split run's first range's last when the ranges merge) replaces the
+  // ones from its number on.
+  shots.length = Math.min(shots.length, shot.shot - 1);
   shots.push(shot);
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} so far`], ran());
 });

@@ -22,7 +22,10 @@
 //                                                                too, its 'done' a stopped run's
 //                        'progress' { video, done, expected }    frames done and expected (0 when unknown), one worker
 //                        'range'    { video, index, done, of }   a split run's range: its frames done, of how many
-//                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it
+//                        'shot'     { video, shot }              a shot as soon as ShotDetector knows it (a split
+//                                                                run's first range's as it scores, the rest at the
+//                                                                merge); one told again replaces those from its number
+//                                                                on (a resumed run's last, the first range's last)
 //                        'done'     { video, result, seconds, name, from, restored }   the run's result (Api's
 //                                                                Detect, its CSVs as scenesCsv, a string, and statsCsv,
 //                                                                a Blob of text/csv); name: the file's, without its
@@ -47,7 +50,7 @@
 //                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
 //                       title (MARKS), markTitle how they are checked, the chip's tooltip; a row of another kind says
 //                       so in its own tooltip.
-import { RESULTS, ThreadedRunner, threadsUsable } from './threads.js';
+import { RESULTS, ThreadedRunner, threadsUsable, warm } from './threads.js';
 import { held, playheadTime, secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
@@ -366,6 +369,8 @@ async function choose(chosen) {
   // The landing folds into the toolbar.
   document.body.classList.add('picked');
   file = chosen;
+  // A one-worker run goes on threads: their runtime starts now, not at Detect (threads.js, warm).
+  if (threadCount() > 1) warm();
   if (video.src) URL.revokeObjectURL(video.src);
   unplayable.hidden = true;
   video.hidden = false;
@@ -1059,10 +1064,12 @@ function showPicture(jpeg, frame) {
 // The video's length on the axis: Open's duration, or its frames over its rate.
 const lengthOf = v => v.duration ?? v.frames * v.frameRate.den / v.frameRate.num;
 
-// The toolbar's line on the file: its size, and once opened the description's first facts.
+// The toolbar's line on the file: its size, and once opened the description's first facts, the picture's size as it is
+// shown (a rotated video's upright).
 function facts(f, v) {
   const rate = Number((v.frameRate.num / v.frameRate.den).toFixed(3));
-  return [megabytes(f.size), `${v.width}×${v.height}`, `${rate} fps`, `${lengthOf(v).toFixed(1)} s`,
+  const [w, h] = Math.abs(v.rotation) % 180 === 90 ? [v.height, v.width] : [v.width, v.height];
+  return [megabytes(f.size), `${w}×${h}`, `${rate} fps`, `${lengthOf(v).toFixed(1)} s`,
     v.audio ? v.audio.codec.toUpperCase() : 'no audio'].join(' · ');
 }
 
@@ -1111,6 +1118,8 @@ pauseButton.onclick = pauseOrResume;
 // The demo clip, next to the page (pages.yml), run as if it had been picked.
 demoButton.onclick = async () => {
   demoButton.disabled = true;
+  // The threaded runtime starts while the clip downloads (threads.js, warm).
+  if (threadCount() > 1) warm();
   say('Downloading the demo clip…');
   try {
     const response = await fetch('demo/sintel-trailer.mp4');

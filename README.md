@@ -24,14 +24,15 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, not rotated: progressive,
-or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
+Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant frame rate, upright or turned a
+quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
+the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
 pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
 in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
-`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, rotated, variable
-frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; rotation, a variable rate and 4:2:2 wait on
+`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, a rotation that isn't a
+quarter turn, variable frame rate, an AVI that drops frames or an OpenDML AVI over 1 GB; a variable rate and 4:2:2 wait on
 ShotDetector, decision `docs/decisions/2026-10-30-scope-widening.md`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
 can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
@@ -111,8 +112,8 @@ of any size runs: the worker gets the `File` itself, and .NET reads it in slices
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
 run, else `REFERENCE_FPS` at the top of `app.js`); Stop ends the run where it has got to and shows the result for the
 part read, its shots and both CSVs, as a finished run's, labelled "stopped at", and a run with other options then
-starts at once on the opened file (Stopping a run, below). A long video is split across several workers, its shots
-shown once their ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not a video this
+starts at once on the opened file (Stopping a run, below). A long video is split across several workers, the first
+range's shots shown as they are found and the rest once the ranges merge (Long videos across workers, below). Errors are the library's messages, a damaged file's prefixed "The file is damaged or not a video this
 page can read:". "Try the demo" fetches `demo/sintel-trailer.mp4` next to the page and runs it as a picked file:
 `pages.yml` puts the Sintel sample there; locally, copy `samples/sintel_trailer-480p.mp4` to
 `wwwroot/demo/sintel-trailer.mp4` in the publish folder.
@@ -196,7 +197,12 @@ the packets before it walked with their data skipped as opening does, and gives 
 merge compares). Each worker's scores come back as bytes (`Api.RangeBytes`, `RangeScores.ToBytes`, about 97 bytes a
 frame for the adaptive detector), and the page's own worker merges them (`Api.Merge`), after which the CSVs come as
 from a one-worker run. Meanwhile the timeline's Ranges lane shows each worker's range and how far it has got; the
-shots come once the ranges merge (ShotDetector decides shots there). A run on one worker keeps its live shots.
+first range's shots come as its worker (the page's own) finds them, as a one-worker run's, ShotDetector telling a
+range from frame 0's shots since 3.22.0; the rest come once the ranges merge (ShotDetector decides them there), and the
+merge tells only the shots the first range didn't, the first range's last again from its number on (it ended at the
+range's end). On the two-hour control the first shot came at the merge, 5 to 7 s before the end of a 221 to 406 s
+run, before this (backlog "Performance pass on the page"). A resumed run's rest has no range from frame 0: its shots
+come at the merge.
 
 Stop stops every worker at its next pause; each range ends where its worker got to, and the ranges from the start
 merge for as long as each reaches into the next one's first frame, so the result is the one for the video up to where
@@ -249,6 +255,9 @@ carries two bundles: `_framework/`, today's, in its workers (the page's own, a s
 runs the exports on a thread of its own and the run on its thread pool (`Host.cs`), and the file is read in slices of a
 megabyte with `Blob.arrayBuffer()` (the page's thread has no `FileReaderSync`), each one waited for on the pool. The
 page stays responsive, the shots come as they are found, and pause, resume and stop work as on the page's worker.
+The threaded runtime starts when a file is picked or the demo is fetched, not at Detect: its 31 files (5.6 MB
+gzipped) and its start had made a first run's first progress 1.1 to 1.6 s later than on the page's worker (backlog
+"Performance pass on the page"); a file that then runs split has fetched them for nothing.
 A split run doesn't use threads: its workers already keep the cores busy. The decoder gets as many threads as
 `navigator.hardwareConcurrency` says the machine has cores, at most 4 (6 did no better on 4 cores; `MOST_THREADS` at the
 top of `app.js`; `?threads=N` in the page's address forces N, 0 or 1 meaning the page's worker).
@@ -286,6 +295,14 @@ and shown; with the big file it rose to about 800 MB in the first half hour and 
 returns, which V8 frees late while .NET holds the thread). Before the duration pass skipped the packets' data, opening
 the same file took 43 s and peaked the renderer at 1.7 GB. The estimate before the big file's run said 35 min (the
 reference rate scaled by picture size); the next run in the same browser uses its own measured rate.
+
+Measured again on 2026-10-31 on GitHub's 4-core runner (backlog-done "Performance pass on the page"), the control
+made again: a run on one worker grows the renderer steadily, its largest process from 425 to 715 MB on the page's
+worker and from 683 to 869 MB on 4 threads, while a split run stays at about 600 MB after opening. With a full garbage
+collection every 10 s the same runs grew 412 to 472 MB and 662 to 761 MB: nothing leaks. What stays is the run's own
+results in the .NET heap, which grow with the frame count (the threaded runtime's memory 166 to 239 MB over the run;
+below, "What the heap holds"); the rest is garbage, mostly the slices the file is read in, that the browser collects
+late and frees under pressure.
 
 The reference rate (`REFERENCE_FPS`, a first visit's estimate) was measured again on 2026-10-30, after ShotDetector
 3.20.0, ManagedCodecs 0.1.0, FrameReader 2.15.0, pause and resume and the stills per shot: the AOT bundle in headless
@@ -609,7 +626,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
-  (`PictureMeasures.Types`, ManagedCodecs' `VideoFrame.PictureType`) against `ffprobe -show_frames -show_entries
+  (`PictureMeasures.Types`, ManagedCodecs' `VideoFrame.PictureType`) against `ffprobe -show_entries
   frame=pict_type`, frame by frame in display order, an MJPEG sample's all I, whole, on four decoder threads and in
   ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each sample's run with all five detectors split
   into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
@@ -703,7 +720,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   in the status); `mjpeg-320x240-25.avi` picked, which no browser plays: its downloads the native run's, the player an
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
-  every shot; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
+  every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
+  (a quarter turn); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
   in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on
