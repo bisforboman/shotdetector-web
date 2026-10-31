@@ -391,6 +391,43 @@ two-hour film's peak is the run's, 115 MB on this file.
 An open file also holds its video packet list (`VideoInput.Packets`, below; in the numbers above): 13 bytes a frame,
 2.25 MB on a two-hour film.
 
+ManagedCodecs 0.4.0 ([ManagedCodecs#233](https://github.com/bisforboman/ManagedCodecs/pull/233), from
+[#211](https://github.com/bisforboman/ManagedCodecs/issues/211)) has the rest: an `Mp4Demuxer` of the tracks asked for
+(`MediaTypes`) and `ReadPacketInfo`, the packets without their data, from the sample tables alone. Since 2026-10-31
+opening takes the format's duration and the packet list from `ReadPacketInfo` (no packet read or allocated), a run's
+demuxer (`Mp4Input.DecodedFrames`, a range's too) indexes and reads the video track only, and the audio pass
+(`Mp4Audio`) the audio only, which ended its stream that skipped the video's reads. Measured on the control made again
+by its recipe (172,800 frames, 335,939 audio packets, 345,713,834 bytes, 1,184 shots), the code before and after on the
+same package (0.4.0), on one 4-core cloud VM. Natively, a stream counting the bytes read, `GC.GetTotalAllocatedBytes`
+around each step, opening and the audio pass in three interleaved rounds (the bytes and allocations the same every
+round), a run's frames once each:
+
+| Step, natively | Read, before | Read, after | Allocated, before | Allocated, after |
+| --- | --- | --- | --- | --- |
+| The file opened | 9.8 MB | 9.8 MB | 404 MB (0.9 to 1.4 s) | 49.6 MB (0.36 to 0.38 s) |
+| The audio pass (`Mp4Audio.Measure`) | 120.7 MB | 120.7 MB | 3,337 MB | 3,097 MB (about 26 s either way) |
+| A run's frames (`Frames()`, 172,800) | 345.7 MB in 508,744 reads | 229.9 MB in 172,805 reads | 19,430 MB | 19,286 MB (141 and 143 s, once each) |
+
+Under Node on the AOT bundle, as above, adaptive with stats, both bundles once (the audio pass in a runtime of its own,
+as the page's sound worker), the wasm heap after each step and the bytes `BlobStream` read from the `Blob`:
+
+| Step | Wasm heap, before | Wasm heap, after |
+| --- | --- | --- |
+| The runtime started | 32 MB | 32 MB |
+| The file opened | 80 MB | 80 MB |
+| The packets (`Packets()`) | 96 MB | 80 MB |
+| The run (`Detect`) | 166 MB | 166 MB |
+| The stats CSV (`StatsCsv()`) | 166 MB | 166 MB |
+| The audio pass (`Audio()`, after opening) | 96 MB | 96 MB |
+
+So, as the patched build had said, the heap's peak stays where it was: the arrays that went died young. Opening
+allocates an eighth of what it did and takes about a third of the time, and natively a run no longer reads the audio
+(a third of this file). In the browser it still does: `BlobStream` reads a megabyte from wherever a read starts, and the
+audio is interleaved with the video in far less than that, so a run read 360.7 MB of the `Blob` after and 361.8 MB
+before (the file and the slices' overlaps), and the audio pass 360.7 MB both times. What a run saves there is the
+audio's packets allocated and copied, not the reads. (The heap's 166 MB after the run, against 115 MB on 2026-10-30, is
+the same before and after this change.)
+
 ## Size
 
 A first visit downloads the page and every file in `_framework/` that `dotnet.js` names. GitHub Pages gzips every
@@ -758,10 +795,12 @@ its position and how far apart the values are: "identical" is a comparison that 
 ## Packages
 
 ShotDetector and ShotDetector.FastYuv (3.22.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`), FrameReader (2.16.0),
-ManagedCodecs (0.3.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.4.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
-under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221)
+under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
+0.4.0 reads only the tracks asked for and gives packets without their data, ManagedCodecs#233, below "What the heap
+holds")
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core

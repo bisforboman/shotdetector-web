@@ -40,28 +40,11 @@ The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
 asynchronous frame source, `DetectionOptions.OnShot`), [#494](https://github.com/bisforboman/shotdetector/issues/494)
 in FrameReader 2.11.0 (`ReferenceToneFinder`, `WaveformBuilder`); those filed on 2026-10-26 shipped in ShotDetector
-3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), but
-ManagedCodecs#138's optional part, the row below. Those filed on 2026-10-30,
+3.20.0 and ManagedCodecs 0.1.0 (2026-10-27 and 2026-10-28). Their rows are done ([backlog-done.md](backlog-done.md)), and
+ManagedCodecs#138's optional part too, in ManagedCodecs 0.4.0 (#211, 2026-10-30). Those filed on 2026-10-30,
 [shotdetector#597](https://github.com/bisforboman/shotdetector/issues/597) and
 [#598](https://github.com/bisforboman/shotdetector/issues/598), shipped in ShotDetector 3.22.0 the same day: their rows
 are in Next again.
-
-- ManagedCodecs: a demuxer of the tracks asked for, packets without their data
-  - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
-    allocates every packet's data even where the stream skips the reads. On the two-hour control natively, 342 MB of
-    zeroed arrays come out of `Open`'s 405 MB allocated, and a run allocates and throws away the audio track's 115 MB.
-    It doesn't grow the wasm heap: both were tried in a patched local build, 84 MB opened and 121 MB after the run either
-    way (README "What the heap holds", 2026-10-29). So low priority: allocation and time, not memory.
-  - Where: upstream (bisforboman/ManagedCodecs), filed as #211 from the text in
-    [#59](https://github.com/bisforboman/shotdetector-web/pull/59), a follow-up to
-    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138). Then here: the run's demuxer
-    (`Mp4Input.DecodedFrames`, the ranges') of the video track only, and the opening pass through the timing-only
-    read, measured again as README does.
-  - Done when: a ManagedCodecs release has both, and the page uses them with the checks unchanged.
-  - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it); stays on 0.1.0
-    (ManagedCodecs#206).
-  - Status: Waiting on upstream ([ManagedCodecs#211](https://github.com/bisforboman/ManagedCodecs/issues/211), filed
-    2026-10-30)
 
 - Rotation
   - Why: phones record rotated; the FFmpeg path turns frames upright.

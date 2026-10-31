@@ -933,3 +933,22 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `PictureMeasures`; `Api.FrameTypes`, `panels/frametypes.js` marked core; `FrameTypeCheck.cs` the same as
     `ffprobe -show_frames` on all 19 samples, MBAFF and MJPEG (all I) included, whole, on four threads and in ranges;
     app-check.mjs and the page check hold the App and the page to it)
+
+- ManagedCodecs: a demuxer of the tracks asked for, packets without their data
+  - Why: ManagedCodecs 0.1.0's `Mp4Demuxer` still indexes video and audio whatever its caller reads, and `ReadPackets`
+    allocates every packet's data even where the stream skips the reads. On the two-hour control natively, 342 MB of
+    zeroed arrays come out of `Open`'s 405 MB allocated, and a run allocates and throws away the audio track's 115 MB.
+    It doesn't grow the wasm heap: both were tried in a patched local build, 84 MB opened and 121 MB after the run either
+    way (README "What the heap holds", 2026-10-29). So low priority: allocation and time, not memory.
+  - Where: upstream (bisforboman/ManagedCodecs), filed as #211 from the text in
+    [#59](https://github.com/bisforboman/shotdetector-web/pull/59), a follow-up to
+    [ManagedCodecs#138](https://github.com/bisforboman/ManagedCodecs/issues/138). Then here: the run's demuxer
+    (`Mp4Input.DecodedFrames`, the ranges') of the video track only, and the opening pass through the timing-only
+    read, measured again as README does.
+  - Done when: a ManagedCodecs release has both, and the page uses them with the checks unchanged.
+  - Not: no copy of the demuxer here (CLAUDE.md: report it there, don't work around it).
+  - Status: Done (2026-10-31: ManagedCodecs 0.4.0's `Mp4Demuxer(stream, MediaTypes, ...)` and `ReadPacketInfo`
+    (#233): opening's duration and packet list from `ReadPacketInfo`, a run's and a range's demuxer of the video track
+    only, `Mp4Audio`'s of the audio only, its `AudioDataStream` gone; the checks unchanged, native, wasm and AOT. On the
+    two-hour control natively opening allocates 49.6 MB instead of 404 and a run reads 229.9 MB instead of 345.7; the
+    wasm heap's peak and the bytes read from the `Blob` as before: README "What the heap holds")
