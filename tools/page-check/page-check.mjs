@@ -438,9 +438,9 @@ async function compare(page, what, name, run, stoppedAt = null) {
     } else if (!existsSync(native)) {
       fail(`${what}: no native ${label} ${native} (tools/check.sh native first)`);
     } else if (text !== readFileSync(native, 'utf8').replaceAll(stem(FILES[name]), stem(name))) {
-      fail(`${what}: the downloaded ${label} (${saved}) differs from ${native}${FILES[name] === name ? '' : ', its name the page\'s'}`);
+      fail(`${what}: the downloaded ${label} (${saved}) differs from ${native}${basename(FILES[name]) === name ? '' : ', its name the page\'s'}`);
     } else {
-      console.log(`${what}: ${expectedName} identical to ${basename(native)}${FILES[name] === name ? '' : ', its name the page\'s'}`);
+      console.log(`${what}: ${expectedName} identical to ${basename(native)}${basename(FILES[name]) === name ? '' : ', its name the page\'s'}`);
     }
   }
 }
