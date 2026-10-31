@@ -115,6 +115,18 @@ public static class Mp4Audio
     static TimeSpan Seconds(long ticks, ManagedCodecs.Rational timeBase) =>
         TimeSpan.FromTicks((long)Math.Round(ticks * (double)timeBase.Numerator / timeBase.Denominator * TimeSpan.TicksPerSecond));
 
+    /// <summary>EBU R128's absolute gate, in LUFS: an integrated loudness at it is ebur128's for nothing above it.</summary>
+    const double AbsoluteGate = -70;
+
+    /// <summary>
+    /// BS.1770-4's channel weights in ManagedCodecs' AAC output order (FL FR FC LFE BL BR, configuration 7 then SL SR; four
+    /// channels FL FR FC BC; three FC FL FR, all front): 1 for the front, 0 for the LFE, 1.41 for the rest, as FFmpeg's
+    /// ebur128 weighs them. Not FrameReader's <see cref="ChannelWeights.Default"/>, which is FFmpeg's default layout (three
+    /// channels are 2.1 there, an LFE third).
+    /// </summary>
+    static ChannelWeights Weights(int channels) =>
+        new(Enumerable.Range(0, channels).Select(c => c < 3 ? 1 : c == 3 && channels is 6 or 8 ? 0 : 1.41));
+
     /// <summary>Everything measured, fed each decoded frame in turn.</summary>
     sealed class Measurer
     {
@@ -123,8 +135,6 @@ public static class Mp4Audio
         readonly ReferenceToneFinder _tone;
         readonly SilenceFinder _silence;
         readonly LoudnessMeter _loudness;
-        readonly double[] _peaks;
-        readonly long[] _fullScale;
         float[] _interleaved = [];
         long _samples;
         int _packetSamples;
@@ -137,9 +147,7 @@ public static class Mp4Audio
             _waveform = new WaveformBuilder(sampleRate, channels, waveform);
             _tone = new ReferenceToneFinder(sampleRate, channels, options.ReferenceTone);
             _silence = new SilenceFinder(sampleRate, channels, options);
-            _loudness = new LoudnessMeter(sampleRate, channels);
-            _peaks = new double[channels];
-            _fullScale = new long[channels];
+            _loudness = new LoudnessMeter(sampleRate, channels, Weights(channels));
         }
 
         public int SampleRate { get; }
@@ -150,27 +158,9 @@ public static class Mp4Audio
         {
             int count = frame.SampleCount;
             var samples = frame.Samples;
-            for (int c = 0; c < Channels; c++)
-            {
-                double peak = _peaks[c];
-                long full = 0;
-                foreach (float s in samples[c])
-                {
-                    float a = Math.Abs(s);
-                    if (a > peak)
-                        peak = a;
-                    if (a >= 1)
-                        full++;
-                }
-
-                _peaks[c] = peak;
-                _fullScale[c] += full;
-            }
-
             _silence.Add(samples, count);
-            _loudness.Add(samples, count);
 
-            // FrameReader's builders take the samples interleaved.
+            // FrameReader's builders and loudness meter take the samples interleaved.
             int length = count * Channels;
             if (_interleaved.Length < length)
                 _interleaved = new float[length];
@@ -182,6 +172,7 @@ public static class Mp4Audio
             }
 
             var interleaved = _interleaved.AsSpan(0, length);
+            _loudness.Add(interleaved);
             var time = _start + TimeSpan.FromTicks(_samples * TimeSpan.TicksPerSecond / SampleRate);
             _waveform.Add(interleaved, time);
             if (!_tone.IsComplete)
@@ -192,10 +183,12 @@ public static class Mp4Audio
 
         public AudioMeasures Finish()
         {
-            var loudness = _loudness.Finish();
-            var peaks = new ChannelPeak[Channels];
-            for (int c = 0; c < Channels; c++)
-                peaks[c] = new ChannelPeak(LoudnessMeter.Dbfs(_peaks[c]), LoudnessMeter.Dbfs(_loudness.TruePeak(c)), _fullScale[c]);
+            // FrameReader's LoudnessMeter (ebur128's arithmetic, BS.1770-4 Annex 2's true peak): its integrated loudness
+            // is ebur128's -70 LUFS when no block passes the absolute gate, which the page tells as none.
+            var measured = _loudness.Finish();
+            var l = measured.Loudness;
+            var loudness = new Loudness(l.Integrated <= AbsoluteGate ? null : l.Integrated, l.Range, l.TruePeak);
+            var peaks = measured.Channels.Select(c => new ChannelPeak(c.SamplePeak, c.TruePeak, c.FullScale)).ToArray();
             return new AudioMeasures
             {
                 Track = new AudioTrack("aac", SampleRate, Channels, _start, _samples, _packetSamples),
@@ -208,6 +201,16 @@ public static class Mp4Audio
         }
     }
 }
+
+/// <summary>
+/// Loudness as ITU-R BS.1770-4 and EBU Tech 3341/3342 define it: integrated loudness in LUFS, loudness range in LU, and
+/// true peak in dBTP, by FrameReader's <see cref="LoudnessMeter"/> (ebur128's arithmetic, without FFmpeg). FFmpeg's
+/// <c>ebur128</c> filter (with <c>peak=true</c>) measures the same; NativeCheck compares the two (README, Checks).
+/// </summary>
+/// <param name="Integrated">The integrated loudness (gated, LUFS); null when nothing is louder than the absolute gate (-70 LUFS).</param>
+/// <param name="Range">The loudness range (LU): the spread of the short-term loudness, from its 10th to its 95th percentile; 0 when there is none.</param>
+/// <param name="TruePeak">The highest true peak of any channel (dBTP).</param>
+public sealed record Loudness(double? Integrated, double Range, double TruePeak);
 
 /// <summary>What <see cref="Mp4Audio.Measure(Stream, AudioOptions?, CancellationToken)"/> measures, and how.</summary>
 public sealed record AudioOptions

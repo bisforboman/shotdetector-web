@@ -1200,3 +1200,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     YouTube's rules; AOT under Node 2925 of 2925 files identical; the page check's downloads the native run's, the demo's
     chapters at 10 s carrying a title typed. Chromium drops a click now and then when downloads follow each other within
     milliseconds: the page check clicks a second time)
+
+- FrameReader's `LoudnessMeter` in place of the page's own meter
+  - Why: FrameReader 2.18.0's `LoudnessMeter` (shotdetector#646) measures EBU R128 loudness of samples decoded by the
+    caller with ebur128's own arithmetic and nothing of FFmpeg, so it runs in the browser; the page's `Loudness.cs` was
+    a second implementation of the same thing (the owner's choice, 2026-10-31: adopted after the 3.24.0 bump).
+  - Where: `Mp4Audio`'s measurer (the interleaved samples it already builds for FrameReader's waveform), the channel
+    weights in ManagedCodecs' AAC order; `Loudness.cs` deleted, its `Loudness` record kept in `Mp4Audio.cs` so the page's
+    `loudness` JSON keeps its shape.
+  - Done when: `AudioCheck.cs` passes against ebur128 within its tolerances, and the page's JSON is unchanged in shape.
+  - Status: Done (2026-10-31: AudioCheck agrees on every sample with audio, the integrated loudness and the range now
+    0.000 from ebur128's (up to 0.006 and 0.005 with the page's meter), the peaks as before; natively every check
+    agrees, AOT under Node 2250 of 2250 files identical)
