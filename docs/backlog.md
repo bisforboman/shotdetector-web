@@ -33,6 +33,21 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
+- Editor exports on the run card (issue [#84](https://github.com/bisforboman/shotdetector-web/issues/84), the first
+  slice of [docs/ideas/editor-exports-and-launch.md](ideas/editor-exports-and-launch.md); the owner's choice,
+  2026-10-31)
+  - Why: editors are the users most likely to come back, and scenedetect's timeline files are what they would use;
+    ShotDetector's `Timeline` already writes them byte for byte as scenedetect does, and adds no assembly to the
+    bundle (no FFmpeg.AutoGen, +17 KB).
+  - Where: the core's `TimelineFiles` (`Timeline.Edl`, `Fcpx`, `Fcp7`, `Otio`, `Qp` with their defaults, the result
+    given `VideoPath` `/<file name>`), `Api.Timeline.cs`'s `TimelineFile(format, fileName)` with its twin in
+    `Api.Threads.cs` and its name in `threads.js`, a "For editors" row of downloads in `panels/run.js`; NativeCheck,
+    app-check.mjs (whole, paused, split and resumed runs) and the page check's downloads against `Detect(path)`'s.
+  - Done when: `tools/check.sh native wasm aot page` passes with the five files identical to the native run's on
+    every sample and run (the page's but for the file's name).
+  - Not: YouTube chapters, marker lists or the public launch (parked in the note); no path field (the editor relinks).
+  - Status: In progress (2026-10-31)
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
