@@ -5,8 +5,10 @@
 //      so one-worker runs go on the threaded runtime on the page's own thread (threads.js; decision
 //      2026-10-30-threads.md), as on Pages;
 //   1. a sample set on the file input, detected with the options as the page prefills them, on threads: its scenes and
-//      stats CSVs and its shots as JSON and HTML downloaded from the run's card and compared with the native check's
-//      run of that detector byte for byte, the shots table one row per shot of the CSV;
+//      stats CSVs, its shots as JSON and HTML and the editors' timeline files (EDL, FCPXML, FCP7 XML, OTIO, QP)
+//      downloaded from the run's card and compared with the native check's run of that detector byte for byte (the
+//      timeline files but for the file's name: the page gives the picked file's), the shots table one row per shot of
+//      the CSV;
 //   2. the same sample on the page's worker (?threads=0, as where the page isn't isolated), and split across two
 //      workers (?workers=2): the ranges lane; the same downloads each time;
 //   3. "Try the demo": the clip fetched and run as picked, on threads, paused a quarter of the way in (the bar and the
@@ -334,8 +336,8 @@ async function finished(page, what, expected = 'done') {
   return status;
 }
 
-// The run's downloads, as a visitor clicks them, against the native check's files of the same run (its CSVs and the
-// shots as JSON and HTML); the shots table against the scenes CSV. A run stopped at frame stoppedAt: its stats CSV the
+// The run's downloads, as a visitor clicks them, against the native check's files of the same run (its CSVs, the
+// shots as JSON and HTML and the editors' timeline files); the shots table against the scenes CSV. A run stopped at frame stoppedAt: its stats CSV the
 // native run's rows up to that frame, but for the adaptive ratio of the last w frames, None (its window after them
 // isn't read), as app-check.mjs's checkStopped; its scenes CSV's last shot ending there, and its JSON and HTML the
 // scenes CSV's shots.
@@ -403,6 +405,41 @@ async function compare(page, what, name, run, stoppedAt = null) {
       const shots = scenes.length;
       const rows = await page.locator('#shots tbody tr').count();
       if (shots < 1 || rows !== shots) fail(`${what}: the shots table has ${rows} rows for the CSV's ${shots} shots`);
+    }
+  }
+  // The editors' timeline files (Api's TimelineFile), each the native run's but for the file's name, which the page
+  // gives as the picked file's (the demo's sintel-trailer.mp4, the native check's sample's own). A stopped run's: the
+  // EDL a cut event a shot of the scenes CSV, the QP file frame 0 and each later shot's start.
+  for (const [id, ext, label] of [['timeline-edl', 'edl', 'EDL'], ['timeline-fcpxml', 'fcpxml', 'FCPXML'],
+    ['timeline-fcp7', 'fcp7.xml', 'FCP7 XML'], ['timeline-otio', 'otio', 'OTIO'], ['timeline-qp', 'qp', 'QP file']]) {
+    const link = page.locator(`#${id}`);
+    if (!await link.isVisible()) {
+      fail(`${what}: no ${label} to download`);
+      continue;
+    }
+    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    const expectedName = `${stem(name)}.${ext}`;
+    if (download.suggestedFilename() !== expectedName) {
+      fail(`${what}: the ${label} downloads as ${download.suggestedFilename()}, not ${expectedName}`);
+    }
+    const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${ext}`);
+    await download.saveAs(saved);
+    const text = readFileSync(saved, 'utf8');
+    const native = join(nativeDir, `${stem(FILES[name])}.${run}.${ext}`);
+    if (stoppedAt !== null) {
+      if (scenes === null) continue;
+      const starts = ext === 'edl'
+        ? lines(text).filter(line => /^\d{3}  /.test(line)).length
+        : ext === 'qp' ? lines(text).length : null;
+      const expected = scenes.length;
+      if (starts !== null && starts !== expected) fail(`${what}: the stopped run's ${label} has ${starts} lines for ${expected} shots`);
+      else console.log(`${what}: ${expectedName} downloaded${starts !== null ? `, ${starts} lines for the ${expected} shots` : ''}`);
+    } else if (!existsSync(native)) {
+      fail(`${what}: no native ${label} ${native} (tools/check.sh native first)`);
+    } else if (text !== readFileSync(native, 'utf8').replaceAll(stem(FILES[name]), stem(name))) {
+      fail(`${what}: the downloaded ${label} (${saved}) differs from ${native}${FILES[name] === name ? '' : ', its name the page\'s'}`);
+    } else {
+      console.log(`${what}: ${expectedName} identical to ${basename(native)}${FILES[name] === name ? '' : ', its name the page\'s'}`);
     }
   }
 }
