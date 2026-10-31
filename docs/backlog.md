@@ -108,13 +108,13 @@ another, a pull request each (the owner's choice, 2026-10-31).
     ManagedCodecs' `Mp4Demuxer` doesn't: the core's `StartPts` is 1000 against FFmpeg's 0, and every packet's pts
     (`PacketCheck`) is 1000 later than ffprobe's, and so the black spans' times (`PictureCheck`, blackdetect) a frame
     later than FFmpeg's. The CSVs and the shots' JSON and HTML are still identical, but the description isn't.
-  - Where: upstream in ManagedCodecs' `Mp4Demuxer` (sent to the shotdetector coordinator, 2026-10-31); then here a
+  - Where: upstream, [ManagedCodecs#252](https://github.com/bisforboman/ManagedCodecs/issues/252) (`Mp4Demuxer`); then here a
     ManagedCodecs bump, and a sample with that edit list in make-samples.sh (ffmpeg's muxer writes media_time = the
     first offset, so none of today's samples has it).
   - Done when: `tools/realworld.sh check wasm caminandes_gran_dillama.mp4 caminandes-fragmented.mp4` passes, and the
     native check passes on the new sample.
   - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
-  - Status: Waiting on upstream (sent to the shotdetector coordinator, 2026-10-31)
+  - Status: Waiting on upstream (ManagedCodecs#252, filed 2026-10-31)
 
 ## Maybe
 
