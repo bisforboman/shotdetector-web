@@ -48,7 +48,8 @@ import { basename, extname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileBlob, host } from './node-host.mjs';
 
-// tools/Shared/Runs.cs's runs as the page's options: each detector with scenedetect's defaults, and all five in one run.
+// tools/Shared/Runs.cs's runs as the page's options: each detector with scenedetect's defaults, all five in one run,
+// then deinterlaced (yadif): the default with deinterlace auto, all five with on.
 const RUNS = {
   adaptive: { detector: 'adaptive' },
   'adaptive-window': { detector: 'adaptive', frameWindow: 1, minContentVal: 5 },
@@ -57,7 +58,12 @@ const RUNS = {
   histogram: { detector: 'histogram' },
   hash: { detector: 'hash' },
   all: { detectors: ['adaptive', 'content', 'threshold', 'histogram', 'hash'].map(kind => ({ kind })) },
+  'deinterlace-auto': { detector: 'adaptive', deinterlace: 'auto' },
+  'deinterlace-on': { detectors: ['adaptive', 'content', 'threshold', 'histogram', 'hash'].map(kind => ({ kind })), deinterlace: 'on' },
 };
+// The runs that deinterlace (where the field order says so, for auto): yadif reads the frame after each, so a stopped
+// run's last frame is deinterlaced as a file's last (its own next), and its stats row differs from the whole run's.
+const DEINTERLACED = ['deinterlace-auto', 'deinterlace-on'];
 
 // The most ranges a run is split into here, as the page splits a long video (app.js's MOST_WORKERS), and the runs split:
 // the page's default (one detector: the merge tells the shots as each cut is confirmed) and all five detectors at once
@@ -267,7 +273,8 @@ process.exit(failed ? 1 : 0);
 // run's last rows. Its shots are the whole run's that end before the stop, then the next one cut short at the stop. A cut
 // decided only on frames past the stop is the one difference allowed: a few frames before it, within the adaptive window
 // and the minimum shot length (FlashFilter's merge decides a cut that late). (The threshold detector would also end a
-// fade-out the stop falls in with a cut, as at a file's end: no sample stops in one.)
+// fade-out the stop falls in with a cut, as at a file's end: no sample stops in one.) A deinterlaced run's last row may
+// differ too: yadif deinterlaces the last frame read with itself as the next, as a file's last.
 async function checkStop(sample, video, run, options, whole, wholeStats) {
   const name = `${basename(sample)} ${run} stopped`;
   const half = Math.floor(video.frames / 2);
@@ -288,7 +295,7 @@ async function checkStop(sample, video, run, options, whole, wholeStats) {
   if (progress.at(-1)?.[0] !== n) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}, not at ${n}`);
   if (JSON.stringify(told) !== JSON.stringify(result.shots)) fail(`${name}: the shots told aren't the result's`);
   checkPictureStopped(name, result);
-  checkStopped(name, video, result, await statsText(), whole, wholeStats);
+  checkStopped(name, video, result, await statsText(), whole, wholeStats, DEINTERLACED.includes(run));
 }
 
 // A run paused half-way (the worker's 'pause') stays where it is while held, no frame read and no progress told, and
@@ -324,7 +331,7 @@ async function checkPause(sample, video, options, whole, wholeScenes, wholeStats
 }
 
 // A stopped run's result (n frames) against the whole run's: its stats and shots as checkStop says.
-function checkStopped(name, video, result, statsCsv, whole, wholeStats) {
+function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterlaced = false) {
   const n = result.frameCount, rate = video.frameRate.num / video.frameRate.den;
 
   // The stats: the whole run's rows for the first n frames, but None for the adaptive ratio in the last w. A row a frame
@@ -342,6 +349,7 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats) {
   for (let i = 0; i < Math.max(ours.length, rows); i++) {
     if (ours[i] === theirs[i]) continue;
     const a = ours[i]?.split(','), b = theirs[i]?.split(',');
+    if (deinterlaced && i === rows - 1 && a && b && a[0] === b[0]) continue;
     const late = a && b && i < rows && i + skipped > n - window && a.length === b.length &&
       a.every((cell, c) => cell === b[c] || (ratios.includes(c) && cell === 'None'));
     if (!late) wrong.push(i);
