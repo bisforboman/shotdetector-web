@@ -984,3 +984,54 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the upright picture) the FFmpeg path's; the page check picks the 90 one on threads and on two workers; the
     About card says how the video is shown; `FrameTypeCheck` without `-show_frames`, whose display matrix side data
     ffprobe prints over lines)
+
+- Performance pass on the page
+  - Why: the owner's choice (2026-10-31): measure what a visitor waits for and what the page costs, then fix what
+    stands out, a pull request each, the results byte for byte as before.
+  - Where: measured by a throwaway workflow on the branch `claude/perf-measure` (`tools/page-check/perf.mjs`, not on
+    `main`): the AOT bundle as `pages.yml` publishes it, served with Pages' headers (gzip, `max-age=600`), in headless
+    Chromium on GitHub's 4-core runner, and the live site for a first visit. Two runs, 2026-10-31: run 41186034723
+    (AMD EPYC 9V45) and run 41187986379 (EPYC 7763, about 1.7 times as slow); figures as "9V45 / 7763" where both.
+    - First load: the page 25 files, 195 KB (71 KB gzipped); the worker's bundle 4.8 MB gzipped (14.6 MB). Loaded in
+      40 to 80 ms, isolated (the service worker's reload) at 210 to 670 ms, interactive (the footer's versions: the
+      worker's runtime answered) at 540 to 1,220 ms; the live site 890 to 950 ms. The reload aborts the first
+      document's bundle half-loaded and the second fetches it all again (live: 39 to 44 requests, 4.8 to 5.2 MB);
+      .NET's loader fetches with `no-cache`, so every later visit revalidates the 26 files (304s on Pages). A revisit
+      was interactive in 430 / 620 ms.
+    - The threaded bundle: 31 more files, 5.6 MB gzipped (17.4 MB), fetched and started at the first one-worker run's
+      click: the first progress after 1.4 / 2.1 s on threads against 0.33 / 0.5 s on the page's worker, though the
+      run ends sooner (the demo done in 5.1 to 5.5 / 8.8 to 9.7 s on 4 threads, 7.3 to 7.6 / 12.4 to 12.6 s on the
+      worker; first shot 2.6 to 2.9 / 4.2 to 4.7 s and 2.4 / 4.0 s).
+    - The two-hour control (README "Large files", made again: 640x360, 250 kbit/s, 172,800 frames, 1,105 shots):
+      split on 3 workers done in 221 / 406 s, its first shot told only by the merge, 5 s / 7 s before the end;
+      on one worker on 4 threads done in 291 / 534 s, its first shot at 3.2 / 5.2 s.
+    - Memory, the largest renderer process's RSS each second (run 41187986379): split, 812 MB a minute in while the
+      runtimes open the file, then flat at about 600 MB, 1,007 MB at its peak, 547 MB after; one worker on threads,
+      rising steadily from 673 to 944 MB over the run (about 30 MB a minute), 770 MB after. Run 41186034723's peaks:
+      1,047 and 990 MB.
+    - The panels after a run: every lane and card drawn 70 to 120 ms after `done` on the demo, 170 to 440 ms on the
+      control, no long task over 82 ms. But a split run's merge tells its 1,105 shots one message each, and
+      `panels/cuts.js` reads the track's width for each new span, a layout each: 3.7 / 5.2 s of the page's thread in
+      the last 7 s before `done` (in tasks under 50 ms, so no long task). The scores lane reads the control's stats
+      CSV in 40 ms; the stills are a few ms each.
+  - The owner's picks (2026-10-31), all four offered, a pull request each: (1) the cuts lane without a layout per
+    span; (2) a split run's first range telling its shots as it finds them; (3) the threaded runtime started when a
+    file is picked or the demo fetched, not at the click; (4) the threaded run's growing renderer, found and fixed or
+    reported upstream.
+  - After, measured together in run 41191247215 (`claude/perf-measure-all`, the three fixes merged): (1) the cuts lane
+    17 ms of the page's thread in the split run's last seconds, from 3.7 / 5.2 s; (2) the split control's first shot
+    at 2.4 s, from 216 / 399 s; (3) on threads the threaded bundle's files were in 0.6 s after the file was picked,
+    and the long file's first progress came at 1.5 s, the threaded bundle no longer fetched after the click.
+  - (4), the growing renderer, measured again with a full collection every 10 s (Chromium with `--expose-gc`, `gc()` in
+    the page and each worker; run 41194804248): on the page's worker the largest renderer process grew 412 to 472 MB
+    over the control's run, against 425 to 715 MB without; on threads 662 to 761 MB against 683 to 869 MB, the
+    threaded runtime's wasm memory 166 to 239 MB of it (the JS heap flat at 10 to 16 MB). So nothing leaks, on threads
+    or off: the growth is the run's own results in the .NET heap, which grow with the frame count (README "What the
+    heap holds"), and garbage the browser collects late (the slices the file is read in, as CLAUDE.md's Gotchas says of
+    `FileReaderSync`), which it frees under pressure. No change here and nothing to report upstream (README "Large
+    files" says so).
+  - Done when: the four are each a pull request with its before and after, the checks as CLAUDE.md's "Before pushing"
+    says (the results byte for byte).
+  - Not: no change to what is detected or to the downloads; nothing bought with exactness.
+  - Status: Done (2026-10-31: #85 the measurements and the cuts lane, #86 a split run's first shots live, #87 the
+    threaded runtime started when a file is picked; (4) found to be no leak, the finding in README "Large files")
