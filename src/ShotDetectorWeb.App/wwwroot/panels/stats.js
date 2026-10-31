@@ -1,23 +1,22 @@
-// The shots' statistics, a card (backlog "Shot statistics and a timeline"): from the shots as Detect returns them, how
-// many, their average and median length, the shortest and the longest (a click plays it), cuts per minute and how long
-// the run took against the length it read. They are the page's own figures, worked out here from the shots, not
-// ShotDetector's, and the card's mark says so. They wait for a finished run. The shot playing is app.js's caption under
-// the video, and the shots table marks its row.
+// The shots' statistics, a card beside the shots table (backlog "Shot statistics and a timeline"): from the shots as
+// Detect returns them, how many, their average and median length, the shortest and the longest (a click plays it), cuts
+// per minute and how long the run took against the length it read. They are the page's own figures, worked out here
+// from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run. The shot playing is
+// app.js's caption under the video, and the shots table marks its row.
 import { card, on } from '../app.js';
 import { secondsOf, seek } from '../timeline.js';
 
 const section = card('Shot statistics', {
+  place: 'below',
   mark: 'page',
-  markTitle: 'Worked out by the page from the shots ShotDetector found, not ShotDetector\'s numbers',
+  markTitle: 'Worked out by the page from the shots ShotDetector found, not ShotDetector\'s numbers: their lengths as in ' +
+    'the scenes CSV, a cut where each shot after the first starts, the length read from the first shot\'s start to the ' +
+    'last one\'s end. Exact values in the tooltips',
 });
 section.id = 'stats';
 section.hidden = true;
 const list = document.createElement('dl');
-const note = document.createElement('p');
-note.className = 'note';
-note.textContent = 'From the run\'s shots: their lengths as in the scenes CSV, a cut where each shot after the first ' +
-  'starts, the length read from the first shot\'s start to the last one\'s end. Exact values in the tooltips.';
-section.append(list, note);
+section.append(list);
 
 let shots = [];   // the result's shots
 let starts = [];  // each shot's start in seconds, and its end

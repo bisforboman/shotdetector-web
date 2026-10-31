@@ -21,7 +21,8 @@ let asked = 0;     // how many runs began: an answer after a new run or file dra
 const section = card('Frame types', {
   mark: 'core',
   markTitle: 'The core\'s: each frame\'s type as ManagedCodecs\' decoder gives it (FFmpeg\'s pict_type), checked frame ' +
-    'by frame against ffprobe -show_frames, exactly',
+    'by frame against ffprobe -show_frames, exactly. An I frame is not always a keyframe: the bitrate\'s keyframes are ' +
+    'the file\'s flags',
 });
 section.id = 'frametypes';
 section.hidden = true;
@@ -137,13 +138,6 @@ function fill(text, video) {
   section.append(paragraph(own(longest === 0 ? 'No B-frames.' :
     `At most ${longest} B-${longest === 1 ? 'frame' : 'frames'} in a row.`,
   'The page\'s own: the longest run of B-frames in display order')));
-
-  const command = document.createElement('code');
-  command.textContent = 'ffprobe -show_frames';
-  const note = paragraph('Each frame\'s type as the decoder gives it, FFmpeg\'s pict_type, checked frame by frame ' +
-    'against ', command, '. An I frame is not always a keyframe: the bitrate\'s keyframes are the file\'s flags.');
-  note.className = 'note';
-  section.append(note);
 }
 
 const count = n => n.toLocaleString('en');

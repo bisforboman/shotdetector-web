@@ -182,7 +182,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
   reloaded and resumed, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
-  threaded bundle), the picture card's crop and colour bars the native run's, any page or worker error failing it;
+  threaded bundle), the picture card's crop and colour bars the native run's, the layout (no hole under a details card, the shots unscrolled up to 15, no red in a lane but the playhead, the run's figures in the first screen, nothing wider than the window) with screenshots at 1280 and 390 px, light and dark, of the demo done, kept and resumed, any page or worker error failing it;
   `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per

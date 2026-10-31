@@ -1,7 +1,7 @@
 // The picture's measures (backlog "Picture measures", decision 2026-10-30-picture-measures.md): every run measures each
 // frame as it reads it (the core's PictureMeter; a split run each range in its worker), and Api's Picture gives them
 // after the run. A lane of the timeline: each frame's luma, its lowest to highest as a band and its mean as a line, the
-// black spans shaded, the colour bars marked, a tick where pixels leave broadcast range (a click on a span plays from
+// black spans hatched, the colour bars marked, a tick where pixels leave broadcast range (a click on a span plays from
 // its start). A card with the numbers. They are FFmpeg's figures, checked frame by frame against its signalstats,
 // blackdetect and cropdetect, exactly (README, Checks): the card's mark says "measured". The colour bars are found by
 // their definition (no FFmpeg filter finds them), checked on samples made with FFmpeg's smptebars and smptehdbars; what
@@ -10,7 +10,7 @@ import { call, card, on } from '../app.js';
 import { lane, seek, timecode, x } from '../timeline.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
-const BAND = 0.15; // the out-of-range ticks' share of the lane's height, at its bottom
+const BAND = 0.2; // the out-of-range ticks' share of the lane's height, at its bottom
 
 let picture = null; // the last run's Picture() JSON, with the video it is for
 let opened = null;  // the opened file's YuvVideo
@@ -19,7 +19,8 @@ let asked = 0;      // how many runs began: a Picture() answered after a new run
 const section = card('Picture', {
   mark: 'measured',
   markTitle: 'The core\'s measures of every frame the run read: each checked frame by frame against FFmpeg\'s ' +
-    'signalstats, blackdetect and cropdetect, exactly; the colour bars by their definition',
+    'signalstats, blackdetect and cropdetect, exactly; the colour bars by their definition. Times rounded to the ' +
+    'second here, exact in each line\'s tooltip and on the timeline',
 });
 section.id = 'picture';
 section.hidden = true;
@@ -36,8 +37,8 @@ const pictureLane = lane('Picture', track => {
 pictureLane.track.classList.add('picture');
 pictureLane.label.classList.add('picture');
 pictureLane.label.title = 'Each frame\'s luma (signalstats\' YMIN to YMAX as a band, YAVG as a line, 0 to 255), the ' +
-  'black spans (blackdetect) shaded, the colour bars marked, a tick at the bottom where pixels are out of broadcast ' +
-  'range (BRNG)';
+  'black spans (blackdetect) hatched, the colour bars marked, a tick at the bottom where pixels are out of broadcast ' +
+  'range (BRNG), as tall as the share of the frame out of range on a log scale (0.01% to all of it)';
 pictureLane.show(false);
 
 // The lane's points as an SVG over the run's frames, in x()'s percentages: x is the point, y the luma from 255 (top)
@@ -56,11 +57,15 @@ function svg({ frames, points: { framesPerPoint, min, mean, max, brng } }, secon
   let line = '';
   for (let i = 0; i < n; i++) line += `${i === 0 ? 'M' : 'L'}${i + 0.5} ${y(mean[i])}`;
   let ticks = '';
-  for (let i = 0; i < n; i++) if (brng[i] > 0) ticks += `M${i + 0.5} ${1 - BAND}V1`;
+  for (let i = 0; i < n; i++) if (brng[i] > 0) ticks += `M${i + 0.5} ${(1 - BAND * share(brng[i])).toFixed(4)}V1`;
   s.append(path('levels', `${band}Z`), path('mean', line), path('brng', ticks));
   if (framesPerPoint > 1) s.dataset.framesPerPoint = framesPerPoint;
   return s;
 }
+
+// An out-of-range tick's height in the band: the share of the frame out of range on a log scale, a hundredth of a percent
+// (or less) a tenth of the band, the whole frame all of it, so that a few pixels show and a frame half out stands out.
+const share = r => Math.min(Math.max((Math.log10(r) + 4) / 4, 0.1), 1);
 
 function path(kind, d) {
   const p = document.createElementNS(SVG, 'path');
@@ -178,11 +183,6 @@ function fill({ summary: p, video }) {
     section.append(paragraph(`Colour bars: ${at(s.firstFrame)} to ${at(s.endFrame)}`,
       `Frames ${s.firstFrame + 1} to ${s.endFrame}, ${timecode(seconds(s.firstFrame))} to ${timecode(seconds(s.endFrame))}`));
   }
-
-  const note = paragraph('Measured: every frame the run read, FFmpeg\'s figures exactly; times rounded to the second ' +
-    'here, exact in each one\'s tooltip and on the timeline.');
-  note.className = 'note';
-  section.append(note);
 }
 
 const count = n => n.toLocaleString('en');

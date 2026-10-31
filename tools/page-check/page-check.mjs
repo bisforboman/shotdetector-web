@@ -24,7 +24,9 @@
 //   8. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
-// Screenshots of the stopped run shown again after the reload and of its resume go to <out>.
+// The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
+// (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
+// first screen) and shot at 1280 and 390 px, light and dark, into <out>.
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there; the frame types' card (panels/frametypes.js) the counts of ffprobe's pict_type
 // as the native check wrote them, and its lane is there.
@@ -160,14 +162,14 @@ async function resumedAfterReload(page, what, frames, run, settle, threads) {
     fail(`${what}: after the reload, not the stopped run at frame ${frames} kept with Resume: ${status}`);
   await compare(page, `${what}, shown again`, 'sintel-trailer.mp4', run, frames);
   await keptCards(page, `${what}, shown again`, frames);
-  await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.kept.png`), fullPage: true });
+  await looks(page, `${what}, shown again`, `${what.replace(/\W+/g, '-')}.kept`);
   await page.click('#resume');
   const done = await finished(page, `${what}, resumed`);
   if (done === null) return;
   if (!resumedAt(done, frames) || THREADED.test(done) !== threads) fail(`${what}: resumed, the status says ${done}`);
   await realTime(page, `${what}, resumed`, done);
   await compare(page, `${what}, resumed`, 'sintel-trailer.mp4', run);
-  await page.screenshot({ path: join(outDir, `${what.replace(/\W+/g, '-')}.resumed.png`), fullPage: true });
+  await looks(page, `${what}, resumed`, `${what.replace(/\W+/g, '-')}.resumed`);
   if (await page.isVisible('#resume')) fail(`${what}: finished, Resume is still offered`);
 }
 
@@ -210,6 +212,84 @@ async function keptCards(page, what, frames) {
   if (forget[0] !== 'rgba(0, 0, 0, 0)' || forget[1] === detect[1] || forget[1] === resume[1])
     fail(`${what}: Forget is styled as Detect or Resume: ${forget} against ${detect} and ${resume}`);
   console.log(`${what}: the sound measured, the bitrate and the statistics of the ${frames} frames read, Forget quiet`);
+}
+
+// The page's layout once a run is shown (backlog "The page's layout and styling"), at 1280x800 in light: no card in the
+// details with more than about 100 px of empty height under it (the other column's longer); every shot's row in view
+// of the shots card, no inner scroll, at 15 shots or fewer; no red in a lane (the timeline's tracks: their elements'
+// colours, the SVGs' strokes and fills, the canvases' pixels) but the playhead's; the run card's figures in the first
+// screen. Then the page as a visitor sees it, at 1280x800 and 390x844, light and dark: <out>/<name>.<width>.<scheme>.png,
+// nothing in it wider than the window or than its card.
+const VIEWS = [[1280, 800], [390, 844]];
+async function looks(page, what, name) {
+  const size = page.viewportSize();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // The stills and the lanes' redraws at the new width.
+  await page.waitForTimeout(1000);
+  const m = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#details > .card')].filter(c => !c.hidden).map(c => c.getBoundingClientRect());
+    let hole = 0;
+    for (const c of cards) {
+      // The cards beside this one (the other column), and how far the lowest of them goes below it.
+      const beside = cards.filter(o => Math.abs(o.left - c.left) > 1 && o.top < c.bottom && o.bottom > c.top);
+      const below = cards.some(o => Math.abs(o.left - c.left) <= 1 && o.top >= c.bottom - 1);
+      if (!below && beside.length > 0) hole = Math.max(hole, Math.max(...beside.map(o => o.bottom)) - c.bottom);
+    }
+    const box = document.getElementById('shots-card');
+    const rows = document.querySelectorAll('#shots tbody tr').length;
+    // A colour's red: a hue within 20 degrees of red, saturated and neither near black nor white, not see-through.
+    const red = (r, g, b, a = 1) => {
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+      if (a < 0.15 || d < 0.25 || l < 0.15 || l > 0.9) return false;
+      const h = max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+      return (h + 360) % 360 < 20 || (h + 360) % 360 > 340;
+    };
+    const colours = text => [...text.matchAll(/rgba?\(([^)]*)\)|color\(srgb ([^)]*)\)/g)].map(m => m[1]
+      ? m[1].split(/[ ,/]+/).filter(Boolean).map((v, i) => i < 3 ? Number(v) / 255 : Number(v))
+      : m[2].split(/[ /]+/).filter(Boolean).map(Number));
+    const reds = new Set();
+    for (const e of document.querySelectorAll('#timeline .track, #timeline .track *')) {
+      const st = getComputedStyle(e);
+      for (const prop of ['color', 'backgroundColor', 'backgroundImage', 'borderLeftColor', 'borderTopColor', 'fill', 'stroke']) {
+        // A colour that paints nothing: text in an element without text, a border of no width, an SVG paint of none.
+        if (prop === 'color' && !e.textContent.trim() || prop.startsWith('border') && parseFloat(st[prop.replace('Color', 'Width')]) === 0 ||
+          (prop === 'fill' || prop === 'stroke') && !(e instanceof SVGElement)) continue;
+        if (colours(st[prop]).some(c => red(...c))) reds.add(`${e.className.baseVal ?? e.className} ${prop} ${st[prop]}`);
+      }
+      if (e instanceof HTMLCanvasElement && e.width > 0 && e.height > 0) {
+        const px = e.getContext('2d').getImageData(0, 0, e.width, e.height).data;
+        for (let i = 0; i < px.length; i += 4) {
+          if (red(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255, px[i + 3] / 255)) { reds.add(`canvas ${e.parentElement.className}`); break; }
+        }
+      }
+    }
+    const figures = document.querySelector('#run .figures')?.getBoundingClientRect();
+    return { hole: Math.round(hole), rows, scroll: box.scrollHeight - box.clientHeight, reds: [...reds],
+      figures: figures ? Math.round(figures.bottom) : null };
+  });
+  if (m.hole > 100) fail(`${what}: a details card has ${m.hole} px of empty height under it`);
+  if (m.rows <= 15 && m.scroll > 0) fail(`${what}: the shots card scrolls ${m.scroll} px for ${m.rows} rows`);
+  if (m.reds.length > 0) fail(`${what}: red in a lane: ${m.reds.join('; ')}`);
+  if (m.figures === null || m.figures > 800) fail(`${what}: the run card's figures end at ${m.figures} px, below the fold`);
+  console.log(`${what}: ${m.hole} px at most under a details card, ${m.rows} shot rows unscrolled, no red in a lane, ` +
+    `the run's figures down to ${m.figures} px`);
+  for (const [width, height] of VIEWS) {
+    for (const scheme of ['light', 'dark']) {
+      await page.setViewportSize({ width, height });
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(outDir, `${name}.${width}.${scheme}.png`), fullPage: true });
+      // Nothing wider than the window, nor than its card (the shots table at phone width).
+      const wide = await page.evaluate(() => [document.documentElement, ...document.querySelectorAll('.card')]
+        .filter(e => e.offsetParent !== null || e === document.documentElement)
+        .filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.id || e.tagName));
+      if (scheme === 'light' && wide.length > 0) fail(`${what}: wider than the window or its card at ${width} px: ${wide.join(', ')}`);
+    }
+  }
+  await page.setViewportSize(size ?? { width: 1280, height: 720 });
+  await page.emulateMedia({ colorScheme: null });
 }
 
 // The page cross-origin isolated: on a first visit, once sw.js has taken over and the page has reloaded (app.js, serve).
@@ -357,7 +437,7 @@ async function picture(page, what, file) {
   }
   const p = JSON.parse(readFileSync(native, 'utf8'));
   await page.waitForFunction(() => document.getElementById('picture')?.hidden === false &&
-    document.querySelector('#picture .note') !== null, null, { timeout: 60 * 1000 }).catch(() => {});
+    document.querySelector('#picture h3') !== null, null, { timeout: 60 * 1000 }).catch(() => {});
   const text = await page.textContent('#picture') ?? '';
   const crop = p.crop ? `crop=${p.crop.w}:${p.crop.h}:${p.crop.x}:${p.crop.y}` : 'Too few frames for cropdetect.';
   const bars = (text.match(/Colour bars: \d/g) ?? []).length;
@@ -382,7 +462,7 @@ async function frameTypes(page, what, file) {
   const types = readFileSync(native, 'utf8'), n = t => (types.split(t).length - 1).toLocaleString('en');
   const expected = `${types.length.toLocaleString('en')} frames: ${n('I')} I, ${n('P')} P, ${n('B')} B`;
   await page.waitForFunction(() => document.getElementById('frametypes')?.hidden === false &&
-    document.querySelector('#frametypes .note') !== null, null, { timeout: 60 * 1000 }).catch(() => {});
+    document.querySelector('#frametypes p') !== null, null, { timeout: 60 * 1000 }).catch(() => {});
   const text = await page.textContent('#frametypes') ?? '';
   const lane = await page.locator('.track.frametypes canvas').count();
   if (!text.includes(expected) || lane !== 1)
@@ -444,6 +524,7 @@ try {
     await page.waitForFunction(() => !document.getElementById('status-text').textContent.includes('measuring the sound'),
       null, { timeout: 5 * 60 * 1000 });
     console.log(`${what}: the sound measured`);
+    await looks(page, what, 'the-demo.done');
 
     // Detected again, paused and stopped while paused: the result for the frames read up to the pause.
     const again = 'the demo stopped while paused';
