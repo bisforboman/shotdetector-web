@@ -33,6 +33,24 @@ panel; their core parts are "Audio in the core" under "Now" and "Packets in the 
 derives for display is labelled as the page's own; the CSVs, and the shots as JSON and HTML, stay the only output the
 exactness check speaks for.
 
+### Real-world check
+
+- Real-world check: the core and the page on real files
+  - Why: the generated samples each isolate one thing, and real files mix them: long camera and broadcast-like H.264,
+    phone videos (rotation, a variable rate), fragmented and interlaced material, AAC audio, and old encoders' quirks.
+    Results must equal ShotDetector's FFmpeg path byte for byte on them too, as NativeCheck and app-check do on the
+    samples (the owner's choice, 2026-10-31; shotdetector's own is its `realworld.yml` and `tools/realworld.py`).
+  - Where: `tools/realworld.sh` (the files, pinned by SHA-256: Blender Foundation films, CC-BY, from
+    download.blender.org, the one host the cloud sandbox reaches, and variants of them the pinned FFmpeg makes:
+    fragmented, rotated, 1080i25 MBAFF), `.github/workflows/realworld.yml` (nightly and by hand, never on a pull
+    request, not required: the owner's choice, 2026-10-31), `tools/app-check.mjs --light` (the AOT bundle's default
+    and every-detector runs, whole and split, on files over three minutes), `tools/ci-scope.sh` (the two new files
+    need no pull-request check).
+  - Done when: realworld.yml's groups pass, or what they find is a row here or an ask upstream; README "Checks" says
+    what it runs.
+  - Not: no file in the repository, none that isn't openly licensed; no change to shotdetector.
+  - Status: In progress (2026-10-31)
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
