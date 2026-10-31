@@ -28,8 +28,10 @@ Supported so far: **8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constan
 recording's: every frame at its own pts, as FFmpeg's path takes it, given up front where the rate varies), upright or turned a
 quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
 the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
-ShotDetector does by default: deinterlacing (`--deinterlace auto`) waits on ShotDetector and ManagedCodecs, and field
-pictures (PAFF) have no sample to check them on (decision `docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
+ShotDetector does by default, or deinterlaced by yadif when the page's Deinterlace option says so (`auto`: where the
+field order says interlaced, as `--deinterlace auto`; on one worker, not resumed, until ShotDetector's ranges take it,
+shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
+`docs/decisions/2026-10-30-interlaced.md`). **And 4:2:0 MJPEG
 in an AVI** (yuvj420p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:2:2/4:4:4 or 10-bit, a rotation that isn't a
@@ -616,8 +618,10 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
 
 - **native** (`tools/NativeCheck`): for each sample, first the core library's `YuvVideo` against FFmpeg's description
   of the file (FrameReader's probe and first decoded frame, as ShotDetector's own FrameInputTests builds it), field by
-  field; then each detector (adaptive, content, threshold, histogram, hash, and all five in one run, with stats) on
-  (a) the core library and (b) ShotDetector's `Detect(path)` with FFmpeg in-process and the same FastYuv converter:
+  field; then each detector (adaptive, content, threshold, histogram, hash, and all five in one run, with stats, then
+  deinterlaced: adaptive with `--deinterlace auto`, all five with `on`) on
+  (a) the core library (FastYuv's `Yadif` deinterlacing) and (b) ShotDetector's `Detect(path)` with FFmpeg in-process
+  (FFmpeg's yadif filter) and the same FastYuv converter:
   frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV, the shots as JSON and HTML
   (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) and the editors' timeline files
   (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes, both results given the sample's name) must
@@ -628,7 +632,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
   (`PictureMeasures.Types`, ManagedCodecs' `VideoFrame.PictureType`) against `ffprobe -show_entries
   frame=pict_type`, frame by frame in display order, an MJPEG sample's all I, whole, on four decoder threads and in
-  ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each sample's run with all five detectors split
+  ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each frame's interlaced and
+  top-field-first flags, which set yadif's parity, against `ffprobe -show_entries frame=interlaced_frame,top_field_first`
+  (`FieldCheck.cs`); each sample's run with all five detectors split
   into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
   the same run decoded on four threads (`VideoInput.DecoderThreads`, as the page's threaded runtime decodes), whole, in
@@ -721,7 +727,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
   every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
-  (a quarter turn) and `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times); "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
+  (a quarter turn) and `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times); `interlaced-tff-320x240-25.mp4` with
+  Deinterlace auto, on threads and asked for two workers (it runs on one, the ranges lane saying why), its downloads
+  the native check's `deinterlace-auto` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
   in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on
@@ -764,7 +772,7 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
   - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js`,
     `blob-write.js` and `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
     All of it is: native on every sample;
-  wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the six runs, the audio pass, the
+  wasm interpreted on one short sample with audio (`with-audio-320x240-25.mp4`: the nine runs, the audio pass, the
   shots told and progress), plus every file to refuse and every file without AAC, with the strict "no FFmpeg assembly
   loaded at all"; wasm AOT, the build the page deploys, on every sample, and the page in Chromium on that bundle. About 7 minutes (7 min 21 s on 2026-10-27, with
   the default and all-detector runs also split into ranges and stopped there; 5 min 21 s on 2026-10-26).

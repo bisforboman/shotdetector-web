@@ -1094,3 +1094,30 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the Frame Number column is the time's at the average rate; the page puts frames at their own times
     (`frameSeconds`: the ranges, picture and frame types lanes, the status), says "on average" of the rate, and the
     page check picks the sample on threads and on two workers, the second range's band at its frame's pts)
+
+- Deinterlacing interlaced H.264
+  - Why: broadcast material is interlaced; MBAFF video is detected on its woven frames since the "Interlaced H.264"
+    row, as ShotDetector's default, but `--deinterlace auto` (yadif) is the setting for it, and FFmpeg's field order
+    belongs in the description (decision [2026-10-30-interlaced.md](decisions/2026-10-30-interlaced.md)).
+  - Where: first upstream, [shotdetector#614](https://github.com/bisforboman/shotdetector/issues/614) (`YuvVideo.FieldOrder`,
+    `YuvFrame.Interlaced` and `TopFieldFirst`, `Deinterlace` with FastYuv's `Yadif` on frames from the caller) and
+    [ManagedCodecs#225](https://github.com/bisforboman/ManagedCodecs/issues/225) (each frame's interlacing and the field
+    order as FFmpeg reports them, and whether a frame was two field pictures); then here: `Mp4Input` describes the field
+    order (NativeCheck against ffprobe's `field_order` and `-show_frames`' `interlaced_frame,top_field_first`), a
+    deinterlace option on the page (on one worker: ShotDetector's ranges refuse `Deinterlace`), the runs with it in
+    `tools/Shared/Runs.cs`. Field pictures with a sample muxed one frame a sample (JM's, as ManagedCodecs', put one field
+    in each, which the constant-rate check refuses), or refused by ManagedCodecs#225's flag.
+  - Done when: the native, wasm and page checks pass byte for byte on the interlaced samples with deinterlacing on
+    `auto`, and the field order is checked against ffprobe.
+  - Not: no yadif or slice-header parsing here (CLAUDE.md: report it there, don't work around it).
+  - Status: Done (2026-10-31: ShotDetector 3.23.0's `Yadif`, `YuvVideo.FieldOrder`, `YuvFrame.Interlaced` and
+    `TopFieldFirst` (shotdetector#614, #619) and ManagedCodecs 0.4.0's frame flags (#225); `Mp4Input` describes the
+    field order (`H264Decoder.FieldOrder`), the frames carry FFmpeg's interlaced_frame and top_field_first, FastYuv's
+    `Yadif` goes with the converter, frames coded as field pictures are refused (`IsCodedAsFields`; no sample); a new
+    sample, the top-field-first one without its SEI (the field order from the field order counts), checked with
+    trace_headers and ffprobe; Runs.cs's deinterlace auto and on runs on every sample, the field order and every
+    frame's flags (`FieldCheck.cs`) against FFmpeg's, the runs against the file path with FFmpeg's yadif filter, byte
+    for byte natively and on wasm; the page's Deinterlace option (off, auto, on), a deinterlaced run detected whole on
+    one worker (ShotDetector's ranges refuse yadif, shotdetector#628), the ranges lane saying why where it would split
+    and a stopped one saying it isn't kept to resume; the page check picks the top-field-first sample with auto on
+    threads and asked for two workers; the About card gives the field order)
