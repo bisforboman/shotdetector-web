@@ -47,7 +47,7 @@
 //                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
 //                       title (MARKS), markTitle how they are checked, the chip's tooltip; a row of another kind says
 //                       so in its own tooltip.
-import { RESULTS, ThreadedRunner, threadsUsable } from './threads.js';
+import { RESULTS, ThreadedRunner, threadsUsable, warm } from './threads.js';
 import { secondsOf, setDuration, timecode } from './timeline.js';
 
 // The estimate before a run: frames per second scale with picture size (pixels per second about constant). Until this
@@ -366,6 +366,8 @@ async function choose(chosen) {
   // The landing folds into the toolbar.
   document.body.classList.add('picked');
   file = chosen;
+  // A one-worker run goes on threads: their runtime starts now, not at Detect (threads.js, warm).
+  if (threadCount() > 1) warm();
   if (video.src) URL.revokeObjectURL(video.src);
   unplayable.hidden = true;
   video.hidden = false;
@@ -1029,6 +1031,8 @@ pauseButton.onclick = pauseOrResume;
 // The demo clip, next to the page (pages.yml), run as if it had been picked.
 demoButton.onclick = async () => {
   demoButton.disabled = true;
+  // The threaded runtime starts while the clip downloads (threads.js, warm).
+  if (threadCount() > 1) warm();
   say('Downloading the demo clip…');
   try {
     const response = await fetch('demo/sintel-trailer.mp4');

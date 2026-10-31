@@ -238,6 +238,9 @@ carries two bundles: `_framework/`, today's, in its workers (the page's own, a s
 runs the exports on a thread of its own and the run on its thread pool (`Host.cs`), and the file is read in slices of a
 megabyte with `Blob.arrayBuffer()` (the page's thread has no `FileReaderSync`), each one waited for on the pool. The
 page stays responsive, the shots come as they are found, and pause, resume and stop work as on the page's worker.
+The threaded runtime starts when a file is picked or the demo is fetched, not at Detect: its 31 files (5.6 MB
+gzipped) and its start had made a first run's first progress 1.1 to 1.6 s later than on the page's worker (backlog
+"Performance pass on the page"); a file that then runs split has fetched them for nothing.
 A split run doesn't use threads: its workers already keep the cores busy. The decoder gets as many threads as
 `navigator.hardwareConcurrency` says the machine has cores, at most 4 (6 did no better on 4 cores; `MOST_THREADS` at the
 top of `app.js`; `?threads=N` in the page's address forces N, 0 or 1 meaning the page's worker).
