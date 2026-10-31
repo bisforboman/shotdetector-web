@@ -545,11 +545,14 @@ async function pickedAvi() {
     await expectFrame('at the start', 0);
     // A click on the timeline at 60% of its width: the frame the playhead is in (the page's own times, frames over the
     // rate as the axis has them).
-    const box = await page.locator('#timeline .tracks').boundingBox();
-    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height / 2);
-    const at = Number(await page.locator('#timeline .tracks').getAttribute('aria-valuenow'));
+    const tracks = page.locator('#timeline .tracks');
+    await tracks.scrollIntoViewIfNeeded();
+    const box = await tracks.boundingBox();
+    await tracks.click({ position: { x: box.width * 0.6, y: box.height / 2 } });
+    const at = Number(await tracks.getAttribute('aria-valuenow'));
+    if (!(at > 0)) fail(`${what}: a click on the timeline left the playhead at ${at} s`);
     await expectFrame(`clicked at ${at} s`, Math.floor(at * num / den + 1e-6));
-    // A shot's row (the third, else the last): its first frame, the scenes CSV's start frame.
+    // A shot's row (the third, else the last): its first frame, the scenes CSV's start frame (counted from 1).
     const rows = await page.locator('#shots tbody tr').count();
     const row = page.locator('#shots tbody tr').nth(Math.min(2, rows - 1));
     const start = await row.locator('td').nth(2).textContent();
@@ -558,7 +561,7 @@ async function pickedAvi() {
     const shot = scenes.find(cells => cells[2] === start);
     await row.click();
     if (!shot) fail(`${what}: no shot in the scenes CSV starts at ${start}`);
-    else await expectFrame(`the shot from ${start}`, Number(shot[1]));
+    else await expectFrame(`the shot from ${start}`, Number(shot[1]) - 1);
     // A still per shot, every one drawn from the file's JPEGs (none "didn't show").
     await page.waitForFunction(n => document.querySelectorAll('#shots td.still canvas').length >= n, rows,
       { timeout: 30000 }).catch(() => {});
