@@ -121,10 +121,14 @@ function fill(text, video) {
   for (const t of text) counts[t] = (counts[t] ?? 0) + 1;
   const n = t => counts[t] ?? 0;
   const others = text.length - n('I') - n('P') - n('B');
+  // The counts, the core's; then the page's reading: the longest run of B-frames, and the frames from one I frame to
+  // the next.
+  let longest = 0;
+  for (let f = 0, run = 0; f < text.length; f++) longest = Math.max(longest, run = text[f] === 'B' ? run + 1 : 0);
   section.append(paragraph(`${count(text.length)} frames: ${count(n('I'))} I, ${count(n('P'))} P, ${count(n('B'))} B` +
-    `${others > 0 ? `, ${count(others)} of other types` : ''}.`));
-
-  // The page's reading: the frames from one I frame to the next, and the longest run of B-frames.
+    `${others > 0 ? `, ${count(others)} of other types` : ''}; `,
+  own(longest === 0 ? 'no B-frames' : `at most ${longest} B in a row`,
+    'The page\'s own: the longest run of B-frames in display order'), '.'));
   const starts = [];
   for (let f = 0; f < text.length; f++) if (text[f] === 'I') starts.push(f);
   if (starts.length > 1) {
@@ -133,11 +137,6 @@ function fill(text, video) {
       `(${seconds(video, spacing).toFixed(2)} s) on average.`,
     'The page\'s own: the frames from the first I frame to the last over the I frames between them')));
   }
-  let longest = 0;
-  for (let f = 0, run = 0; f < text.length; f++) longest = Math.max(longest, run = text[f] === 'B' ? run + 1 : 0);
-  section.append(paragraph(own(longest === 0 ? 'No B-frames.' :
-    `At most ${longest} B-${longest === 1 ? 'frame' : 'frames'} in a row.`,
-  'The page\'s own: the longest run of B-frames in display order')));
 }
 
 const count = n => n.toLocaleString('en');
