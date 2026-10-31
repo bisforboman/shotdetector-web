@@ -1155,8 +1155,11 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
       116 ms).
     - After: 29, each once, 5.3 MB, interactive at 596 and 592 ms (isolated at 109 and 106 ms): no later, a little
       sooner, as the reloaded document's runtime no longer shares the line with the aborted one's.
-    - The live site before the deploy, from the same runner: 48 requests of the bundle's files on a first visit, 19
-      files twice, interactive at a median of 812 ms. After the deploy: see below.
+    - The live site from GitHub's runner, before the deploy (run 41225735347, five visits): 48 requests of the bundle's
+      files on a first visit, 19 files twice in four visits of five, interactive at a median of 812 ms (696 to 970).
+      After it (#103 deployed; run 41231705579, ten visits): 29, each once, in every visit, 5.2 MB, interactive at a
+      median of 827 ms (784 to 969 but two at 1,379 and 1,603), the same within the spread; isolated at 283 ms against
+      163, the network's: the reload comes before the worker's runtime starts either way. A revisit 574 ms.
   - The loader's `no-cache` (`dotnet.js` asks for each file with `cache: 'no-cache'` unless `disableNoCacheFetch`), a
     revisit within Pages' ten minutes: 26 revalidations, all 304, interactive at a median of 531 ms; with
     `withConfig({ disableNoCacheFetch: true })` in `worker.js` none, 531 ms; with 40 ms added to each answer (a slower
