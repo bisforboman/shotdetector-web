@@ -157,12 +157,14 @@ public abstract partial class VideoInput
     /// </summary>
     IEnumerable<(YuvFrame Frame, PictureType Type)> Frames(int fromPacket)
     {
+        var format = DecodedFormat(Video.PixelFormat);
         foreach (var frame in DecodedFrames(fromPacket))
         {
             using (frame)
             {
-                if (frame.Format != PixelFormat.Yuv420P)
-                    throw new UnsupportedVideoException($"A frame came out as {frame.Format}: only 8-bit 4:2:0 is supported so far.");
+                // A stream whose format changes midway (an SPS of another profile, a JPEG of other sampling).
+                if (frame.Format != format)
+                    throw new UnsupportedVideoException($"A frame came out as {frame.Format}, not {format} as the first: a format that changes midway is not supported.");
                 if ((frame.Width, frame.Height) != (Video.Width, Video.Height))
                     throw new UnsupportedVideoException($"The frame size changes ({Video.Width}x{Video.Height} to {frame.Width}x{frame.Height}): not supported.");
                 if (frame.IsCodedAsFields)
@@ -170,7 +172,8 @@ public abstract partial class VideoInput
                 var p = frame.Planes;
                 var o = frame.Offsets;
                 var s = frame.Strides;
-                // FFmpeg's interlaced_frame and top_field_first, which set yadif's parity when the run deinterlaces.
+                // FFmpeg's interlaced_frame and top_field_first, which set yadif's parity when the run deinterlaces. A
+                // 10-bit frame's planes are 16-bit little-endian words, its strides in bytes: YuvFrame's layout as is.
                 var yuv = new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2])
                 {
                     Pts = frame.Pts,
@@ -181,6 +184,15 @@ public abstract partial class VideoInput
             }
         }
     }
+
+    /// <summary>ManagedCodecs' layout of the frames of FFmpeg's pixel format <paramref name="pixelFormat"/> (the video's).</summary>
+    private protected static PixelFormat DecodedFormat(string pixelFormat) => pixelFormat switch
+    {
+        "yuv420p" or "yuvj420p" => PixelFormat.Yuv420P,
+        "yuv422p" or "yuvj422p" => PixelFormat.Yuv422P,
+        "yuv420p10le" => PixelFormat.Yuv420P10,
+        _ => throw new UnsupportedVideoException($"The pixel format {pixelFormat} is not supported."),
+    };
 
     /// <summary>
     /// Why a frame coded as two field pictures (PAFF) is refused: no encoder at hand makes a sample to check it on

@@ -11,7 +11,7 @@ namespace ShotDetectorWeb;
 /// <see cref="SpsInfo"/>) and ManagedCodecs' <see cref="Mp4Demuxer"/>, decoded by its <see cref="H264Decoder"/>.
 /// </summary>
 /// <remarks>
-/// So far: 8-bit 4:2:0 H.264 in an MP4, fragmented or not, at a constant or variable frame rate (every frame's pts given
+/// So far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 (High, High 4:2:2, High 10) in an MP4, fragmented or not, at a constant or variable frame rate (every frame's pts given
 /// up front, <see cref="YuvVideo.FrameTimestamps"/>, where the rate varies), upright or turned by
 /// a quarter turn (<see cref="YuvVideo.Rotation"/>, the frames as decoded): progressive, or
 /// interlaced coded as MBAFF frames (its field order and each frame's flags described, for ShotDetector's
@@ -42,10 +42,14 @@ public sealed class Mp4Input : VideoInput
             throw new UnsupportedVideoException("The video track has no samples.");
 
         var sps = SpsInfo.FromAvcConfig(header.AvcConfig.Span);
-        if (sps.ChromaFormatIdc != 1 || sps.BitDepthLuma != 8 || sps.BitDepthChroma != 8)
+        // The formats ShotDetector's frame source takes (3.24.0): 8-bit 4:2:0 and 4:2:2, 10-bit 4:2:0.
+        bool supported = sps.BitDepthLuma == sps.BitDepthChroma &&
+            (sps.ChromaFormatIdc, sps.BitDepthLuma) is (1, 8) or (2, 8) or (1, 10);
+        if (!supported)
         {
-            string chroma = sps.ChromaFormatIdc switch { 0 => "4:0:0", 1 => "4:2:0", 2 => "4:2:2", _ => "4:4:4" };
-            throw new UnsupportedVideoException($"The video is {chroma} at {sps.BitDepthLuma} bits: only 8-bit 4:2:0 is supported so far.");
+            string chroma = sps.ChromaFormatIdc switch { 0 => "4:0:0 (greyscale)", 1 => "4:2:0", 2 => "4:2:2", _ => "4:4:4" };
+            string depth = sps.BitDepthLuma == sps.BitDepthChroma ? $"{sps.BitDepthLuma} bits" : $"{sps.BitDepthLuma} bits (luma), {sps.BitDepthChroma} (chroma)";
+            throw new UnsupportedVideoException($"The video is {chroma} at {depth}: only 8-bit 4:2:0 and 4:2:2, and 10-bit 4:2:0, are supported so far.");
         }
 
         // One demuxer for the first frame, the audio's description and the format's duration, which needs both tracks:
@@ -82,7 +86,8 @@ public sealed class Mp4Input : VideoInput
         }
 
         // The decoder's colour tags: the SPS's VUI where it has them, else the container's 'colr' box (FFmpeg's h264
-        // decoder overrides the container's values with the SPS's). Full range makes FFmpeg's h264 decoder output yuvj420p.
+        // decoder overrides the container's values with the SPS's). Full range makes FFmpeg's h264 decoder output
+        // yuvj420p or yuvj422p at 8 bits; at 10 bits there is no such format, only the range tag.
         bool fullRange = sps.VideoSignalTypePresent ? sps.FullRange : header.ColrFullRange ?? false;
         int? matrix = sps.MatrixCoefficients ?? header.ColrMatrix;
         string colorSpace = matrix is int m && m < MatrixNames.Length ? MatrixNames[m] : "";
@@ -94,9 +99,16 @@ public sealed class Mp4Input : VideoInput
             Width = width,
             Height = height,
             FrameRate = fps,
-            PixelFormat = fullRange ? "yuvj420p" : "yuv420p",
+            PixelFormat = (sps.ChromaFormatIdc, sps.BitDepthLuma) switch
+            {
+                (1, 10) => "yuv420p10le",
+                (2, _) => fullRange ? "yuvj422p" : "yuv422p",
+                _ => fullRange ? "yuvj420p" : "yuv420p",
+            },
             ColorSpace = colorSpace,
             FullRange = fullRange,
+            // The SPS's chroma location (FFmpeg's h264 decoder gives each frame the SPS's; no MP4 box carries one).
+            ChromaLocation = ChromaLocationName(sps.ChromaLocation),
             TimeBase = timeBase,
             StartPts = firstPts,
             // FFmpeg's nb_frames is the 'stts' count alone: unknown with an empty 'moov', short of the fragments' with
@@ -110,6 +122,12 @@ public sealed class Mp4Input : VideoInput
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
         };
     }
+
+    // FFmpeg's names of the chroma locations (libavutil's av_chroma_location_name); unspecified (0) is null, as ffprobe's
+    // "unspecified" is to FrameReader.
+    static readonly string?[] ChromaLocations = [null, "left", "center", "topleft", "top", "bottomleft", "bottom"];
+
+    static string? ChromaLocationName(int location) => location >= 0 && location < ChromaLocations.Length ? ChromaLocations[location] : null;
 
     /// <summary>
     /// The display rotation as ShotDetector's file path takes it from FFmpeg (VideoReader: the display matrix's angle
