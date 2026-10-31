@@ -30,9 +30,11 @@
 // After each whole run (1 to 3), the picture's card (panels/picture.js) shows the native check's cropdetect line and
 // colour bars, and its lane is there; the frame types' card (panels/frametypes.js) the counts of ffprobe's pict_type
 // as the native check wrote them, and its lane is there.
+//   9. each more sample (a rotated video, ...: what the first sample doesn't have) picked on threads and split across
+//      two workers, the same downloads, picture and frame types as 1 and 2.
 // Any error on the page, in its workers or a failed request fails the check.
 //
-// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>
+// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native> [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -42,12 +44,12 @@ import { basename, extname, join, normalize, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
 const at = args.indexOf('--native');
-if (at < 0 || args.length !== 6) {
-  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native>');
+if (at < 0 || args.length < 6) {
+  console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> --native <out/native> [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
-const [root, outDir, sample, demo] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
+const [root, outDir, sample, demo, ...more] = args.filter((_, i) => i !== at && i !== at + 1).map(a => resolve(a));
 mkdirSync(outDir, { recursive: true });
 
 let playwright;
@@ -332,7 +334,7 @@ async function finished(page, what, expected = 'done') {
 // native run's rows up to that frame, but for the adaptive ratio of the last w frames, None (its window after them
 // isn't read), as app-check.mjs's checkStopped; its scenes CSV's last shot ending there, and its JSON and HTML the
 // scenes CSV's shots.
-async function compare(page, what, name, run, stoppedAt = null) {
+async function compare(page, what, name, run, stoppedAt = null, file = name === 'sintel-trailer.mp4' ? demo : sample) {
   let scenes = null; // the downloaded scenes CSV's shots, [start frame, end frame] each
   // The run's card shows its downloads once it has the shots as JSON and HTML, a call or two after 'done' (on threads,
   // to the threaded runner: a little later than to the worker).
@@ -351,7 +353,7 @@ async function compare(page, what, name, run, stoppedAt = null) {
     }
     const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${kind}.${ext}`);
     await download.saveAs(saved);
-    const native = join(nativeDir, `${basename(name === 'sintel-trailer.mp4' ? demo : sample, '.mp4')}.${run}.${kind}.${ext}`);
+    const native = join(nativeDir, `${basename(file, '.mp4')}.${run}.${kind}.${ext}`);
     if (!existsSync(native)) {
       fail(`${what}: no native ${label} ${native} (tools/check.sh native first)`);
     } else if (stoppedAt !== null && kind === 'shots') {
@@ -479,9 +481,9 @@ function report(what, errors) {
   if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
 }
 
-async function picked(query, what) {
+async function picked(query, what, file = sample) {
   const { context, page, errors } = await open(query);
-  await page.setInputFiles('#file', sample);
+  await page.setInputFiles('#file', file);
   await page.click('#detect');
   const run = await page.inputValue('#detector');
   const status = await finished(page, what);
@@ -493,9 +495,9 @@ async function picked(query, what) {
       const bands = await page.locator('.range').count();
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
     }
-    await compare(page, what, basename(sample), run);
-    await picture(page, what, sample);
-    await frameTypes(page, what, sample);
+    await compare(page, what, basename(file), run, null, file);
+    await picture(page, what, file);
+    await frameTypes(page, what, file);
   }
   report(what, errors);
   await context.close();
@@ -505,6 +507,10 @@ try {
   await picked('', `${basename(sample)}, picked`);
   await picked('?threads=0', `${basename(sample)}, the page's worker`);
   await picked('?workers=2', `${basename(sample)}, two workers`);
+  for (const m of more) {
+    await picked('', `${basename(m)}, picked`, m);
+    await picked('?workers=2', `${basename(m)}, two workers`, m);
+  }
 
   const what = 'the demo';
   const { context, page, errors } = await open();
@@ -606,7 +612,8 @@ if (failures.length > 0) {
   console.log(`The page check failed: ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}.`);
   process.exit(1);
 }
-console.log('The page check passed: isolated, picked on threads, on the page\'s worker and split across two workers, ' +
+console.log('The page check passed: isolated, picked on threads, on the page\'s worker and split across two workers ' +
+  `(${[sample, ...more].map(f => basename(f)).join(', ')}), ` +
   'the demo on threads paused and resumed, and offline, the CSVs, JSON and HTML identical to the native run\'s; the ' +
   'demo stopped while paused, the result for the frames read, and resumed across a reload' +
   `${process.env.PAGE_CHECK_FIREFOX === 'skip' ? '' : ' (in Firefox too)'} and split.`);

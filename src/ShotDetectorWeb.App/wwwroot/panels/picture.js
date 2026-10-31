@@ -164,7 +164,9 @@ function fill({ summary: p, video }) {
     'checked against it exactly'));
   if (p.crop === null) section.append(paragraph('Too few frames for cropdetect.'));
   else {
-    const { x1, x2, y1, y2 } = p.crop, w = video.width, h = video.height;
+    // cropdetect's lines are the upright picture's (a rotated video's turned, as FFmpeg's filters see it).
+    const { x1, x2, y1, y2 } = p.crop, turned = Math.abs(video.rotation) % 180 === 90;
+    const [w, h] = turned ? [video.height, video.width] : [video.width, video.height];
     const bars = [['top', y1], ['bottom', h - 1 - y2], ['left', x1], ['right', w - 1 - x2]].filter(([, n]) => n > 0);
     const code = document.createElement('code');
     code.textContent = `crop=${p.crop.w}:${p.crop.h}:${p.crop.x}:${p.crop.y}`;
