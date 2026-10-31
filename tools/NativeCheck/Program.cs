@@ -3,7 +3,7 @@
 // then every detector run on (a) the core library (ManagedCodecs + FastYuv) and (b) ShotDetector's Detect(path) with
 // FFmpeg in-process and the same converter: frame count, frame rate, cuts, scene CSV, stats CSV, the shots as JSON
 // and HTML (Shots.Json, Shots.Html: the page's other downloads) and the editors' timeline files (TimelineFiles: EDL,
-// FCPXML, FCP7 XML, OTIO, QP, each given the sample's file name) must be equal byte for byte. Writes (a)'s files to --out
+// FCPXML, FCP7 XML, OTIO, QP, Aegisub keyframes, each given the sample's file name) must be equal byte for byte. Writes (a)'s files to --out
 // (the wasm check compares its own with them), (b)'s next to them where they differ.
 // Then each sample's video packets against ffprobe's (PacketCheck.cs), whose lines go to --out for the wasm check, its
 // frames' types against ffprobe's pict_type (FrameTypeCheck.cs), whole, on four threads and in ranges, ffprobe's going

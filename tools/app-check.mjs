@@ -129,7 +129,7 @@ const statsText = () => {
 };
 // The editors' timeline files (Api's TimelineFile, the run card's downloads for editors; the core's TimelineFiles): each
 // format and the extension NativeCheck writes it with, the sample's file name given as the page gives the picked file's.
-const TIMELINES = [['edl', 'edl'], ['fcpx', 'fcpxml'], ['fcp7', 'fcp7.xml'], ['otio', 'otio'], ['qp', 'qp']];
+const TIMELINES = [['edl', 'edl'], ['fcpx', 'fcpxml'], ['fcp7', 'fcp7.xml'], ['otio', 'otio'], ['qp', 'qp'], ['keyframes', 'keyframes.txt']];
 let fileName = ''; // the opened sample's
 const timelines = () => TIMELINES.map(([format]) => TimelineFile(format, fileName));
 // The last run's shots as JSON and HTML (Api's ShotsJson and ShotsHtml, the page's downloads beside the CSVs) and its

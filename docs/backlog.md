@@ -39,11 +39,12 @@ exactness check speaks for.
   - Why: editors are the users most likely to come back, and scenedetect's timeline files are what they would use;
     ShotDetector's `Timeline` already writes them byte for byte as scenedetect does, and adds no assembly to the
     bundle (no FFmpeg.AutoGen, +17 KB).
-  - Where: the core's `TimelineFiles` (`Timeline.Edl`, `Fcpx`, `Fcp7`, `Otio`, `Qp` with their defaults, the result
+  - Where: the core's `TimelineFiles` (`Timeline.Edl`, `Fcpx`, `Fcp7`, `Otio`, `Qp`, `Keyframes` with their defaults
+    (keyframes included and the file referred to by its name only: the owner's choices), the result
     given `VideoPath` `/<file name>`), `Api.Timeline.cs`'s `TimelineFile(format, fileName)` with its twin in
     `Api.Threads.cs` and its name in `threads.js`, a "For editors" row of downloads in `panels/run.js`; NativeCheck,
     app-check.mjs (whole, paused, split and resumed runs) and the page check's downloads against `Detect(path)`'s.
-  - Done when: `tools/check.sh native wasm aot page` passes with the five files identical to the native run's on
+  - Done when: `tools/check.sh native wasm aot page` passes with the six files identical to the native run's on
     every sample and run (the page's but for the file's name).
   - Not: YouTube chapters, marker lists or the public launch (parked in the note); no path field (the editor relinks).
   - Status: In progress (2026-10-31)

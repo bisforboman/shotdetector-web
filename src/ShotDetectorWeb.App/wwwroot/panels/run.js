@@ -2,7 +2,7 @@
 // the length read and the options it ran with), and the downloads, the scene and stats CSVs as scenedetect writes them
 // and the shots as ShotDetector's JSON and scenedetect's HTML page (Api's ShotsJson and ShotsHtml, asked for here once
 // the run is done), named after the file; and for editors, the shots in scenedetect's timeline formats (Api's
-// TimelineFile: an EDL, FCPXML, FCP7 XML, OTIO and an x264 QP file), which name the file at the root, as the browser
+// TimelineFile: an EDL, FCPXML, FCP7 XML, OTIO, an x264 QP file and Aegisub keyframes), which name the file at the root, as the browser
 // doesn't know its folder: the editor relinks it. A stopped run's are the result for the part read, and its figures say
 // where it stopped. A run lost with its worker (one that didn't answer a stop) says where it had got to and has no downloads
 // (.NET and the result went with the worker).
@@ -33,6 +33,7 @@ section.insertAdjacentHTML('beforeend', `
     <a id="timeline-fcp7" download>FCP7 XML</a>
     <a id="timeline-otio" download>OTIO</a>
     <a id="timeline-qp" download>QP</a>
+    <a id="timeline-keyframes" download>Keyframes</a>
   </p>`);
 const figures = section.querySelector('.figures'), summary = section.querySelector('#summary');
 const downloads = section.querySelector('.downloads'), editors = section.querySelector('.editors');
@@ -49,6 +50,8 @@ const TIMELINES = [
     '18.5 and later, OpenTimelineIO\'s tools)'],
   ['qp', 'timeline-qp', 'qp', 'text/plain', 'an x264/x265 QP file, a keyframe at each cut, to encode the video so each ' +
     'shot starts on one'],
+  ['keyframes', 'timeline-keyframes', 'keyframes.txt', 'text/plain', 'Aegisub\'s keyframes (format v1), frame 0 and each ' +
+    'cut, for timing subtitles to the cuts'],
 ].map(([format, id, extension, type, what]) => ({ format, link: section.querySelector(`#${id}`), extension, type, what }));
 const RELINK = 'It names the file at the root, as the browser doesn\'t know its folder: relink it in the editor.';
 let shots = [];

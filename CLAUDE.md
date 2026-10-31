@@ -41,7 +41,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   FFmpeg's `pict_type`), `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures from them,
   `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
   (`PictureJson`), which NativeCheck also writes; `TimelineFiles` (a result's shots in scenedetect's timeline formats,
-  ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp` and each one's extension, the
+  ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes` and each one's extension, the
   result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
@@ -130,7 +130,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `StatsCsv()`, picked by the header per detector, against the threshold the run used, the cuts marked, still pictures
   as the page's reading; the CSV read once into typed arrays, drawn decimated to the canvas's width), `waveform.js` (a lane: `Audio()`'s waveform, none without audio, one line
   when not measured; `lane(...).show(false)` hides a lane), `run.js` (a card beside the video: the figures and the downloads, the CSVs and the shots as JSON and HTML, and
-  for editors the EDL, FCPXML, FCP7 XML, OTIO and QP of `TimelineFile` for the file `chose` named), `shots.js`
+  for editors the EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes of `TimelineFile` for the file `chose` named), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
   decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`

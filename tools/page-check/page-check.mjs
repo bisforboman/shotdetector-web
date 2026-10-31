@@ -5,7 +5,7 @@
 //      so one-worker runs go on the threaded runtime on the page's own thread (threads.js; decision
 //      2026-10-30-threads.md), as on Pages;
 //   1. a sample set on the file input, detected with the options as the page prefills them, on threads: its scenes and
-//      stats CSVs, its shots as JSON and HTML and the editors' timeline files (EDL, FCPXML, FCP7 XML, OTIO, QP)
+//      stats CSVs, its shots as JSON and HTML and the editors' timeline files (EDL, FCPXML, FCP7 XML, OTIO, QP, keyframes)
 //      downloaded from the run's card and compared with the native check's run of that detector byte for byte (the
 //      timeline files but for the file's name: the page gives the picked file's), the shots table one row per shot of
 //      the CSV;
@@ -409,9 +409,10 @@ async function compare(page, what, name, run, stoppedAt = null) {
   }
   // The editors' timeline files (Api's TimelineFile), each the native run's but for the file's name, which the page
   // gives as the picked file's (the demo's sintel-trailer.mp4, the native check's sample's own). A stopped run's: the
-  // EDL a cut event a shot of the scenes CSV, the QP file frame 0 and each later shot's start.
+  // EDL a cut event a shot of the scenes CSV, the QP and keyframes files frame 0 and each later shot's start.
   for (const [id, ext, label] of [['timeline-edl', 'edl', 'EDL'], ['timeline-fcpxml', 'fcpxml', 'FCPXML'],
-    ['timeline-fcp7', 'fcp7.xml', 'FCP7 XML'], ['timeline-otio', 'otio', 'OTIO'], ['timeline-qp', 'qp', 'QP file']]) {
+    ['timeline-fcp7', 'fcp7.xml', 'FCP7 XML'], ['timeline-otio', 'otio', 'OTIO'], ['timeline-qp', 'qp', 'QP file'],
+    ['timeline-keyframes', 'keyframes.txt', 'keyframes file']]) {
     const link = page.locator(`#${id}`);
     if (!await link.isVisible()) {
       fail(`${what}: no ${label} to download`);
@@ -430,7 +431,7 @@ async function compare(page, what, name, run, stoppedAt = null) {
       if (scenes === null) continue;
       const starts = ext === 'edl'
         ? lines(text).filter(line => /^\d{3}  /.test(line)).length
-        : ext === 'qp' ? lines(text).length : null;
+        : ext === 'qp' ? lines(text).length : ext === 'keyframes.txt' ? lines(text).length - 2 : null;
       const expected = scenes.length;
       if (starts !== null && starts !== expected) fail(`${what}: the stopped run's ${label} has ${starts} lines for ${expected} shots`);
       else console.log(`${what}: ${expectedName} downloaded${starts !== null ? `, ${starts} lines for the ${expected} shots` : ''}`);

@@ -12,7 +12,7 @@ public static partial class Api
 {
     /// <summary>
     /// The last <see cref="Detect"/>'s shots in <paramref name="format"/> (<c>edl</c>, <c>fcpx</c>, <c>fcp7</c>,
-    /// <c>otio</c> or <c>qp</c>) for the file named <paramref name="fileName"/>, the picked file's name: the XMLs and the
+    /// <c>otio</c>, <c>qp</c> or <c>keyframes</c>) for the file named <paramref name="fileName"/>, the picked file's name: the XMLs and the
     /// OTIO name the file at the root (<see cref="TimelineFiles"/>), as the browser doesn't know its folder.
     /// </summary>
     [JSExport]

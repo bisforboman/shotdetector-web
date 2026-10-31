@@ -101,7 +101,8 @@ shots as JSON and HTML beside them (`<file>.shots.json`, ShotDetector's `Shots.J
 save-html page, `Shots.Html`, without images) are ShotDetector's, and checked as the CSVs are. For editors, the
 card also offers the shots in scenedetect's timeline formats (`Api.TimelineFile`, ShotDetector's `Timeline` with its
 defaults through the core's `TimelineFiles`): `<file>.edl` (save-edl, CMX 3600), `<file>.fcpxml` (save-fcp, FCPXML
-1.9), `<file>.fcp7.xml` (save-fcp `--format fcp7`), `<file>.otio` (save-otio) and `<file>.qp` (save-qp), checked as the
+1.9), `<file>.fcp7.xml` (save-fcp `--format fcp7`), `<file>.otio` (save-otio), `<file>.qp` (save-qp) and
+`<file>.keyframes.txt` (save-keyframes, Aegisub's keyframes), checked as the
 CSVs are. The browser never learns the picked file's folder, so they are given its name at the root (`/<name>`): the
 XMLs' and the OTIO's media path is `file:///<name>` or `/<name>`, which the editor relinks to the file where it is
 (scenedetect writes the absolute path it was given; the same string on the FFmpeg path gives the same bytes). A file
@@ -602,7 +603,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   (a) the core library and (b) ShotDetector's `Detect(path)` with FFmpeg in-process and the same FastYuv converter:
   frame count, frame rate, length, duration, processed size, cuts, scene CSV, stats CSV, the shots as JSON and HTML
   (`Shots.Json`, `Shots.Html` without images, the page's other two downloads) and the editors' timeline files
-  (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO and QP, both results given the sample's name) must be equal. It also
+  (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes, both results given the sample's name) must
+  be equal. It also
   checks that `samples/reject/` is refused, each file with its own message, and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
