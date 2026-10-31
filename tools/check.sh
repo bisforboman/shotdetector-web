@@ -101,12 +101,12 @@ if [[ $wasm == true ]]; then
   # No FFmpeg assembly loaded at all, interpreted or AOT: none is in the bundle.
   if ! grep -qE '^No FFmpeg assembly loaded at all\.$' out/wasm-stderr.txt; then echo "The WebAssembly run failed or loaded FFmpeg (above)." >&2; exit 1; fi
 
-  # The native CSVs, JSON and HTML of the samples run here (all of out/native/ unless samples were named), each written
-  # by the run.
+  # The native CSVs, JSON, HTML and timeline files of the samples run here (all of out/native/ unless samples were
+  # named), each written by the run.
   files=0 differ=0 extra=0 missing=0
   for s in "${samples[@]}"; do
     b=out/native/$(basename "${s%.*}")
-    written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html)
+    written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html "$b".*.edl "$b".*.fcpxml "$b".*.fcp7.xml "$b".*.otio "$b".*.qp)
     if [[ ${#written[@]} == 0 ]]; then echo "No native CSVs for $s: run tools/check.sh native on it first."; missing=$((missing + 1)); fi
     for n in "${written[@]}"; do
       [[ $n == *.ffmpeg.* ]] && continue
@@ -115,10 +115,11 @@ if [[ $wasm == true ]]; then
       if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
     done
   done
-  for w in out/wasm/*.csv out/wasm/*.shots.json out/wasm/*.shots.html; do
+  for w in out/wasm/*.csv out/wasm/*.shots.json out/wasm/*.shots.html out/wasm/*.edl out/wasm/*.fcpxml out/wasm/*.fcp7.xml \
+    out/wasm/*.otio out/wasm/*.qp; do
     if [[ ! -f out/native/${w#out/wasm/} ]]; then echo "Not written natively: $w"; extra=$((extra + 1)); fi
   done
-  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs, JSON and HTML identical (${#samples[@]} samples)."
+  summary="WebAssembly (AOT: $aot) and native: $((files - differ)) of $files CSVs, JSON, HTML and timeline files identical (${#samples[@]} samples)."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $differ != 0 || $extra != 0 || $missing != 0 ]]; then exit 1; fi
