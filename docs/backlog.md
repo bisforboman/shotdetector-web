@@ -41,7 +41,41 @@ The performance pass's rows are all done ([backlog-done.md](backlog-done.md)).
 
 The owner chose on 2026-11-01 to adopt ManagedCodecs 0.5.0 in one session, a pull request each, in this order: the
 bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a track whose edit list starts at 0"
-(Waiting, ManagedCodecs#252, fixed in 0.5.0). The bump and each frame's colour tags are done (backlog-done).
+(Waiting, ManagedCodecs#252, fixed in 0.5.0). All three are done (backlog-done).
+
+### Found by the real-world check (2026-11-01)
+
+- The audio's start in a fragmented file (found by the real-world check)
+  - Why: on caminandes-fragmented.mp4 (Caminandes remuxed `frag_keyframe+empty_moov+default_base_moof`, the streams
+    copied) the core's silences are 42 ms (2048 samples at 48 kHz) earlier than `silencedetect`'s, start and end, while
+    on the unfragmented file they agree: the audio's priming is skipped where FFmpeg, which applies no edit list in a
+    fragmented file, keeps it. Seen on `main`'s nightly of 2026-11-01 (run 41262305295) and on the 0.5.0 branches.
+  - Where: first find whose it is: ManagedCodecs' `Mp4Demuxer` (`SkipSamples` in a fragmented track) or `Mp4Audio`'s
+    start (CLAUDE.md, Gotchas: pts + skip); a sample in make-samples.sh (with-audio fragmented) that isolates it.
+  - Done when: AudioCheck agrees on the sample and `tools/realworld.sh check caminandes-fragmented.mp4` passes.
+  - Not: a shift in the core working around the demuxer, if it is the demuxer's.
+  - Status: Open (2026-11-01)
+
+- Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
+  - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
+    of the whole run missing; its allowance (the adaptive window plus 0.6 s plus 1 frame, 18 frames at its rate) admits
+    5721 but not 5683, 53 frames before the stop. The native check agrees; the realworld clips job fails on it every
+    night (2026-11-01, on 0.4.0 and 0.5.0).
+  - Where: `tools/app-check.mjs` `checkStopped` (the lag), against what ShotDetector decides at a stop (the flash
+    filter's or a detector's own look-ahead at a variable rate: Elephants Dream is one); upstream if a stop changes a
+    cut that far back.
+  - Done when: the realworld clips job passes, the allowance explained by ShotDetector's rule.
+  - Status: Open (2026-11-01)
+
+- Tears of Steel's every-detector stats under AOT (found by the real-world check)
+  - Why: realworld.yml on 2026-11-01 (run 41295044525, ManagedCodecs 0.5.0): the native check agrees with FFmpeg on
+    tears_of_steel_720p.mov, but the AOT bundle's `tears_of_steel_720p.all.stats.csv` differs from the native one (7 of
+    8 files identical; the shots, the default run's CSVs and the split runs the same). The first night Tears of Steel
+    downloaded, so no run on 0.4.0 to compare.
+  - Where: the artifact's two CSVs (realworld-tears), the first differing row and column: a detector's score under AOT
+    (a float path the interpreter and native agree on), or ManagedCodecs' frames there.
+  - Done when: realworld.yml's tears job passes.
+  - Status: Open (2026-11-01)
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
@@ -88,20 +122,6 @@ that waited on them are open. ShotDetector 3.25.0 and FrameReader 2.19.0 (2026-1
 [#647](https://github.com/bisforboman/shotdetector/issues/647) (`LoadScenes` over a `YuvVideo`), odd heights, and
 FrameReader's `PictureMeter` and `SilenceFinder` (the page's measures moved upstream, the owner's decision 2026-10-31
 in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 3.25.0 and FrameReader 2.19.0".
-
-- The first pts of a track whose edit list starts at 0 (found by the real-world check)
-  - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
-    (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and
-    ManagedCodecs' `Mp4Demuxer` doesn't: the core's `StartPts` is 1000 against FFmpeg's 0, and every packet's pts
-    (`PacketCheck`) is 1000 later than ffprobe's, and so the black spans' times (`PictureCheck`, blackdetect) a frame
-    later than FFmpeg's. The CSVs and the shots' JSON and HTML are still identical, but the description isn't.
-  - Where: upstream, [ManagedCodecs#252](https://github.com/bisforboman/ManagedCodecs/issues/252) (`Mp4Demuxer`); then here a
-    ManagedCodecs bump, and a sample with that edit list in make-samples.sh (ffmpeg's muxer writes media_time = the
-    first offset, so none of today's samples has it).
-  - Done when: `tools/realworld.sh check wasm caminandes_gran_dillama.mp4 caminandes-fragmented.mp4` passes, and the
-    native check passes on the new sample.
-  - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
-  - Status: Waiting on upstream (ManagedCodecs#252, filed 2026-10-31)
 
 ## Maybe
 

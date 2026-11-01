@@ -52,6 +52,16 @@ enc -filter_complex "$(three 352x288 25 1.5)" -c:v libx264 -pix_fmt yuv420p -out
 enc -filter_complex "$(three 352x288 25 1.5)" -c:v libx264 -pix_fmt yuv420p "$out/edit-end-352x288-25.mp4"
 python3 -I tools/mp4-edit-list.py "$out/edit-end-352x288-25.mp4" 0 3000:1024
 
+# An edit list that starts at media_time 0 (Caminandes: Gran Dillama's, backlog "The first pts of a track whose edit
+# list starts at 0"), over the whole media (4.56 s): libx264's 2-frame delay is then a first composition offset of 1024
+# in 1/12800 that the edit doesn't skip. FFmpeg shifts the track so its first pts is 0 (mov_fix_index) and discards the
+# last packets, past the edit; ffmpeg's muxer writes media_time = the first offset, so only a rewrite makes it.
+enc -filter_complex "$(three 352x288 25 1.5)" -c:v libx264 -pix_fmt yuv420p "$out/edit-zero-352x288-25.mp4"
+python3 -I tools/mp4-edit-list.py "$out/edit-zero-352x288-25.mp4" 0 4560:0
+got=$("$fp" -v trace "$out/edit-zero-352x288-25.mp4" 2>&1 | grep -o 'edit list 0 - media time: [0-9]*' | head -1)
+got+=,$("$fp" -v error -select_streams v -read_intervals %+#1 -show_entries stream=start_pts:packet=pts,dts -of csv=p=0 "$out/edit-zero-352x288-25.mp4" | tr '\n' ,)
+[[ $got == 'edit list 0 - media time: 0,0,-1024,0,' ]] || { echo "edit-zero: its edit, first packet and start pts are $got" >&2; exit 1; }
+
 # 720p, untagged: ShotDetector's size rule picks BT.709 there.
 enc -filter_complex "$(three 1280x720 25 1),$untagged" -c:v libx264 -preset veryfast -pix_fmt yuv420p "$out/cuts-1280x720-25.mp4"
 

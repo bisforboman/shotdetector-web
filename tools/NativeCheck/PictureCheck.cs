@@ -143,6 +143,7 @@ static class PictureCheck
         string found = spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s => $"frames {s.FirstFrame}-{s.EndFrame - 1}"));
         bool three = name.StartsWith("cuts-", StringComparison.Ordinal) || name.StartsWith("baseline-", StringComparison.Ordinal) ||
             name.StartsWith("full-range-", StringComparison.Ordinal) || name.StartsWith("start-offset-", StringComparison.Ordinal) ||
+            name.StartsWith("edit-zero-", StringComparison.Ordinal) ||
             name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
             name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal) ||
             name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal) ||
