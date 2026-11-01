@@ -916,12 +916,13 @@ its position and how far apart the values are: "identical" is a comparison that 
 ShotDetector and ShotDetector.FastYuv (3.24.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
 a rotation, a variable frame rate and deinterlacing there, 3.24.0 the first refusing a frame of another size than the
 video's, shotdetector#625), FrameReader (2.18.0),
-ManagedCodecs (0.4.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.5.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
 under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
 0.4.0 reads only the tracks asked for and gives packets without their data, ManagedCodecs#233, below "What the heap
-holds")
+holds"; 0.5.0 gives each frame's colour tags and sample aspect ratio, the stream's colour, 'pasp', rotation and
+duration, and seeking, which the core doesn't use yet: `Mp4Header`, `SpsInfo` and `AviHeader` still read what FFmpeg says)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core

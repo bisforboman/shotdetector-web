@@ -37,6 +37,12 @@ stay the only output the exactness check speaks for.
 
 The performance pass's rows are all done ([backlog-done.md](backlog-done.md)).
 
+### ManagedCodecs 0.5.0
+
+The owner chose on 2026-11-01 to adopt ManagedCodecs 0.5.0 in one session, a pull request each, in this order: the
+bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a track whose edit list starts at 0"
+(Waiting, ManagedCodecs#252, fixed in 0.5.0). The bump is done (backlog-done).
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
@@ -103,9 +109,8 @@ file out of `samples/reject/`, and passes the native check.
   - Why: ShotDetector 3.24.0 converts each frame with its own `YuvFrame.ColorSpace` and `FullRange` (shotdetector#626),
     as `Detect(path)` does with each frame's tags from FFmpeg's decoder: a spliced stream whose SPS changes its VUI
     colour matrix or range midway gives other stats here, without a word, since `Mp4Input` describes every frame with
-    the first SPS's (`SpsInfo.FromAvcConfig`, the 'avcC''s). ManagedCodecs' `VideoFrame` carries no colour tags (0.4.0),
-    so the core can't tell them per frame without parsing each packet's in-band SPS itself and tracking which decoded
-    frames each one covers, which is the decoder's knowledge.
+    the first SPS's (`SpsInfo.FromAvcConfig`, the 'avcC''s). ManagedCodecs' `VideoFrame` carried no colour tags until
+    0.5.0, which gives each frame's (`VideoFrame.ColorMatrix`, `ColorRange`, ...) from its active SPS.
   - Where: first upstream, ManagedCodecs: each `VideoFrame`'s colour description from its active SPS (matrix and range;
     an MJPEG frame's are fixed); then `VideoInput`'s frames set `YuvFrame.ColorSpace`/`FullRange` where they differ
     from `YuvVideo`'s, and a sample in make-samples.sh (two streams with other VUI tags, their Annex B concatenated as
