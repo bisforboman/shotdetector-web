@@ -1315,3 +1315,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `PWA.install`), finds its manifest without errors and installable, and runs a sample opened with it
     (`PWA.launchFilesInApp`, through `launchQueue`) and shared to it (the POST), on threads and on `?threads=0`, to the
     picked file's downloads. A real Android share isn't checked: CDP can't make one, so the check sends its POST)
+
+- Deinterlaced runs split and resumed
+  - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,
+    since ShotDetector's ranges refused yadif before 3.25.0; a long broadcast file is where both matter most.
+    ShotDetector 3.25.0's `ScoreRange`/`ScoreRangeAsync`/`Merge` take deinterlacing (shotdetector#628), and
+    `ShotDetection.RangeFrames(video, options, firstFrame, endFrame)` says which frames a range reads (its margin: 1
+    frame each side, 2 when deinterlacing).
+  - Where: `Api`'s deinterlaced path (`Whole`) goes, `VideoInput.Deinterlaces` (a copy of ShotDetector's rule) and
+    the ranges' hard-coded 1-frame margins give way to `RangeFrames`; `app.js`'s `planFor` and `NOT_KEPT` with them.
+    The deinterlaced runs join RangeCheck, ThreadsCheck, ResumeCheck and app-check's `SPLIT_RUNS`; app-check's
+    stopped-run allowance for deinterlaced runs (`DEINTERLACED`: the last row, and the adaptive ratio whose window
+    reaches it) holds for split runs too. The page check's interlaced sample, asked for two workers, gets them.
+  - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
+  - Not: no margin of the page's own (ShotDetector's `RangeFrames` is the rule).
+  - Status: Done (2026-11-01: a range starts `RangeFrames`' margin past its keyframe, two frames when deinterlacing;
+    `FrameRange` carries `From`/`To`; `Api.Whole`, `VideoInput.Deinterlaces`, `planFor` and `NOT_KEPT` gone. ShotDetector's
+    merge counts a deinterlaced range's scores to a frame before the last it was given (yadif's next), so `FromStart`
+    and `Continue` leave it out but at the video's end (`Lookahead`): a resumed deinterlaced MJPEG run, a keyframe every
+    frame, was refused before. The deinterlaced all-detector run in RangeCheck, ThreadsCheck, ResumeCheck and
+    app-check's `SPLIT_RUNS`; the page check splits the interlaced sample across two workers. Upstream suggestion, told
+    the coordinator: `RangeScores` saying where its scores reach)
