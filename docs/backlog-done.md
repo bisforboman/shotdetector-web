@@ -1404,3 +1404,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Not: odd widths, unless ShotDetector takes them.
   - Status: Done (2026-11-01: `odd-height-yuv422p-320x239-25.mp4` (the SPS's bottom crop 1) and
     `mjpeg-odd-height-320x239-25.avi`, native and wasm (interpreted and AOT) byte for byte, the core unchanged)
+
+- Tears of Steel's every-detector stats under AOT (found by the real-world check)
+  - Why: realworld.yml on 2026-11-01 (run 41295044525, ManagedCodecs 0.5.0): the native check agrees with FFmpeg on
+    tears_of_steel_720p.mov, but the AOT bundle's `tears_of_steel_720p.all.stats.csv` differs from the native one (7 of
+    8 files identical; the shots, the default run's CSVs and the split runs the same). The first night Tears of Steel
+    downloaded, so no run on 0.4.0 to compare.
+  - Where: no cloud session can download the artifact (its blob host is blocked), but job logs and annotations come
+    through `gh api`: `tools/csv-diff.mjs` prints a differing CSV's first 3 rows (frame, column, native and wasm value)
+    to the log and as an `::error` annotation, from realworld.sh's and check.sh's "Differs:" and app-check.mjs's
+    comparisons with the whole run.
+  - Done when: realworld.yml's tears job, dispatched on `main`, has printed the rows, and they, its run and job ids are
+    here and with the shotdetector coordinator, who decides whether it is ShotDetector's arithmetic or the web core's.
+  - Not: the fix, a later row once that is decided.
+  - Status: Done (2026-11-01: #121's diagnostic; realworld.yml run 41327859923 on `main` 66d4320, job 124912056287
+    "Real world (tears)": 8 of 17620 rows differ, all in `hash_dist [size=8 lowpass=2]` and each by 0.03125 (2/64,
+    two bits of the hash), the other columns and the 7 other files identical. Frame 38: native 0.46875, wasm 0.5;
+    frame 100: native 0.46875, wasm 0.5; frame 215: native 0.53125, wasm 0.5625; 5 more. Sent to the shotdetector
+    coordinator, who decides; the fix is a later row)
