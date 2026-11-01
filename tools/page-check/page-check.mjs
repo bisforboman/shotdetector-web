@@ -35,6 +35,12 @@
 //      variable-rate video's second range drawn at its first frame's own time. Then the --deinterlace sample with
 //      Deinterlace auto on threads, and asked for two workers: on one, the ranges lane saying why; the downloads the
 //      native check's deinterlace-auto run's.
+//  11. the installed app (backlog "An installable app with Open with and a share target"): its manifest served and valid
+//      (Chromium's own reading, CDP Page.getAppManifest, no errors, nothing keeping it from being installed, the icons
+//      served), the app installed (CDP PWA.install, the full Chromium, channel 'chromium', in a profile of its own) and a
+//      sample opened with it (PWA.launchFilesInApp: the file through launchQueue, to the page already open, as the
+//      manifest's launch_handler says), on threads and on ?threads=0; and the sample shared to the page (the share
+//      target's multipart POST, which sw.js answers) on both: each to the same downloads as 1.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -47,7 +53,8 @@
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { basename, extname, join, normalize, resolve } from 'node:path';
 
@@ -80,7 +87,7 @@ const { chromium, firefox } = playwright;
 const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.wasm': 'application/wasm', '.mp4': 'video/mp4', '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon', '.png': 'image/png', '.txt': 'text/plain',
+  '.ico': 'image/x-icon', '.png': 'image/png', '.txt': 'text/plain', '.webmanifest': 'application/manifest+json',
 };
 const server = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
@@ -141,7 +148,7 @@ async function open(query = '', on = browser) {
   });
   page.on('response', r => { if (r.status() >= 400) errors.push(`${r.status()}: ${r.url()}`); });
   await page.goto(base + query);
-  await (on === browser ? isolated(page) : served(page));
+  await (on === browser || on.isolates ? isolated(page) : served(page));
   settling = false;
   return { context, page, errors };
 }
@@ -743,8 +750,117 @@ async function pickedAvi() {
   await context.close();
 }
 
+// The installed app: a Chromium of its own, the full one (the headless shell has no PWA domain), in a profile of its own
+// (an incognito context can't install), whose page open() isolates as any. The profile's folder goes once the context
+// has closed (removed: rm()).
+function appBrowser() {
+  const dir = mkdtempSync(join(tmpdir(), 'page-check-app-'));
+  return {
+    isolates: true,
+    newContext: options => chromium.launchPersistentContext(dir, { ...options, channel: 'chromium' }),
+    rm: () => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }),
+  };
+}
+
+// The manifest as Chromium reads it: no errors, nothing keeping the page from being installed, what the app needs in it,
+// its icons served.
+async function manifestValid(page, cdp) {
+  const what = 'the manifest';
+  const { url, errors, data } = await cdp.send('Page.getAppManifest');
+  if (!url.endsWith('/manifest.webmanifest') || !data) return fail(`${what}: not linked or not served (${url})`);
+  if (errors.length > 0) fail(`${what}: ${errors.map(e => e.message).join('; ')}`);
+  const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors');
+  if (installabilityErrors.length > 0) fail(`${what}: not installable: ${installabilityErrors.map(e => e.errorId).join(', ')}`);
+  let m;
+  try {
+    m = JSON.parse(data);
+  } catch (e) {
+    return fail(`${what}: not JSON: ${e.message}`);
+  }
+  const accepts = Object.values(m.file_handlers?.[0]?.accept ?? {}).flat();
+  const share = m.share_target;
+  const problems = [
+    !m.name && 'no name',
+    m.display !== 'standalone' && `display ${m.display}`,
+    !['192x192', '512x512'].every(size => m.icons?.some(i => i.sizes === size && i.type === 'image/png')) &&
+      'no 192 and 512 px PNG icons',
+    !['.mp4', '.avi'].every(ext => accepts.includes(ext)) && `file handlers for ${accepts.join(' ') || 'nothing'}`,
+    !(share?.method === 'POST' && share.enctype === 'multipart/form-data' && share.params?.files?.[0]?.name === 'video') &&
+      'no multipart share target with a video',
+  ].filter(Boolean);
+  for (const icon of m.icons ?? []) {
+    const response = await page.request.get(new URL(icon.src, url).href);
+    if (!response.ok() || !(response.headers()['content-type'] ?? '').startsWith('image/'))
+      problems.push(`icon ${icon.src}: ${response.status()} ${response.headers()['content-type']}`);
+  }
+  if (problems.length > 0) fail(`${what}: ${problems.join('; ')}`);
+  else console.log(`${what}: valid and installable, ${m.icons.length} icons served, files ${accepts.join(' ')}, a share target`);
+}
+
+// The sample run as picked, once it has arrived some other way (opened with the app, shared): detected with the page's
+// options, on threads or not as the query says, to the same downloads as a picked run.
+async function arrived(page, what, query) {
+  const name = basename(sample);
+  const has = await page.waitForFunction(n => document.getElementById('file-name')?.textContent === n &&
+    document.body.classList.contains('picked'), name, { timeout: 30000 }).then(() => true, () => false);
+  if (!has) return fail(`${what}: the file didn't arrive (the file line says "${await page.textContent('#file-name')}")`);
+  await page.click('#detect');
+  const run = await page.inputValue('#detector');
+  const status = await finished(page, what);
+  if (status === null) return;
+  if (THREADED.test(status) !== (query === '')) fail(`${what}: ${query ? 'on' : 'not on'} threads: ${status}`);
+  await compare(page, what, name, run);
+}
+
+// The app installed and the sample opened with it: launchQueue.
+async function launched(query, what) {
+  const app = appBrowser();
+  const { context, page, errors } = await open(query, app);
+  try {
+    const cdp = await context.newCDPSession(page);
+    if (query === '') await manifestValid(page, cdp);
+    const { appId: manifestId } = await cdp.send('Page.getAppId');
+    await cdp.send('PWA.install', { manifestId, installUrlOrBundleUrl: base });
+    await cdp.send('PWA.launchFilesInApp', { manifestId, files: [sample] });
+    await arrived(page, what, query);
+  } catch (e) {
+    fail(`${what}: ${e.message}`);
+  }
+  report(what, errors);
+  await context.close();
+  app.rm();
+}
+
+// The sample shared to the page: the share target's POST, multipart as Android sends it, to share with the page's query,
+// answered by sw.js (the file kept, the page sent to ?shared, which it takes off the address).
+async function sharedTo(query, what) {
+  const { context, page, errors } = await open(query);
+  await page.evaluate(q => {
+    const form = Object.assign(document.createElement('form'),
+      { id: 'share-check', method: 'post', enctype: 'multipart/form-data', action: `share${q}` });
+    form.append(Object.assign(document.createElement('input'), { type: 'file', name: 'video' }),
+      Object.assign(document.createElement('button'), { type: 'submit' }));
+    document.body.append(form);
+  }, query);
+  await page.setInputFiles('#share-check input', sample);
+  // The POST's navigation replaces the document, and with it its workers.
+  settlings.get(page)(true);
+  await Promise.all([page.waitForEvent('framenavigated', f => f === page.mainFrame()), page.click('#share-check button')]);
+  await page.waitForLoadState('load');
+  settlings.get(page)(false);
+  await arrived(page, what, query);
+  const search = await page.evaluate(() => location.search);
+  if (search !== query) fail(`${what}: the page's address after the share has ${search}, not its own query ${query}`);
+  report(what, errors);
+  await context.close();
+}
+
 try {
   await pickedAvi();
+  await launched('', `${basename(sample)}, opened with the installed app`);
+  await launched('?threads=0', `${basename(sample)}, opened with the installed app, the page's worker`);
+  await sharedTo('', `${basename(sample)}, shared to the page`);
+  await sharedTo('?threads=0', `${basename(sample)}, shared to the page, the page's worker`);
   await picked('', `${basename(sample)}, picked`);
   await picked('?threads=0', `${basename(sample)}, the page's worker`);
   await picked('?workers=2', `${basename(sample)}, two workers`);
