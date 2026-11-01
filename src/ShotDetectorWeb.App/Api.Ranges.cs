@@ -157,7 +157,7 @@ public static partial class Api
                 at += length;
             }
 
-            merged = VideoInput.FromStart(scores);
+            merged = input.FromStart(scores, request.ToOptions());
             // A resumed run's rest has no range from frame 0: the merge tells all of its shots.
             var told = kept.Length == 0 ? _toldInFirstRange ?? [] : [];
             _toldInFirstRange = null;

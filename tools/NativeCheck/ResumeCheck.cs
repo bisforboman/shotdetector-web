@@ -62,7 +62,7 @@ internal static class ResumeCheck
                         pictures = go.Earlier.Count == 0 ? [picture.Measures] : [Joined(pictures, rest.FirstFrame), picture.Measures];
                     }
 
-                    var merged = input.Merge(VideoInput.FromStart(kept), options);
+                    var merged = input.Merge(input.FromStart(kept, options), options);
                     var problems = Same(merged, baseName);
                     if (merged.FrameCount != frames)
                         problems.Add($"{merged.FrameCount} frames merged");
@@ -109,7 +109,7 @@ internal static class ResumeCheck
             return "nothing left to resume";
         var scored = input.Ranges(options, 4, rest.FirstFrame)
             .Select(r => Carried(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult()));
-        var problems = Same(input.Merge(VideoInput.FromStart([.. go.Earlier, .. scored]), options), baseName);
+        var problems = Same(input.Merge(input.FromStart([.. go.Earlier, .. scored], options), options), baseName);
         return problems.Count == 0 ? "same" : string.Join("; ", problems);
     }
 

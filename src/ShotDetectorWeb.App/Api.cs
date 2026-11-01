@@ -108,7 +108,7 @@ public static partial class Api
                     }
                 }
 
-                var merged = VideoInput.FromStart(scored);
+                var merged = input.FromStart(scored, options);
                 // The shots were told as the frames were scored, the merge's would be told twice.
                 return (input.Merge(merged, options with { OnShot = null, Progress = null }), merged);
             }));
