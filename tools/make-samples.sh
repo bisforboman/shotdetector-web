@@ -170,7 +170,11 @@ want="mjpeg,yuvj420p,25/1,114,114,K__,4.560000 mjpeg,yuvj420p,30000/1001,135,135
 # (FFmpeg's H.264 default, left), one with chroma_sample_loc_type 2 (topleft), full range and BT.709. 4:2:2 limited and
 # full range (yuvj422p).
 enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv420p10le "$out/yuv420p10-320x240-25.mp4"
-enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv420p10le -chroma_sample_location topleft \
+# Its sources tagged BT.709 before the concat (which converts each input to the first's tags, testsrc2's BT.601), so
+# that only the range is converted and the last shot is BT.709's colour bars at full range in 10 bits (PictureCheck).
+bt709=setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709
+enc -filter_complex "$(three 320x240 25 1.5 | sed "s/\[\([abc]\)\];/,$bt709[\1];/g")" \
+  -c:v libx264 -pix_fmt yuv420p10le -chroma_sample_location topleft \
   -color_range pc -colorspace bt709 -color_primaries bt709 -color_trc bt709 "$out/yuv420p10-full-topleft-bt709-320x240-25.mp4"
 enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv422p "$out/yuv422p-320x240-25.mp4"
 enc -filter_complex "$(three 320x240 25 1.5),format=yuvj422p" -c:v libx264 -pix_fmt yuvj422p -color_range pc "$out/yuvj422p-320x240-25.mp4"
