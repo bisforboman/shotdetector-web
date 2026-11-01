@@ -103,7 +103,7 @@ that waited on them are open.
   - Done when: `PictureCheck` passes on `samples/yuv420p10-*.mp4` exactly as on the 8-bit samples, and the page check
     shows a 10-bit sample's picture lane.
   - Not: anything of the detection (its CSVs are already byte for byte).
-  - Status: Open (found 2026-10-31, widening the scope to 10 bits)
+  - Status: In progress (2026-11-01)
 
 ## Maybe
 
