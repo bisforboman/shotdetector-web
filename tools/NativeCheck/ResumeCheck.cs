@@ -1,3 +1,4 @@
+using FrameReader;
 using ShotDetector;
 
 namespace ShotDetectorWeb.Checks;

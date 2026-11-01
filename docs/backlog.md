@@ -63,7 +63,7 @@ from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI ar
   - Done when: the native check's PictureCheck and FrameTypeCheck pass on every sample with the core's copy deleted,
     and app-check's `Picture()` and `FrameTypes()` comparisons (whole, split, stopped and resumed) too.
   - Not: no measure of the page's own beside FrameReader's; a measure missing or wrong there goes upstream.
-  - Status: Open (needs the bump)
+  - Status: In progress (2026-11-01)
 
 - The silences and channel weights from FrameReader
   - Why: FrameReader 2.19.0's `SilenceFinder` is silencedetect's counting upstream (the owner's decision, 2026-10-31:

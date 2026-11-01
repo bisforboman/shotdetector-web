@@ -37,11 +37,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
   FrameReader's `LoudnessMeter` (loudness and each channel's peaks, ebur128's arithmetic; the page's channel weights); `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
   decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
-  parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: what FFmpeg's `signalstats`, `blackdetect` and `cropdetect`
-  count, a 10-bit frame in 10-bit values against their thresholds at 10 bits, and colour bars by their definition,
-  `BarColours`, 4 times their 8-bit levels at 10 bits; and each frame's type, ManagedCodecs' `VideoFrame.PictureType`,
-  FFmpeg's `pict_type`), `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures from them,
-  `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
+  parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: FrameReader's `PictureMeter` given a `YuvVideo`'s frames
+  (its `PictureFormat`, a range's frames before its first skipped, ManagedCodecs' `VideoFrame.PictureType` as
+  FrameReader's), what FFmpeg's `signalstats`, `blackdetect` and `cropdetect` count, a 10-bit frame in 10-bit values,
+  and colour bars by their definition; shotdetector's decision 2026-10-31: the page's own copy moved upstream), and
+  FrameReader's `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures
+  from them, `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
   (`PictureJson`), which NativeCheck also writes; `TimelineFiles` (a result's shots in scenedetect's timeline formats,
   ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes`, `shotchanges` (Subtitle
   Edit's, `Timeline.ShotChanges`) and each one's extension, the
@@ -277,7 +278,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
 - Packages: ShotDetector/FastYuv 3.25.0, FrameReader 2.19.0 and ManagedCodecs 0.5.0 (Containers, H264, Mjpeg, Aac, each
-  pinning Core, and Core, whose `PictureType` `PictureMeter` keeps) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
+  pinning Core, and Core, whose `PictureType` `PictureMeter` maps to FrameReader's) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
   file (`docs/decisions/2026-10-24-fastyuv-replaceable.md`; `tools/check.sh replace aot` in CI). Workflows pin actions by commit SHA with the tag in a comment, as shotdetector.
