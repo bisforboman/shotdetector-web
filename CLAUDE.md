@@ -261,7 +261,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 in MP4 (yuv420p, yuv422p, yuv420p10le, and yuvj420p/yuvj422p at full range; `YuvVideo.ChromaLocation` the SPS's or left; each frame's own colour matrix, range and chroma location where its SPS's differ, `YuvFrame.ColorSpace`/`FullRange`/`ChromaLocation` from ManagedCodecs' `VideoFrame`; a 10-bit run's picture in 10-bit code values with FFmpeg's thresholds at 10 bits) (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
+- Scope so far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 in MP4 (yuv420p, yuv422p, yuv420p10le, and yuvj420p/yuvj422p at full range;
+  8-bit of an odd height too, ShotDetector 3.25.0: a 4:2:2 H.264 sample and a 4:2:0 MJPEG one; `YuvVideo.ChromaLocation` the SPS's or left; each frame's own colour matrix, range and chroma location where its SPS's differ, `YuvFrame.ColorSpace`/`FullRange`/`ChromaLocation` from ManagedCodecs' `VideoFrame`; a 10-bit run's picture in 10-bit code values with FFmpeg's thresholds at 10 bits) (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
   shown packets' pts sorted, given where the frames leave the average rate's grid), upright or a quarter turn (`YuvVideo.Rotation`, the
   display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
   as MBAFF frames (`YuvVideo.FieldOrder` and each frame's flags from ManagedCodecs, deinterlaced by FastYuv's `Yadif` when

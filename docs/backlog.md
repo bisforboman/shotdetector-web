@@ -54,11 +54,12 @@ from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI ar
   - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
     H.264 stream (its crop unit one row) or an MJPEG AVI can be that tall, and the core passes them on today without a
     sample proving the result is the FFmpeg path's.
-  - Where: `tools/make-samples.sh` (an H.264 4:2:2 sample and an MJPEG one of an odd height, checked with ffprobe);
-    `Mp4Input`/`AviInput`, `PictureMeter`'s format and FastYuv's conversion as they come out on them; CLAUDE.md's scope.
+  - Where: `tools/make-samples.sh` (an H.264 4:2:2 sample and a 4:2:0 MJPEG one of an odd height, checked with ffprobe
+    and the SPS's bottom crop; libx264 refuses an odd 4:2:0 height); PictureCheck's list of the samples with colour
+    bars; CLAUDE.md's scope. The core needed nothing (tried 2026-11-01: native byte for byte).
   - Done when: the native and wasm checks pass on both, byte for byte.
   - Not: odd widths, unless ShotDetector takes them.
-  - Status: Open (needs the bump)
+  - Status: In progress (2026-11-01)
 
 ## Waiting
 

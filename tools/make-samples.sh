@@ -179,6 +179,18 @@ enc -filter_complex "$(three 320x240 25 1.5 | sed "s/\[\([abc]\)\];/,$bt709[\1];
 enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -pix_fmt yuv422p "$out/yuv422p-320x240-25.mp4"
 enc -filter_complex "$(three 320x240 25 1.5),format=yuvj422p" -c:v libx264 -pix_fmt yuvj422p -color_range pc "$out/yuvj422p-320x240-25.mp4"
 enc -filter_complex "$(three 320x240 25 1.5),format=yuvj422p" -c:v mjpeg -q:v 3 "$out/mjpeg-422-320x240-25.avi"
+# Odd heights, which ShotDetector's frame source takes for 8-bit 4:2:0 and 4:2:2 since 3.25.0 (backlog "Odd heights"):
+# H.264 4:2:2 (its crop unit a row: libx264 refuses an odd 4:2:0 height) and 4:2:0 MJPEG, 320x239, the three shots cut
+# to 239 rows in 4:4:4 first (testsrc2 rounds a 4:2:0 height down to even).
+odd=format=yuv444p,crop=320:239:0:0
+enc -filter_complex "$(three 320x240 25 1.5),$odd,format=yuv422p" -c:v libx264 -pix_fmt yuv422p "$out/odd-height-yuv422p-320x239-25.mp4"
+enc -filter_complex "$(three 320x240 25 1.5),$odd,format=yuvj420p" -c:v mjpeg -q:v 3 "$out/mjpeg-odd-height-320x239-25.avi"
+got=$(for f in odd-height-yuv422p-320x239-25.mp4 mjpeg-odd-height-320x239-25.avi; do
+  "$fp" -v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt,width,height -of csv=p=0 "$out/$f"; done | tr '\n' ' ')
+got+=$("$ff" -hide_banner -i "$out/odd-height-yuv422p-320x239-25.mp4" -c copy -bsf:v trace_headers -f null - 2>&1 \
+  | awk '$5 == "frame_crop_bottom_offset" {print $NF}' | sort -u)
+[[ $got == 'h264,320,239,yuv422p mjpeg,320,239,yuvj420p 1' ]] || { echo "Odd heights: codec, size, pix_fmt and the SPS's bottom crop are $got" >&2; exit 1; }
+
 # What they must be: from the bitstream (trace_headers: the SPS's chroma_format_idc, bit depths and chroma location
 # flag and type), and from FFmpeg (profile, pix_fmt, range, matrix and the first frame's chroma location).
 got=
