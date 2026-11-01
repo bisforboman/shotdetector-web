@@ -563,7 +563,8 @@ async function paused(page, what, from) {
 }
 
 // The picture's card after a whole run: its cropdetect line and its colour bars the native check's
-// (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown.
+// (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown; a 10-bit video's levels said to
+// be 10-bit code values.
 async function picture(page, what, file) {
   const native = join(nativeDir, `${stem(file)}.picture.json`);
   if (!existsSync(native)) {
@@ -580,6 +581,9 @@ async function picture(page, what, file) {
   // Each line a sentence of its own: none goes on from the one before (as "and 3 shorter" after "none").
   const dangling = await page.$$eval('#picture p', ps => ps.map(p => p.textContent).filter(t => /^(and|or|but) /.test(t)));
   if (dangling.length > 0) fail(`${what}: the picture's card has lines that aren't sentences: ${dangling.join(' | ')}`);
+  // A 10-bit video's card says its levels are 10-bit code values (backlog-done "Picture measures at 10 bits").
+  if (p.bitDepth === 10 && !text.includes('In 10-bit code values (0 to 1023)'))
+    fail(`${what}: a 10-bit video's picture card doesn't say its levels are 10-bit: "${text.slice(0, 300)}"`);
   if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);
   else

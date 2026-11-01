@@ -32,8 +32,8 @@
 // The video's packets (Api's Packets, the bitrate lane's): every sample's against ffprobe's, whose lines the native
 // check wrote (--native: <sample>.packets.txt), exactly.
 // The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
-// <sample>.picture.json, FFmpeg's figures there), exactly; a split run's merge the whole run's; a stopped run's (one
-// worker or split) for the frames its result read.
+// <sample>.picture.json, FFmpeg's figures there), exactly, a 10-bit sample's in 10-bit values; a split run's merge the
+// whole run's; a stopped run's (one worker or split) for the frames its result read.
 // The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
 // check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
 // whole run's; a stopped run's the whole run's first frames, as many as its result read.
@@ -654,11 +654,15 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
 function checkPicture(sample, result) {
   const json = Picture(), picture = JSON.parse(json), name = `${basename(sample)} picture`;
   if (picture.frames !== result.frameCount) fail(`${name}: ${picture.frames} frames, the run read ${result.frameCount}`);
+  // A 10-bit sample measured in 10-bit code values (backlog-done "Picture measures at 10 bits"), the others in 8-bit.
+  const depth = basename(sample).startsWith('yuv420p10-') ? 10 : 8;
+  if (picture.bitDepth !== depth || (picture.frames > 0 && picture.levels.max === null))
+    fail(`${name}: measured at ${picture.bitDepth} bits (levels ${JSON.stringify(picture.levels)}), not ${depth}`);
   const native = join(nativeDir ?? '', `${basename(sample, extname(sample))}.picture.json`);
   if (!nativeDir || !existsSync(native)) fail(`${name}: no native ${native} to compare with`);
   else if (readFileSync(native, 'utf8') !== json) fail(`${name}: differs from the native check's ${native}`);
   else {
-    console.error(`${name}: the native check's (${picture.black.length} black spans, ${picture.bars.length} colour bars, ` +
+    console.error(`${name}: the native check's (${picture.bitDepth}-bit, YMAX up to ${picture.levels.max}, ${picture.black.length} black spans, ${picture.bars.length} colour bars, ` +
       `BRNG in ${picture.brng.frames} frames, ${picture.crop ? `crop=${picture.crop.w}:${picture.crop.h}:${picture.crop.x}:${picture.crop.y}` : 'no crop'})`);
   }
   return json;

@@ -6,6 +6,9 @@
 // blackdetect and cropdetect, exactly (README, Checks): the card's mark says "measured". The colour bars are found by
 // their definition (no FFmpeg filter finds them), checked on samples made with FFmpeg's smptebars and smptehdbars; what
 // the page works out (the mean over the run, the bars' widths, a lane point over several frames) says so in its tooltip.
+// A 10-bit video's figures are 10-bit code values (0 to 1023), as FFmpeg's filters count them at 10 bits, against their
+// thresholds at 10 bits: the card says so and gives a level's 8-bit equivalent in its tooltip; the lane's axis is 0 to
+// 1023.
 import { call, card, frameSeconds, on } from '../app.js';
 import { lane, seek, timecode, x } from '../timeline.js';
 
@@ -36,15 +39,16 @@ const pictureLane = lane('Picture', track => {
 });
 pictureLane.track.classList.add('picture');
 pictureLane.label.classList.add('picture');
-pictureLane.label.title = 'Each frame\'s luma (signalstats\' YMIN to YMAX as a band, YAVG as a line, 0 to 255), the ' +
-  'black spans (blackdetect) hatched, the colour bars marked, a tick at the bottom where pixels are out of broadcast ' +
-  'range (BRNG), as tall as the share of the frame out of range on a log scale (0.01% to all of it)';
+const laneTitle = largest => 'Each frame\'s luma (signalstats\' YMIN to YMAX as a band, YAVG as a line, 0 to ' +
+  `${largest}), the black spans (blackdetect) hatched, the colour bars marked, a tick at the bottom where pixels are ` +
+  'out of broadcast range (BRNG), as tall as the share of the frame out of range on a log scale (0.01% to all of it)';
+pictureLane.label.title = laneTitle(255);
 pictureLane.show(false);
 
 // The lane's points as an SVG over the run's frames, in x()'s percentages: x the time (point i from its first frame's
-// to the next point's: at a variable rate the points are as wide as their frames last), y the luma from 255 (top) to 0
-// above the ticks' band.
-function svg({ frames, points: { framesPerPoint, min, mean, max, brng } }, seconds) {
+// to the next point's: at a variable rate the points are as wide as their frames last), y the luma from the depth's
+// largest value (255 or 1023, top) to 0 above the ticks' band.
+function svg({ frames, bitDepth, points: { framesPerPoint, min, mean, max, brng } }, seconds) {
   const n = min.length, s = document.createElementNS(SVG, 'svg'), total = seconds(frames) || 1;
   const at = i => (seconds(Math.min(i * framesPerPoint, frames)) / total * n).toFixed(4);
   s.setAttribute('viewBox', `0 0 ${n} 1`);
@@ -52,7 +56,7 @@ function svg({ frames, points: { framesPerPoint, min, mean, max, brng } }, secon
   s.setAttribute('aria-hidden', 'true');
   s.style.left = x(0);
   s.style.width = x(seconds(frames));
-  const y = v => ((1 - BAND) * (1 - v / 255)).toFixed(4);
+  const largest = 2 ** bitDepth - 1, y = v => ((1 - BAND) * (1 - v / largest)).toFixed(4);
   let band = `M0 ${y(max[0] ?? 0)}`;
   for (let i = 0; i < n; i++) band += `H${at(i + 1)}V${y(max[i + 1] ?? max[i])}`;
   for (let i = n - 1; i >= 0; i--) band += `V${y(min[i])}H${at(i)}`;
@@ -113,7 +117,8 @@ on('done', async ({ video }) => {
   }
   if (mine !== asked || video !== opened) return; // a new run or file meanwhile
   picture = { summary: JSON.parse(json), video };
-  pictureLane.show(picture.summary.frames > 0 && !picture.summary.notMeasured);
+  pictureLane.label.title = laneTitle(2 ** picture.summary.bitDepth - 1);
+  pictureLane.show(picture.summary.frames > 0);
   pictureLane.draw();
   fill(picture);
 });
@@ -122,22 +127,25 @@ function fill({ summary: p, video }) {
   const seconds = f => frameSeconds(video, f);
   const at = f => `${clock(seconds(f))}`;
   section.hidden = false;
-  if (p.notMeasured) {
-    section.append(paragraph(`The picture wasn't measured: ${p.notMeasured}`));
-    return;
-  }
   if (p.frames === 0) {
     section.append(paragraph('No frames were read.'));
     return;
   }
 
-  section.append(heading('Luma', 'signalstats\' YMIN, YAVG and YMAX of every frame, checked against it exactly'));
+  // At 10 bits FFmpeg's figures are 10-bit code values, its thresholds by the depth (broadcast range times 4,
+  // blackdetect's and cropdetect's from the largest value): the card gives them as FFmpeg does, a level's 8-bit
+  // equivalent in its tooltip.
+  const ten = p.bitDepth === 10, times = ten ? 4 : 1, largest = 2 ** p.bitDepth - 1;
+  const eight = v => (ten ? `; ${Number((v / 4).toFixed(2))} in 8-bit terms` : '');
+  section.append(heading('Luma', `signalstats' YMIN, YAVG and YMAX of every frame, checked against it exactly${ten
+    ? ': 10-bit code values, 0 to 1023, as FFmpeg counts them at 10 bits' : ''}`));
+  if (ten) section.append(paragraph('In 10-bit code values (0 to 1023), as FFmpeg measures a 10-bit video.'));
   const list = document.createElement('dl');
   list.className = 'levels';
   for (const [term, text, title] of [
-    ['Lowest', String(p.levels.min), 'The lowest YMIN of the frames read'],
-    ['Highest', String(p.levels.max), 'The highest YMAX of the frames read'],
-    ['Mean', own(p.levels.mean.toFixed(1), `The page's own: the mean of the frames' YAVG, ${p.levels.mean}`), ''],
+    ['Lowest', String(p.levels.min), `The lowest YMIN of the frames read${eight(p.levels.min)}`],
+    ['Highest', String(p.levels.max), `The highest YMAX of the frames read${eight(p.levels.max)}`],
+    ['Mean', own(p.levels.mean.toFixed(1), `The page's own: the mean of the frames' YAVG, ${p.levels.mean}${eight(p.levels.mean)}`), ''],
   ]) {
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = term;
@@ -147,17 +155,19 @@ function fill({ summary: p, video }) {
   }
   section.append(list);
 
-  section.append(heading('Broadcast range', 'signalstats\' BRNG: luma outside 16 to 235 or chroma outside 16 to 240, ' +
-    'checked against it exactly'));
+  section.append(heading('Broadcast range', `signalstats' BRNG: luma outside ${16 * times} to ${235 * times} or chroma ` +
+    `outside ${16 * times} to ${240 * times}, checked against it exactly`));
   if (p.brng.frames === 0) section.append(paragraph('Every pixel of every frame in range.'));
   else {
     section.append(paragraph(`Out of range in ${count(p.brng.frames)} of ${count(p.frames)} frames; at most ` +
       `${percent(p.brng.largest)} of a frame (frame ${count(p.brng.at + 1)}, ${at(p.brng.at)}).`,
     `BRNG ${p.brng.largest} at frame ${p.brng.at + 1} (${timecode(seconds(p.brng.at))})`));
   }
-  if (p.fullRange) section.append(paragraph('The video is full range (0 to 255): BRNG counts against broadcast range anyway.'));
+  if (p.fullRange) section.append(paragraph(`The video is full range (0 to ${largest}): BRNG counts against broadcast range anyway.`));
 
-  section.append(heading('Black', `blackdetect: 98% of a frame's pixels at or under ${p.fullRange ? 25 : 37}, ` +
+  // blackdetect's pixel_black_th_i: 10% of the range above its black, rounded down.
+  const black = ten ? (p.fullRange ? 102 : 151) : (p.fullRange ? 25 : 37);
+  section.append(heading('Black', `blackdetect: 98% of a frame's pixels at or under ${black}, ` +
     'checked against it exactly; it lists the spans of 2 s or more by default'));
   const long = p.black.filter(s => s.long), short = p.black.length - long.length;
   const shorter = `${short} shorter, on the timeline`;
@@ -167,8 +177,8 @@ function fill({ summary: p, video }) {
   }
   if (long.length > 0 && short > 0) section.append(paragraph(`Shorter than 2 s: ${short}, on the timeline.`));
 
-  section.append(heading('Letterbox', 'cropdetect with its defaults (limit 24, round 16, the first two frames skipped), ' +
-    'checked against it exactly'));
+  section.append(heading('Letterbox', `cropdetect with its defaults (limit ${ten ? '24/255 of 1023, 96' : 24}, round 16, ` +
+    'the first two frames skipped), checked against it exactly'));
   if (p.crop === null) section.append(paragraph('Too few frames for cropdetect.'));
   else {
     // cropdetect's lines are the upright picture's (a rotated video's turned, as FFmpeg's filters see it).
@@ -186,7 +196,8 @@ function fill({ summary: p, video }) {
   }
 
   section.append(heading('Colour bars', 'seven bars side by side, white to blue at 75% or 100%, in BT.601 or BT.709 ' +
-    '(SMPTE and EBU bars): by their definition, checked on FFmpeg\'s smptebars and smptehdbars'));
+    `(SMPTE and EBU bars): by their definition${ten ? ' (its 8-bit levels times 4)' : ''}, checked on FFmpeg's smptebars ` +
+    'and smptehdbars'));
   if (p.bars.length === 0) section.append(paragraph('Colour bars: none.'));
   for (const s of p.bars) {
     section.append(paragraph(`Colour bars: ${at(s.firstFrame)} to ${at(s.endFrame)}`,
