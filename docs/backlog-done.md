@@ -1369,3 +1369,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     the channel weights `ChannelWeights.ForLayout` of the AAC channels' names in ManagedCodecs' order. AudioCheck as
     before on every sample (the tone sample's silences 0 ms from silencedetect's at 2 s and 1 s), app-check's `Audio()`
     the native one's)
+
+- Odd heights
+  - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
+    H.264 stream (its crop unit one row) or an MJPEG AVI can be that tall, and the core passes them on today without a
+    sample proving the result is the FFmpeg path's.
+  - Where: `tools/make-samples.sh` (an H.264 4:2:2 sample and a 4:2:0 MJPEG one of an odd height, checked with ffprobe
+    and the SPS's bottom crop; libx264 refuses an odd 4:2:0 height); PictureCheck's list of the samples with colour
+    bars; CLAUDE.md's scope. The core needed nothing (tried 2026-11-01: native byte for byte).
+  - Done when: the native and wasm checks pass on both, byte for byte.
+  - Not: odd widths, unless ShotDetector takes them.
+  - Status: Done (2026-11-01: `odd-height-yuv422p-320x239-25.mp4` (the SPS's bottom crop 1) and
+    `mjpeg-odd-height-320x239-25.avi`, native and wasm (interpreted and AOT) byte for byte, the core unchanged)
