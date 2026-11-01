@@ -7,12 +7,17 @@ namespace ShotDetectorWeb;
 /// A range of the video's frames, scored on a runtime of its own (a browser Web Worker) by
 /// <see cref="VideoInput.ScoreRangeAsync"/>, its scores merged with the others' by <see cref="VideoInput.Merge"/>
 /// (docs/decisions/2026-10-26-workers.md). <see cref="FirstFrame"/> is ShotDetector's <c>firstFrame</c>: 0 for the first
-/// range, else one past a keyframe, which the range decodes from and gives as the frame before its first.
+/// range, else as far past a keyframe as ShotDetector's margin before a range
+/// (<see cref="ShotDetection.RangeFrames"/>: one frame, two when the run deinterlaces), so that the range decodes from
+/// the keyframe and gives it as its first frame, <see cref="From"/>.
 /// </summary>
 /// <param name="FirstFrame">The range's first frame (0-based, display order).</param>
 /// <param name="EndFrame">The frame after its last: the next range's first, or the video's frame count.</param>
 /// <param name="Keyframe">The video packet (decode order, an index of <see cref="VideoInput.Packets"/>) it decodes from.</param>
-public sealed record FrameRange(int FirstFrame, int EndFrame, int Keyframe);
+/// <param name="From">The first frame it gives ShotDetector, the keyframe's (<see cref="ShotDetection.RangeFrames"/>' <c>From</c>).</param>
+/// <param name="To">One past the last frame it gives (<see cref="ShotDetection.RangeFrames"/>' <c>To</c>), unless it is the
+/// last range, which gives the frames to the video's end.</param>
+public sealed record FrameRange(int FirstFrame, int EndFrame, int Keyframe, int From, long To);
 
 /// <summary>
 /// A stopped run's way on (<see cref="VideoInput.Continue"/>): the earlier ranges' scores to keep, in order, and the range
@@ -43,18 +48,19 @@ public abstract partial class VideoInput
     }
 
     /// <summary>
-    /// Splits the video into at most <paramref name="count"/> ranges about equal in frames, each after the first starting
-    /// one past a keyframe (its frame before), the keyframe nearest to an equal split's start; fewer when the keyframes
-    /// are too few (one range for a video with one keyframe). The same file gives the same ranges on every runtime, so a
-    /// worker told the count and its index decodes the range the page planned. With <paramref name="from"/> (a run
-    /// resumed: <see cref="Continue"/>'s range's first frame), the frames from there on are split the same way, the first
-    /// range starting there.
+    /// Splits the video into at most <paramref name="count"/> ranges about equal in frames for a run with
+    /// <paramref name="options"/>, each after the first starting ShotDetector's margin past a keyframe
+    /// (<see cref="ShotDetection.RangeFrames"/>: the frames before it the range gives), the keyframe nearest to an equal
+    /// split's start; fewer when the keyframes are too few (one range for a video with one keyframe). The same file and
+    /// options give the same ranges on every runtime, so a worker told the count and its index decodes the range the page
+    /// planned. With <paramref name="from"/> (a run resumed: <see cref="Continue"/>'s range's first frame), the frames from
+    /// there on are split the same way, the first range starting there.
     /// </summary>
     /// <exception cref="ArgumentException"><paramref name="from"/> is neither 0 nor where a range can start.</exception>
-    public IReadOnlyList<FrameRange> Ranges(int count, int from = 0)
+    public IReadOnlyList<FrameRange> Ranges(DetectionOptions? options, int count, int from = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
-        var (starts, frames) = RangeStarts();
+        var (starts, frames) = RangeStarts(options);
         (int FirstFrame, int Keyframe) last = (0, 0);
         if (from != 0)
         {
@@ -73,20 +79,29 @@ public abstract partial class VideoInput
             var nearest = starts.MinBy(s => Math.Abs(s.FirstFrame - target));
             if (nearest.FirstFrame <= last.FirstFrame)
                 continue;
-            ranges.Add(new FrameRange(last.FirstFrame, nearest.FirstFrame, last.Keyframe));
+            ranges.Add(Range(options, last.FirstFrame, nearest.FirstFrame, last.Keyframe));
             last = nearest;
         }
 
-        ranges.Add(new FrameRange(last.FirstFrame, frames, last.Keyframe));
+        ranges.Add(Range(options, last.FirstFrame, frames, last.Keyframe));
         return ranges;
     }
 
-    /// <summary>
-    /// The places a range can start, in frame order: one past each keyframe but the first frame's, before the last
-    /// frame, each with its keyframe's packet (decode order); and the frames the video shows.
-    /// </summary>
-    (List<(int FirstFrame, int Keyframe)> Starts, int Frames) RangeStarts()
+    /// <summary>The range [<paramref name="firstFrame"/>, <paramref name="endFrame"/>) decoded from <paramref name="keyframe"/>, with the frames ShotDetector takes for it.</summary>
+    FrameRange Range(DetectionOptions? options, int firstFrame, int endFrame, int keyframe)
     {
+        var (from, to) = ShotDetection.RangeFrames(Video, options ?? new DetectionOptions(), firstFrame, endFrame);
+        return new FrameRange(firstFrame, endFrame, keyframe, (int)from, to);
+    }
+
+    /// <summary>
+    /// The places a range can start for a run with <paramref name="options"/>, in frame order: the first frame past each
+    /// keyframe but the first frame's whose range starts its frames there (<see cref="ShotDetection.RangeFrames"/>'
+    /// <c>From</c>), before the last frame, each with its keyframe's packet (decode order); and the frames the video shows.
+    /// </summary>
+    (List<(int FirstFrame, int Keyframe)> Starts, int Frames) RangeStarts(DetectionOptions? options)
+    {
+        options ??= new DetectionOptions();
         var packets = Packets;
 
         // Each shown frame's pts in display order: a keyframe's index there is its frame's.
@@ -105,8 +120,13 @@ public abstract partial class VideoInput
             if (packets.Flags[i] != PacketFlags.Keyframe)
                 continue;
             int frame = shown.BinarySearch(packets.Pts[i]);
-            if (frame > 0 && frame + 1 < frames)
-                starts.Add((frame + 1, i));
+            if (frame <= 0)
+                continue;
+            int first = frame + 1;
+            while (first < frames && ShotDetection.RangeFrames(Video, options, first, frames).From < frame)
+                first++;
+            if (first < frames)
+                starts.Add((first, i));
         }
 
         starts.Sort();
@@ -122,26 +142,29 @@ public abstract partial class VideoInput
     /// start from but frame 0: the run starts over (no earlier ranges, the range from frame 0). Every frame reached: no
     /// range, the earlier ranges are the whole video's.
     /// </summary>
-    public Continuation Continue(IEnumerable<RangeScores> scored)
+    public Continuation Continue(IEnumerable<RangeScores> scored, DetectionOptions? options)
     {
-        var earlier = FromStart(scored).ToList();
-        var (starts, frames) = RangeStarts();
+        var earlier = FromStart(scored, options).ToList();
+        var (starts, frames) = RangeStarts(options);
         if (earlier.Count == 0)
-            return new Continuation([], new FrameRange(0, frames, 0));
+            return new Continuation([], Range(options, 0, frames, 0));
+        // A range's last scores read frames past them (Lookahead), but for the video's last frames, which have none.
         long reached = earlier[^1].FirstFrame + earlier[^1].FrameCount;
         if (reached >= frames)
             return new Continuation(earlier, null);
+        reached -= Lookahead(options);
         var start = starts.LastOrDefault(s => s.FirstFrame <= reached - 1);
         if (start.FirstFrame == 0)
-            return new Continuation([], new FrameRange(0, frames, 0));
+            return new Continuation([], Range(options, 0, frames, 0));
         earlier.RemoveAll(r => r.FirstFrame >= start.FirstFrame);
-        return new Continuation(earlier, new FrameRange(start.FirstFrame, frames, start.Keyframe));
+        return new Continuation(earlier, Range(options, start.FirstFrame, frames, start.Keyframe));
     }
 
     /// <summary>
     /// The frames ShotDetector's <see cref="ShotDetection.ScoreRangeAsync"/> takes for <paramref name="range"/>: decoded
-    /// from its keyframe (the packets before it neither decoded nor read), the frame before its first, its own, and the
-    /// next range's first (the overlap frame), or to the video's end for the last range; paused as
+    /// from its keyframe (the packets before it neither decoded nor read), ShotDetector's frames for it
+    /// (<see cref="ShotDetection.RangeFrames"/>: the frames before its first that its scores read, its own, and the next
+    /// range's first and any after it that they read), or to the video's end for the last range; paused as
     /// <see cref="FramesAsync"/> is; each frame given measured by <paramref name="picture"/>, if any (a meter of the
     /// range, which measures only its own frames).
     /// </summary>
@@ -149,8 +172,7 @@ public abstract partial class VideoInput
         CancellationToken cancellationToken = default, PictureMeter? picture = null)
     {
         ArgumentNullException.ThrowIfNull(range);
-        int from = Math.Max(range.FirstFrame - 1, 0);
-        int limit = range.EndFrame >= ShownFrames ? int.MaxValue : range.EndFrame - from + 1;
+        int limit = range.EndFrame >= ShownFrames ? int.MaxValue : (int)(range.To - range.From);
         return Paused(Measured(Frames(range.Keyframe), picture), limit, every, between, cancellationToken);
     }
 
@@ -188,15 +210,17 @@ public abstract partial class VideoInput
         ShotDetection.Merge(Video, ranges, WithConverter(options));
 
     /// <summary>
-    /// The ranges from the first on that <see cref="Merge"/> takes: each next one while the one before reaches into it
-    /// (has its first frame, the overlap); the rest (after a gap: a range stopped early, or one missing) left out.
+    /// The ranges from the first on that <see cref="Merge"/> takes for a run with <paramref name="options"/>: each next
+    /// one while the one before reaches into it (scored its first frame, the overlap); the rest (after a gap: a range
+    /// stopped early, or one missing) left out.
     /// </summary>
-    public static IReadOnlyList<RangeScores> FromStart(IEnumerable<RangeScores> ranges)
+    public IReadOnlyList<RangeScores> FromStart(IEnumerable<RangeScores> ranges, DetectionOptions? options)
     {
+        int lookahead = Lookahead(options);
         var taken = new List<RangeScores>();
         foreach (var range in ranges.OrderBy(r => r.FirstFrame))
         {
-            long reached = taken.Count == 0 ? 0 : taken[^1].FirstFrame + taken[^1].FrameCount - 1;
+            long reached = taken.Count == 0 ? 0 : taken[^1].FirstFrame + taken[^1].FrameCount - 1 - lookahead;
             if (range.FrameCount == 0 || range.FirstFrame > reached)
                 break;
             taken.Add(range);
@@ -204,6 +228,14 @@ public abstract partial class VideoInput
 
         return taken;
     }
+
+    /// <summary>
+    /// The frames a range's scores read past their last (<see cref="ShotDetection.RangeFrames"/>' <c>To</c> past the
+    /// next range's first frame, its overlap: none, or yadif's next frame when the run deinterlaces): a range's last
+    /// scores that many frames before the last it was given, as the merge counts them.
+    /// </summary>
+    int Lookahead(DetectionOptions? options) =>
+        (int)(ShotDetection.RangeFrames(Video, options ?? new DetectionOptions(), 0, 1).To - 2);
 
     /// <summary>
     /// The options with ShotDetector.FastYuv's converter unless they name another, and its <see cref="Yadif"/> unless they
@@ -216,13 +248,4 @@ public abstract partial class VideoInput
             options = options with { Yuv420Converter = new SwscaleYuv420() };
         return options.Yadif is null ? options with { Yadif = new Yadif() } : options;
     }
-
-    /// <summary>
-    /// Whether a run with <paramref name="options"/> deinterlaces the frames, as ShotDetector decides it: always with
-    /// <see cref="DeinterlaceMode.On"/>, with <see cref="DeinterlaceMode.Auto"/> when the field order is interlaced (not
-    /// progressive or unknown). Such a run can't be scored in ranges yet (ShotDetector's <c>ScoreRange</c> refuses it:
-    /// yadif reads the frames on either side of each, shotdetector#628), so it is detected whole, on one worker.
-    /// </summary>
-    public bool Deinterlaces(DetectionOptions? options) => options?.Deinterlace == DeinterlaceMode.On ||
-        (options?.Deinterlace == DeinterlaceMode.Auto && Video.FieldOrder is not (FrameReader.FieldOrder.Progressive or FrameReader.FieldOrder.Unknown));
 }

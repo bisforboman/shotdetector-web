@@ -29,8 +29,8 @@ recording's: every frame at its own pts, as FFmpeg's path takes it, given up fro
 quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
 the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default, or deinterlaced by yadif when the page's Deinterlace option says so (`auto`: where the
-field order says interlaced, as `--deinterlace auto`; on one worker, not resumed, until ShotDetector's ranges take it,
-shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
+field order says interlaced, as `--deinterlace auto`; split and resumed as any run since ShotDetector 3.25.0's ranges
+deinterlace, shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
 `docs/decisions/2026-10-30-interlaced.md`). A 10-bit video's samples go to ShotDetector as decoded (16-bit
 little-endian words, yuv420p10le), its chroma location the SPS's (left without one, FFmpeg's H.264 default), which its
 conversion interpolates from; its picture is measured in 10-bit code values, as FFmpeg's filters measure it ("The
@@ -297,6 +297,27 @@ The same service worker keeps the page for offline use, network first: online, e
 it always did and its answer replaces the cached copy; offline, the cached copy answers, the page, both bundles and the
 demo clip once it has been fetched. A new deploy reaches a visitor as it did before; a visit cut off half-way through a
 new deploy's files can leave a mix that fails offline until the next online visit.
+
+## The installed app
+
+The page is an installable app ([#95](https://github.com/bisforboman/shotdetector-web/issues/95)): `manifest.webmanifest`
+(its name, `display: standalone`, the icons `icon.svg`, `icon-192.png` and `icon-512.png`, the PNGs rendered once from
+the SVG and checked in: no build step), linked from `index.html`, so Chromium (Chrome, Edge) offers Install. The
+installed app works offline and on threads as the page does: the same service worker serves it, isolated.
+
+- **Open with** (File Handling, Chromium on the desktop): the manifest's `file_handlers` take `.mp4` and `.avi`; a file
+  opened with the app arrives through `launchQueue` (`app.js`) and is opened as if it had been picked. `launch_handler`
+  `focus-existing`: the app already open takes it, a run under way abandoned as when another file is picked.
+- **Share** (Web Share Target, Chrome on Android): a video shared to the app is POSTed as multipart form data to
+  `share`, which `sw.js` answers itself (Pages serves files, and nothing is uploaded): the file kept in a cache of its
+  own and the page sent to `?shared` (the action's own query kept), where `app.js` takes it out, off the address, and
+  opens it as if picked.
+- While a file is on its way the page doesn't reload to become isolated (a launch would be lost with the document).
+- Firefox and Safari have neither: the file input and the drop zone, as before.
+
+The page check installs the app in Chromium (CDP `PWA.install`, the full Chromium: the headless shell has no `PWA`
+domain), checks its manifest as Chromium reads it, and runs a sample opened with it (`PWA.launchFilesInApp`) and shared
+to it (the share target's POST), on threads and on `?threads=0`, to the same downloads as a picked file.
 
 ## Large files
 
@@ -670,12 +691,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   frame=pict_type`, frame by frame in display order, an MJPEG sample's all I, whole, on four decoder threads and in
   ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each frame's interlaced and
   top-field-first flags, which set yadif's parity, against `ffprobe -show_entries frame=interlaced_frame,top_field_first`
-  (`FieldCheck.cs`); each sample's run with all five detectors split
-  into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
+  (`FieldCheck.cs`); each sample's run with all five detectors, and the same run deinterlaced (wider margins:
+  ShotDetector's `RangeFrames`), split into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
   the same run decoded on four threads (`VideoInput.DecoderThreads`, as the page's threaded runtime decodes), whole, in
   ranges, and stopped half-way against the same run stopped on one thread, byte for byte (`ThreadsCheck.cs`);
-  the default run and the run with all five detectors scored as the page's one-worker run is (one range from frame 0),
+  the default run and the run with all five detectors (as is and deinterlaced) scored as the page's one-worker run is (one range from frame 0),
   stopped at a third, its scores carried as bytes and resumed (`VideoInput.Continue`, the earlier ranges given to
   `ScoreRangeAsync`), stopped again at two thirds and resumed to the end, against the whole run's CSVs, JSON and HTML
   byte for byte, the shots told across the parts the whole run's and the picture measures joined the whole run's; and
@@ -767,12 +788,14 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
   (a quarter turn), `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times) and
   `yuv420p10-full-topleft-bt709-320x240-25.mp4` (10 bits: its picture card and lane in 10-bit values); `interlaced-tff-320x240-25.mp4` with
-  Deinterlace auto, on threads and asked for two workers (it runs on one, the ranges lane saying why), its downloads
+  Deinterlace auto, on threads and on two workers, its downloads
   the native check's `deinterlace-auto` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
   in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on
-  threads to the whole run's downloads (screenshots of both in `out/page/`); the page reloaded offline (Playwright's network off), from the service worker's
+  threads to the whole run's downloads (screenshots of both in `out/page/`); the installed app ("The installed app"):
+  its manifest as Chromium reads it (no errors, installable, the icons served), the sample opened with it through
+  `launchQueue` and shared to it through `sw.js`, each on threads and on `?threads=0`, to the same downloads; the page reloaded offline (Playwright's network off), from the service worker's
   cache, still isolated, the demo run again from the cache on threads; the demo on two workers (`?workers=2`) stopped
   at 40% and resumed in the same visit, the rest split again; and in Firefox, on the page's worker (`?threads=0`), the
   demo stopped at 30%, the page reloaded, shown again and resumed (`PAGE_CHECK_FIREFOX=skip` leaves Firefox out, where
@@ -808,7 +831,8 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
     `tools/WebCodecsCheck/`, `tools/WebCodecsWasm/`): `build` runs and passes without a check, which can't see them;
   - **native** for `tools/NativeCheck/`: the native check alone;
   - **page** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
-    `versions.js`, `worker.js`, `threads.js`, `sw.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
+    `versions.js`, `worker.js`, `threads.js`, `sw.js`, `panels/`, `manifest.webmanifest` and the icons) and
+    `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
     `app.js` among it, then the page in Chromium on an interpreted publish (`tools/check.sh page`);
   - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js`,
     `blob-write.js` and `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).
@@ -917,9 +941,9 @@ its position and how far apart the values are: "identical" is a comparison that 
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.24.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
+ShotDetector and ShotDetector.FastYuv (3.25.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
 a rotation, a variable frame rate and deinterlacing there, 3.24.0 the first refusing a frame of another size than the
-video's, shotdetector#625), FrameReader (2.18.0),
+video's, shotdetector#625, 3.25.0 the first with ranges that deinterlace, shotdetector#628), FrameReader (2.19.0),
 ManagedCodecs (0.5.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
@@ -946,12 +970,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.24.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.25.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.24.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.25.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.24.0 -p:FrameReaderVersion=2.18.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.25.0 -p:FrameReaderVersion=2.19.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \

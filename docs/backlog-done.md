@@ -1284,6 +1284,59 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     starting the metadata file over: the picture check runs it with `-reinit_filter 0`, one graph over the frames as
     decoded, as the meter measures them with the video's range)
 
+- ShotDetector/FastYuv 3.25.0 and FrameReader 2.19.0
+  - Why: what the rows below build on; with nothing else changed the results must stay byte for byte the FFmpeg
+    path's, so a bump on its own shows any change in the packages before a row's code changes the page.
+  - Where: `Directory.Packages.props`; README's Packages and CLAUDE.md's pins.
+  - Done when: the native, wasm (interpreted and AOT) and page checks pass with the new pins, and app-check's
+    `Versions()` check holds them.
+  - Not: no use of the new APIs yet (the rows below).
+  - Status: Done (2026-11-01: the pins moved, nothing else; native, wasm interpreted and AOT (3510 of 3510 files
+    identical) and the page check as before)
+
+- An installable app with Open with and a share target
+  - Why: an installed app with "Open with" is used again where a bookmarked page is forgotten, and an app on the
+    machine, offline, with nothing uploaded, strengthens the privacy story
+    ([#95](https://github.com/bisforboman/shotdetector-web/issues/95)). The service worker already serves the page
+    offline and isolated (decision `2026-10-30-threads.md`), so an installed app works without a network, on threads.
+  - Where: the page only, no build step, no dependency: a web app manifest (`manifest.webmanifest`: name, icons,
+    `display: standalone`), linked from `index.html`, so Chromium offers Install; File Handling (`file_handlers` for
+    .mp4 and .avi), the file arriving through `launchQueue` in `app.js` and opened as if picked; Web Share Target
+    (Android: a multipart POST to `share`), which `sw.js` answers by keeping the file in a cache of its own and sending
+    the page to `?shared`, where `app.js` opens it. Firefox and Safari keep the drop zone. The page check: the manifest
+    served and valid (Chromium's own reading of it, CDP `Page.getAppManifest`), and a file delivered through
+    `launchQueue` and through the share target's POST, on threads and on `?threads=0`, to the same downloads as a
+    picked file.
+  - Done when: the page check passes with those runs.
+  - Not: no install prompt of the page's own (the browser's Install is enough); no change to the .NET side.
+  - Status: Done (2026-11-01, #116: the manifest with an SVG and two PNG icons, `file_handlers` for .mp4 and .avi with
+    `launch_handler` focus-existing, a multipart share target that `sw.js` answers (the file in the cache
+    `shotdetector-web-shared`, the page sent to `?shared`); the page check installs the app in the full Chromium (CDP
+    `PWA.install`), finds its manifest without errors and installable, and runs a sample opened with it
+    (`PWA.launchFilesInApp`, through `launchQueue`) and shared to it (the POST), on threads and on `?threads=0`, to the
+    picked file's downloads. A real Android share isn't checked: CDP can't make one, so the check sends its POST)
+
+- Deinterlaced runs split and resumed
+  - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,
+    since ShotDetector's ranges refused yadif before 3.25.0; a long broadcast file is where both matter most.
+    ShotDetector 3.25.0's `ScoreRange`/`ScoreRangeAsync`/`Merge` take deinterlacing (shotdetector#628), and
+    `ShotDetection.RangeFrames(video, options, firstFrame, endFrame)` says which frames a range reads (its margin: 1
+    frame each side, 2 when deinterlacing).
+  - Where: `Api`'s deinterlaced path (`Whole`) goes, `VideoInput.Deinterlaces` (a copy of ShotDetector's rule) and
+    the ranges' hard-coded 1-frame margins give way to `RangeFrames`; `app.js`'s `planFor` and `NOT_KEPT` with them.
+    The deinterlaced runs join RangeCheck, ThreadsCheck, ResumeCheck and app-check's `SPLIT_RUNS`; app-check's
+    stopped-run allowance for deinterlaced runs (`DEINTERLACED`: the last row, and the adaptive ratio whose window
+    reaches it) holds for split runs too. The page check's interlaced sample, asked for two workers, gets them.
+  - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
+  - Not: no margin of the page's own (ShotDetector's `RangeFrames` is the rule).
+  - Status: Done (2026-11-01: a range starts `RangeFrames`' margin past its keyframe, two frames when deinterlacing;
+    `FrameRange` carries `From`/`To`; `Api.Whole`, `VideoInput.Deinterlaces`, `planFor` and `NOT_KEPT` gone. ShotDetector's
+    merge counts a deinterlaced range's scores to a frame before the last it was given (yadif's next), so `FromStart`
+    and `Continue` leave it out but at the video's end (`Lookahead`): a resumed deinterlaced MJPEG run, a keyframe every
+    frame, was refused before. The deinterlaced all-detector run in RangeCheck, ThreadsCheck, ResumeCheck and
+    app-check's `SPLIT_RUNS`; the page check splits the interlaced sample across two workers. Upstream suggestion, told
+    the coordinator: `RangeScores` saying where its scores reach)
+
 - The first pts of a track whose edit list starts at 0 (found by the real-world check)
   - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
     (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and

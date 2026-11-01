@@ -80,7 +80,7 @@ internal static class FrameTypeCheck
     /// <summary>The ranges' types, each range measured on its own, joined: the whole video's.</summary>
     static string Ranges(VideoInput input, string whole, List<string> problems)
     {
-        var ranges = input.Ranges(MostRanges);
+        var ranges = input.Ranges(null, MostRanges);
         var parts = new List<PictureMeasures>();
         foreach (var range in ranges)
         {

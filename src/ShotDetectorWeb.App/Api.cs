@@ -85,17 +85,9 @@ public static partial class Api
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
-        var go = input.Continue(earlier.Scores);
+        var go = input.Continue(earlier.Scores, request.ToOptions());
         var picture = go.Rest is { } planned ? new PictureMeter(input.Video, planned) : null;
         var options = request.ToOptions(new JsProgress(go.Rest?.FirstFrame ?? 0, input.ShownFrames), new JsShots());
-        if (input.Deinterlaces(options))
-        {
-            // Not in ranges (ShotDetector's ScoreRange refuses yadif, which reads the frames on either side of each:
-            // shotdetector#628): Detect's frames whole, so a stopped run keeps nothing to resume from.
-            if (earlier.Scores.Count > 0)
-                throw new ShotDetectionException(ShotDetectionError.InvalidInput, NotSplit);
-            return await Whole(input, options, run);
-        }
 
         DetectionResult result;
         IReadOnlyList<RangeScores> ranges;
@@ -116,7 +108,7 @@ public static partial class Api
                     }
                 }
 
-                var merged = VideoInput.FromStart(scored);
+                var merged = input.FromStart(scored, options);
                 // The shots were told as the frames were scored, the merge's would be told twice.
                 return (input.Merge(merged, options with { OnShot = null, Progress = null }), merged);
             }));
@@ -133,49 +125,21 @@ public static partial class Api
         }
 
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
-        return Answered(input, result, ranges,
+        return Answered(input, options, result, ranges,
             PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()));
-    }
-
-    /// <summary>
-    /// Why a deinterlaced run is neither split nor kept to resume, as the page says it: ShotDetector's ranges, which both
-    /// need, refuse deinterlacing.
-    /// </summary>
-    const string NotSplit = "A deinterlaced run can't be split or resumed yet: ShotDetector's ranges can't deinterlace (yadif reads the frames on either side of each; shotdetector#628).";
-
-    /// <summary>
-    /// A deinterlaced run (<see cref="VideoInput.Deinterlaces"/>): the frames whole through ShotDetector's DetectAsync,
-    /// pausing and stopping as a range does, no ranges kept (<see cref="Kept"/> has none to resume from).
-    /// </summary>
-    static async Task<string> Whole(VideoInput input, DetectionOptions options, CancellationTokenSource run)
-    {
-        var picture = new PictureMeter(input.Video);
-        DetectionResult result;
-        try
-        {
-            result = await Host.Run(() => DamagedPrefixed(() => input.DetectAsync(PauseEvery, Between, options, run.Token, picture)));
-        }
-        catch (OperationCanceledException e) when (run.IsCancellationRequested)
-        {
-            throw new RunCancelledException(e);
-        }
-        finally
-        {
-            _run = null;
-        }
-
-        return Answered(input, result, [], picture.Measures);
     }
 
     /// <summary>
     /// A run's result kept for the exports that show more of it (<see cref="Picture"/> for the frames it read,
     /// <see cref="Kept"/> its ranges), and its answer as JSON (<see cref="DetectResponse"/>).
     /// </summary>
-    static string Answered(VideoInput input, DetectionResult result, IReadOnlyList<RangeScores> ranges, PictureMeasures? picture)
+    static string Answered(VideoInput input, DetectionOptions options, DetectionResult result, IReadOnlyList<RangeScores> ranges,
+        PictureMeasures? picture)
     {
         _result = result;
         _picture = picture?.Take(result.FrameCount);
         _kept = new KeptRun(ranges, _picture);
+        _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
             new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
@@ -301,7 +265,7 @@ sealed record DetectRequest
     public IReadOnlyList<DetectorRequest>? Detectors { get; init; }
     public DeinterlaceMode? Deinterlace { get; init; }
 
-    public DetectionOptions ToOptions(IProgress<DetectionProgress> progress, IProgress<Shot>? onShot)
+    public DetectionOptions ToOptions(IProgress<DetectionProgress>? progress = null, IProgress<Shot>? onShot = null)
     {
         var options = new DetectionOptions
         {

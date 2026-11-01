@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The app's icon (manifest.webmanifest): a strip of three frames with a cut between the second and the third, on
+       the page's accent. Full bleed, its drawing inside the middle 60%, so that it is maskable too. -->
+  <rect width="512" height="512" fill="#1d4ed8"/>
+  <rect x="112" y="176" width="288" height="160" rx="12" fill="#fafaf9"/>
+  <g fill="#1d4ed8">
+    <rect x="128" y="200" width="72" height="112" rx="6"/>
+    <rect x="216" y="200" width="72" height="112" rx="6"/>
+    <rect x="312" y="200" width="72" height="112" rx="6" opacity="0.55"/>
+  </g>
+  <rect x="295" y="152" width="10" height="208" rx="5" fill="#dc2626"/>
+</svg>

@@ -4,7 +4,8 @@ namespace ShotDetectorWeb.Checks;
 
 /// <summary>
 /// The resume check (README, "Checks"; backlog "Resume after Stop, across visits"): for each sample, the adaptive run
-/// (<see cref="Runs.All"/>' first, the page's default) and the run with every detector (<see cref="Runs.Every"/>), each scored as the
+/// (<see cref="Runs.All"/>' first, the page's default) and the runs with every detector, as is and deinterlaced
+/// (<see cref="Runs.Split"/>), each scored as the
 /// page's one-worker run scores (one range from frame 0) and stopped at the first pause past a third of the frames, its
 /// scores carried as bytes (as the page keeps them in IndexedDB), resumed from there (<see cref="VideoInput.Continue"/>,
 /// the earlier ranges given to <see cref="VideoInput.ScoreRangeAsync(IReadOnlyList{RangeScores}, FrameRange, int, Func{int, ValueTask{bool}}, DetectionOptions?, CancellationToken, PictureMeter?)"/>),
@@ -26,7 +27,7 @@ internal static class ResumeCheck
         Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- |");
         foreach (string sample in samples)
         {
-            foreach (var (run, options) in new[] { Runs.All[0], Runs.Every })
+            foreach (var (run, options) in Runs.Split.Prepend(Runs.All[0]))
             {
                 string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
                 try
@@ -41,12 +42,12 @@ internal static class ResumeCheck
                     var at = new List<string>();
                     foreach (int stop in new[] { frames / 3, frames * 2 / 3, int.MaxValue })
                     {
-                        var go = input.Continue(kept);
+                        var go = input.Continue(kept, options);
                         if (go.Rest is not { } rest)
                             break;
                         at.Add(rest.FirstFrame.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                        // The frames given count from the one before the range's first.
-                        int from = Math.Max(rest.FirstFrame - 1, 0);
+                        // The frames given count from the range's From (before its first: ShotDetector's RangeFrames).
+                        int from = rest.From;
                         var picture = new PictureMeter(input.Video, rest);
                         int first = told.Count;
                         var scored = input.ScoreRangeAsync(go.Earlier, rest, 8, given => ValueTask.FromResult(from + given < stop),
@@ -61,10 +62,13 @@ internal static class ResumeCheck
                         pictures = go.Earlier.Count == 0 ? [picture.Measures] : [Joined(pictures, rest.FirstFrame), picture.Measures];
                     }
 
-                    var merged = input.Merge(VideoInput.FromStart(kept), options);
+                    var merged = input.Merge(input.FromStart(kept, options), options);
                     var problems = Same(merged, baseName);
                     if (merged.FrameCount != frames)
                         problems.Add($"{merged.FrameCount} frames merged");
+                    // Resumed to the end, nothing is left to resume (Api's Kept says -1).
+                    if (input.Continue(kept, options).Rest is { } left)
+                        problems.Add($"a rest from frame {left.FirstFrame} left after the end");
                     string shots = Shots.Json(shown) == Shots.Json(merged.Shots) ? "the whole run's" : "DIFFER";
                     if (shots != "the whole run's")
                         problems.Add("the shots told differ");
@@ -97,18 +101,18 @@ internal static class ResumeCheck
     // again from the continuation's first frame (no OnShot: the page's split runs tell their shots from the merge).
     static string Split(VideoInput input, DetectionOptions options, string baseName)
     {
-        var stopped = input.Ranges(4).Select(r =>
+        var stopped = input.Ranges(options, 4).Select(r =>
         {
-            int from = Math.Max(r.FirstFrame - 1, 0), stop = r.FirstFrame + (r.EndFrame - r.FirstFrame) * 6 / 10;
+            int from = r.From, stop = r.FirstFrame + (r.EndFrame - r.FirstFrame) * 6 / 10;
             return Carried(input.ScoreRangeAsync(r, 8, given => ValueTask.FromResult(from + given < stop), options)
                 .GetAwaiter().GetResult());
         }).ToList();
-        var go = input.Continue(stopped);
+        var go = input.Continue(stopped, options);
         if (go.Rest is not { } rest)
             return "nothing left to resume";
-        var scored = input.Ranges(4, rest.FirstFrame)
+        var scored = input.Ranges(options, 4, rest.FirstFrame)
             .Select(r => Carried(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult()));
-        var problems = Same(input.Merge(VideoInput.FromStart([.. go.Earlier, .. scored]), options), baseName);
+        var problems = Same(input.Merge(input.FromStart([.. go.Earlier, .. scored], options), options), baseName);
         return problems.Count == 0 ? "same" : string.Join("; ", problems);
     }
 

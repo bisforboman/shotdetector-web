@@ -177,7 +177,7 @@ static class PictureCheck
     /// <summary>The run split into ranges, each measured while it is scored, joined: the whole run's measures.</summary>
     static string Ranges(VideoInput input, PictureMeasures whole, List<string> problems)
     {
-        var ranges = input.Ranges(MostRanges);
+        var ranges = input.Ranges(null, MostRanges);
         var parts = new List<PictureMeasures>();
         foreach (var range in ranges)
         {

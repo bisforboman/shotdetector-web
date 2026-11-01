@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Shot detection in the browser</title>
   <meta name="description" content="Finds the shots in an MP4 or an AVI on WebAssembly, with scenedetect's results byte for byte. Nothing leaves the machine.">
+  <!-- The installable app (backlog "An installable app with Open with and a share target", issue #95): Chromium offers
+       Install, an installed app opens .mp4 and .avi files (app.js, launchQueue) and, on Android, takes a shared video
+       (sw.js, the share target's POST). -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#1d4ed8">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
   <script type="module" src="versions.js"></script>

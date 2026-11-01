@@ -22,11 +22,12 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   the audio's codec, rate, channels and VBR length; refuses 4:4:4 and greyscale JPEG and a file with fewer chunks than its
   header's dwLength) each describing its file and decoding its frames. `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
   `DetectAsync`: the frames as an asynchronous source that awaits the caller every N frames and ends early when told;
-  `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(count)`, the video split at keyframes
-  from `Packets` into `FrameRange`s about equal in frames, `ScoreRangeAsync` (one range decoded from its keyframe, the
+  `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(options, count)`, the video split at keyframes
+  from `Packets` into `FrameRange`s about equal in frames (each starting ShotDetector's `RangeFrames` margin past its
+  keyframe, wider when the run deinterlaces; the frames it gives, `From` to `To`, `RangeFrames`'), `ScoreRangeAsync` (one range decoded from its keyframe, the
   packets before it not read, for ShotDetector's `ScoreRangeAsync`), `Merge` and `FromStart` (the ranges that follow
-  each other from the start), `ShownFrames`, `Continue` (a stopped run's `Continuation`: the earlier ranges to keep
-  and the rest's range, from the last range start at or before the last frame scored), `Ranges(count, from)` (the rest
+  each other from the start), `ShownFrames`, `Continue(scored, options)` (a stopped run's `Continuation`: the earlier ranges to keep
+  and the rest's range, from the last range start at or before the last frame scored), `Ranges(options, count, from)` (the rest
   split) and `ScoreRangeAsync(earlier, ...)` (the rest, telling its shots)), `VideoInput.DecoderThreads`
   (ManagedCodecs' `H264Decoder.Threads`, frame threading: the same frames; a run that ends early drains the decoder),
   `Mp4Header` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't
@@ -56,8 +57,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   frameWindow, minContentVal, deinterlace }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
   rate, duration, `stopped` and `warnings` as JSON; one range from frame 0 scored with `OnShot` and merged without it,
   `Detect`'s result byte for byte, so that a stopped run leaves scores, pausing every 8 frames, `PauseEvery`; a run
-  that deinterlaces, `VideoInput.Deinterlaces`, Detect's frames whole instead, keeping no scores: ShotDetector's ranges
-  refuse yadif, shotdetector#628),
+  that deinterlaces too, its ranges' margins ShotDetector's `RangeFrames`, shotdetector#628),
   `Stop()` (the run's frames end at its next pause: the result for the frames read, `stopped` true) and `Cancel()` (the
   run fails, no result), and the `[JSImport]`s `progress(done, expected)`, `shot(json)` (`DetectionOptions.OnShot`:
   each shot as soon as it is known, one object of `Shots.Json`'s array) and `pause(framesRead)` (a promise resolved in
@@ -89,7 +89,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
   (the scores' length, the scores, the range's picture measures); `Api.FrameTypes.cs` `FrameTypes()`: the last run's frames' types from its
   `PictureMeasures`, one character a frame in display order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's
-  `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(count, from)` (`{ frames, ranges:
+  `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(optionsJson, count, from)` (`{ frames, ranges:
   [{ firstFrame, endFrame }] }`, from 0 or a stopped run's rest's first frame), `ScoreRange(optionsJson, count, index,
   from)` (a promise of `{ frames, stopped }`; progress, pauses, `Stop` and `Cancel` as `Detect`'s; a range from frame 0
   tells its shots as `Detect` does, the merge then only the rest) and `RangeBytes()`
@@ -119,7 +119,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `ThreadedRunner` that speaks `worker.js`'s messages (only `Open`, `Detect`,
   `Resume`, the last run's result, stop, cancel, pause, resume), abandoned rather than terminated; `wwwroot/sw.js` the service
   worker: COOP/COEP on every response (cross-origin isolation, which the threads need) and the page offline, network
-  first. The page (no build step, no dependency, native ES modules; README "Running the page";
+  first, and the installed app's share target (a multipart POST to `share`: the file kept in the cache
+  `shotdetector-web-shared`, the page sent to `?shared`); `manifest.webmanifest` and `icon.svg`, `icon-192.png`,
+  `icon-512.png` the installable app (README "The installed app", issue #95: `file_handlers` for .mp4 and .avi,
+  `launch_handler` focus-existing, `share_target`). The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
   toolbar once a file is picked, the status line, the result's four rows: the video beside the run's cards, the timeline
   across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
@@ -131,7 +134,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   say, the playhead `timeline.js`'s own, `held`; `frameAt(t)`, which `shots.js`' stills use too), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
   range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
-  page's worker; `serve()` registers `sw.js` and reloads a first visit once, the page's worker started only once it won't reload or a file is picked, `startWorker`), the sound's worker, and a stopped run kept
+  page's worker; `serve()` registers `sw.js` and reloads a first visit once, the page's worker started only once it won't reload or a file is picked, `startWorker`), the sound's worker, a file arriving
+  through `launchQueue` (Open with) or `?shared` (the share target) opened as if picked (`arrive`, no reload to isolate
+  while one is on its way), and a stopped run kept
   in IndexedDB (`KEPT`, one record: the file by name, size and modified time, the options, `Kept()`'s Blob; shown again
   at once when its file is picked, Resume and Forget beside Detect, a rest over `SPLIT_SECONDS` split); the events panels listen to, `call(name, ...args)`, `card(title, {
   place, mark, markTitle })` and `frameSeconds(video, frames)` (where a frame starts: its number over the rate, or a
@@ -179,9 +184,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
   app-check.mjs compares `FrameTypes()` with); `FieldCheck.cs`: each frame's `YuvFrame.Interlaced` and `TopFieldFirst`
   vs ffprobe's `frame=interlaced_frame,top_field_first`; `AudioStreamCheck.cs`: `VideoInput.Audio`
-  vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run split into ranges, scored and
-  merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run on four decoder threads, whole, in ranges and
-  stopped half-way, vs one thread; `ResumeCheck.cs`: the default and all-detector runs on one range stopped twice and
+  vs ffprobe's first audio stream; `RangeCheck.cs`: every sample's all-detector run, as is and deinterlaced, split into ranges, scored and
+  merged, vs the whole run's CSVs; `ThreadsCheck.cs`: the all-detector run, as is and deinterlaced, on four decoder threads, whole, in ranges and
+  stopped half-way, vs one thread; `ResumeCheck.cs`: the default and all-detector runs (the latter deinterlaced too) on one range stopped twice and
   resumed, and split, stopped and the rest split again, vs the whole run's CSVs, shots told and picture measures;
   `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
@@ -193,10 +198,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
   (`tools/node-host.mjs`: the host's imports and a `FileReaderSync` for Node), every run also stopped half-way (its
   stats CSV the whole run's rows up to there, its shots the whole run's with the next one cut short), one cancelled,
-  `Detect`'s pauses under 1% of the runs' time, the default and all-detector runs stopped at a third, shown again from
+  `Detect`'s pauses under 1% of the runs' time, the default and all-detector runs (the latter deinterlaced too) stopped at a third, shown again from
   their kept bytes, resumed, stopped again and resumed to the end (and stopped split, the rest split again) to the
   whole run's CSVs, shots and picture, kept bytes of other options not resuming, every sample's default run paused half-way (no progress while held,
-  the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs split into ranges and merged (the whole run's CSVs and shots),
+  the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs (the latter deinterlaced too) split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects, and `Picture()` and `FrameTypes()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
   rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
@@ -208,7 +213,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
   reloaded and resumed, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
-  threaded bundle), the picture card's crop and colour bars the native run's, the layout (no hole under a details card, the shots unscrolled up to 15, no red in a lane but the playhead, the run's figures in the first screen, nothing wider than the window) with screenshots at 1280 and 390 px, light and dark, of the demo done, kept and resumed, any page or worker error failing it;
+  threaded bundle), the picture card's crop and colour bars the native run's, the layout (no hole under a details card, the shots unscrolled up to 15, no red in a lane but the playhead, the run's figures in the first screen, nothing wider than the window) with screenshots at 1280 and 390 px, light and dark, of the demo done, kept and resumed, the installed app (the full Chromium, `channel: 'chromium'`: CDP `Page.getAppManifest` without errors and installable, `PWA.install`, a sample
+  through `PWA.launchFilesInApp`'s `launchQueue` and through the share target's POST, on threads and on `?threads=0`, to the same downloads),
+  any page or worker error failing it;
   `tools/realworld.sh`: the real-world check (README "Real world"): Blender films pinned by SHA-256 and variants the
   pinned FFmpeg makes of them (fragmented, rotated, 1080i25), each expected "same" or "refused", the native check and
   the AOT bundle under Node on them (`app-check.mjs --light` on the long ones: the default and all-detector runs,
@@ -256,7 +263,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   shown packets' pts sorted, given where the frames leave the average rate's grid), upright or a quarter turn (`YuvVideo.Rotation`, the
   display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
   as MBAFF frames (`YuvVideo.FieldOrder` and each frame's flags from ManagedCodecs, deinterlaced by FastYuv's `Yadif` when
-  the run asks, on one worker; field pictures refused: no sample); 4:2:0 or 4:2:2 MJPEG in AVI
+  the run asks, split and resumed as any run; field pictures refused: no sample); 4:2:0 or 4:2:2 MJPEG in AVI
   (yuvj420p or yuvj422p, bt470bg, center), its audio described, not measured; anything else is refused in `Mp4Input`'s or `AviInput`'s
   constructor with a message saying what. Widening it means a sample for it in
   make-samples.sh and the checks passing on it, and its real-world file in `tools/realworld.sh` moved from "refused"
@@ -269,7 +276,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.24.0, FrameReader 2.18.0 and ManagedCodecs 0.5.0 (Containers, H264, Mjpeg, Aac, each
+- Packages: ShotDetector/FastYuv 3.25.0, FrameReader 2.19.0 and ManagedCodecs 0.5.0 (Containers, H264, Mjpeg, Aac, each
   pinning Core, and Core, whose `PictureType` `PictureMeter` keeps) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published

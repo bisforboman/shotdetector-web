@@ -77,6 +77,50 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Done when: realworld.yml's tears job passes.
   - Status: Open (2026-11-01)
 
+### ShotDetector 3.25.0 and FrameReader 2.19.0
+
+The owner asked on 2026-11-01 to move the page to the packages released that day. The bump came first (done:
+backlog-done); the rows below each need it and can run in any order, one pull request each. Shotdetector's decisions of 2026-10-31
+apply: the page's managed measures move upstream into FrameReader and the page drops its copies, and a format built
+from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI around it).
+
+- The picture's measures from FrameReader
+  - Why: FrameReader 2.19.0's `PictureMeter`, `PictureFormat`, `PictureMeasures` and `PictureType` are the core's
+    `PictureMeasures.cs` moved upstream (signalstats, blackdetect, cropdetect and the colour bars at 8 to 16 bits,
+    4:2:0, 4:2:2 and 4:4:4); the owner's decision (2026-10-31) is that the page calls them and drops its copy.
+  - Where: `PictureMeasures.cs` goes but for the adapter from a `YuvVideo` and a `YuvFrame` to FrameReader's
+    `PictureFormat` and `Add` (the frame's planes, pts and ManagedCodecs' picture type as FrameReader's);
+    `PictureSummary`, `Api.Picture.cs`, `Api.FrameTypes.cs`, `KeptRun` and `RangeBytes` on FrameReader's types.
+    PictureCheck, FrameTypeCheck and app-check unchanged in what they compare. A kept run's bytes from before (in a
+    visitor's IndexedDB) may not read with FrameReader's `FromBytes`: they then don't resume, as kept bytes of other
+    options don't ("The stopped run didn't resume", the page detects from the start).
+  - Done when: the native check's PictureCheck and FrameTypeCheck pass on every sample with the core's copy deleted,
+    and app-check's `Picture()` and `FrameTypes()` comparisons (whole, split, stopped and resumed) too.
+  - Not: no measure of the page's own beside FrameReader's; a measure missing or wrong there goes upstream.
+  - Status: Open (needs the bump)
+
+- The silences and channel weights from FrameReader
+  - Why: FrameReader 2.19.0's `SilenceFinder` is silencedetect's counting upstream (the owner's decision, 2026-10-31:
+    Mp4Audio's silences move there), and `ChannelWeights.ForLayout` gives ebur128's weights by channel name, which
+    `Mp4Audio.Weights` writes out by hand for ManagedCodecs' AAC order.
+  - Where: `Mp4Audio.cs`: its internal `SilenceFinder` goes for FrameReader's (instants from the first sample, the
+    track's start added here); `Weights` for `ChannelWeights.ForLayout` with the AAC configuration's channel names in
+    ManagedCodecs' order. AudioCheck unchanged in what it compares.
+  - Done when: AudioCheck passes on every sample (silencedetect at 2 s and 1 s, ebur128) and app-check's `Audio()`
+    comparison too.
+  - Not: no silence counting of the page's own.
+  - Status: Open (needs the bump)
+
+- Odd heights
+  - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
+    H.264 stream (its crop unit one row) or an MJPEG AVI can be that tall, and the core passes them on today without a
+    sample proving the result is the FFmpeg path's.
+  - Where: `tools/make-samples.sh` (an H.264 4:2:2 sample and an MJPEG one of an odd height, checked with ffprobe);
+    `Mp4Input`/`AviInput`, `PictureMeter`'s format and FastYuv's conversion as they come out on them; CLAUDE.md's scope.
+  - Done when: the native and wasm checks pass on both, byte for byte.
+  - Not: odd widths, unless ShotDetector takes them.
+  - Status: Open (needs the bump)
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
@@ -100,26 +144,16 @@ all done. ShotDetector 3.24.0 and FrameReader 2.18.0 (2026-10-31) shipped
 [#633](https://github.com/bisforboman/shotdetector/issues/633) (Subtitle Edit's shot changes),
 [#648](https://github.com/bisforboman/shotdetector/issues/648) (YouTube chapters) and FrameReader's `LoudnessMeter`
 ([#646](https://github.com/bisforboman/shotdetector/issues/646)): the bump is done (backlog-done), and the rows below
-that waited on them are open.
-
-- Deinterlaced runs split and resumed
-  - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,
-    since ShotDetector's ranges refuse yadif, which reads the frames on either side of each; a long broadcast file is
-    where both matter most.
-  - Where: first upstream, [shotdetector#628](https://github.com/bisforboman/shotdetector/issues/628) (in progress there,
-    2026-10-31: a range's first frame given the one before it, its last the one after; with it a public
-    `ShotDetection.RangeFrames(video, options, firstFrame, endFrame)`, the frames a range needs, the owner's choice as the
-    coordinator told it); then `Api`'s deinterlaced path (`Whole`) goes, `VideoInput.Deinterlaces` (a copy of
-    ShotDetector's internal rule) and the ranges' hard-coded margins for `RangeFrames`, `app.js`'s `planFor` and
-    `NOT_KEPT` with them, and the deinterlaced runs join the range, threads and resume checks and app-check's
-    `SPLIT_RUNS`.
-  - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
-  - Status: Waiting on upstream (shotdetector#628)
+that waited on them are open. ShotDetector 3.25.0 and FrameReader 2.19.0 (2026-11-01) shipped
+[#628](https://github.com/bisforboman/shotdetector/issues/628) (ranges that deinterlace, `ShotDetection.RangeFrames`),
+[#647](https://github.com/bisforboman/shotdetector/issues/647) (`LoadScenes` over a `YuvVideo`), odd heights, and
+FrameReader's `PictureMeter` and `SilenceFinder` (the page's measures moved upstream, the owner's decision 2026-10-31
+in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 3.25.0 and FrameReader 2.19.0".
 
 ## Maybe
 
-Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;
-since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlaced (`Yadif`), not yet in ranges
+Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 (of an even height until
+3.25.0); since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlaced (`Yadif`), not yet in ranges
 (shotdetector#628); since 3.24.0 10-bit 4:2:0 and 8-bit 4:2:2 (#627, in scope here: backlog-done) and each frame's own colour tags (#626),
 a frame of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
@@ -163,3 +197,20 @@ file out of `samples/reject/`, and passes the native check.
     SHA-256 recorded from the workflow's first download, as ci.yml's Sintel trailer was.
   - Done when: realworld.yml runs them, each "same" or "refused" with its row named.
   - Status: Maybe
+
+- The reference tone left out of the detection
+  - Why: ShotDetector 3.25.0's `YuvVideo.ReferenceTone` and `DetectionOptions.TrimReferenceTone` leave a file's
+    leading tone (and the bars over it) out of the shots, as `Detect(path)` does with FFmpeg finding the tone; the page
+    measures the tone already (`Mp4Audio`, the sound's worker), alongside the run, not before it.
+  - Where: the tone found before the run (or the run told it once the sound's worker has it), `YuvVideo.ReferenceTone`
+    set from it in `Api`, an option on the page; NativeCheck's run with `TrimReferenceTone` on the tone sample.
+  - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
+  - Status: Maybe (found adopting ShotDetector 3.25.0, 2026-11-01)
+
+- Correcting the cuts on the page (issue #90)
+  - Why: ShotDetector 3.25.0's `LoadScenes(YuvVideo, TextReader, column, options)` (shotdetector#647) reads a scenes
+    CSV back over a `YuvVideo`, which a page that lets a viewer add and drop cuts before exporting needs: the edited
+    cuts become a result the downloads (CSVs, timeline files, chapters) are made from by ShotDetector, not the page.
+  - Where: an export taking the edited scenes CSV; the timeline's cuts lane editable; a decision first
+    (docs/decisions/), since what is exact after an edit is the owner's question.
+  - Status: Maybe (issue #90; unblocked upstream 2026-11-01)

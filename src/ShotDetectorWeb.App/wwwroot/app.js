@@ -445,35 +445,17 @@ async function start(how = 'detect') {
 async function detect(resumed = null) {
   setState('detecting');
   if (resumed) setForm(resumed.options);
-  const run = resumed?.options ?? options(), { plan, note } = await planFor(run, resumed?.from ?? 0);
+  const run = resumed?.options ?? options(), plan = await ranges(opened, run, resumed?.from ?? 0);
   listen();
-  await go(run, plan, null, resumed, null, note);
-}
-
-// A run that deinterlaces (Deinterlace on, or auto where the video's field order says interlaced, as ShotDetector
-// decides it) can't be scored in ranges yet (ShotDetector's ranges refuse yadif, which reads the frames on either side
-// of each: shotdetector#628), so it is detected whole on one worker, and a stopped one isn't kept to resume.
-const NOT_SPLIT = 'Deinterlaced, so not split: ShotDetector can\'t score a deinterlaced run in ranges yet (shotdetector#628).';
-const NOT_KEPT = 'not kept to resume: ShotDetector can\'t resume a deinterlaced run yet (shotdetector#628)';
-const deinterlaces = (video, run) => run.deinterlace === 'on' ||
-  (run.deinterlace === 'auto' && !['progressive', 'unknown'].includes(String(video.fieldOrder).toLowerCase()));
-let wholeRun = false; // the run going, or last shown, deinterlaces
-
-// How a run goes: ranges (null for one worker), and note: why a run that would be split isn't (a deinterlaced one).
-async function planFor(run, from = 0) {
-  const plan = await ranges(opened, from);
-  if (!deinterlaces(opened, run)) return { plan, note: null };
-  return { plan: null, note: plan ? NOT_SPLIT : null };
+  await go(run, plan, null, resumed);
 }
 
 // The run itself: on one worker (Api's Detect) or split (plan: splitRun). A split run whose ranges don't merge, or one of
 // whose workers fails, is detected again with one worker, saying why (fallback).
 // A resumed run (resumed: the kept record) goes on from its kept scores (Api's Resume, or Merge with them); kept scores
 // that don't resume (another version's, say) are forgotten and the run detected from the start, saying why (restarted).
-// note: why the run isn't split where it would be (planFor).
-async function go(run, plan, fallback = null, resumed = null, restarted = null, note = null) {
+async function go(run, plan, fallback = null, resumed = null, restarted = null) {
   const from = resumeFrom = resumed?.from ?? 0;
-  wholeRun = deinterlaces(opened, run);
   resumeAt = resumed?.frames ?? 0;
   framesDone = from;
   framesExpected = 0;
@@ -481,7 +463,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null, 
   // before it stay. Split, the merge tells them all.
   const before = resumed && !plan ? resumed.shots.slice(0, -1) : [];
   const keptBytes = resumed ? new Uint8Array(await resumed.blob.arrayBuffer()) : null;
-  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback: fallback ?? note, from });
+  emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback, from });
   clearShots();
   for (const shot of before) {
     emit('shot', { video: opened, shot });
@@ -494,7 +476,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null, 
   estimate = estimateText(opened, workers, threads, frames);
   estimated = estimateSeconds(opened, workers, threads, frames);
   const doing = fallback ? `${fallback} ${resumed ? 'Resuming' : 'Detecting again'} with one worker`
-    : note ? `${note} Detecting with one worker` : resumed ? `Resuming ${resumedFrom()}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
+    : resumed ? `Resuming ${resumedFrom()}` : restarted ? `${restarted} Detecting from the start` : 'Detecting';
   say(`${doing} · about ${duration(estimated)} for ${count(frames)} frames${workers > 1 ? ` with ${workers} workers` : ''}` +
     `${threads > 1 ? ` on ${threads} threads` : ''}`, estimate);
   started = performance.now();
@@ -511,8 +493,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null, 
     if (resumed && e.message?.startsWith(NOT_RESUMED) && state !== 'stopping') {
       running = null;
       forget();
-      const { plan: again, note: why } = await planFor(run);
-      return go(run, again, null, null, e.message, why);
+      return go(run, await ranges(opened, run), null, null, e.message);
     }
     if (!plan || state === 'stopping' || e.name === 'AbortError') throw e;
     running = null;
@@ -701,12 +682,12 @@ function replaceRunner(w) {
 // ranges as there are cores but one, at most MOST_WORKERS (or as ?workers= says), each from a keyframe (Api's Ranges):
 // { count, frames, ranges }, or null for one worker (a short video, a machine with two cores, too few keyframes). A
 // resumed run's rest from frame from, by its own length.
-async function ranges(video, from = 0) {
+async function ranges(video, run, from = 0) {
   const length = lengthOf(video) * Math.max(video.frames - from, 0) / video.frames;
   const count = ASKED_WORKERS ??
     (length > SPLIT_SECONDS ? Math.min((navigator.hardwareConcurrency || 1) - 1, MOST_WORKERS) : 1);
   if (count < 2) return null;
-  const plan = JSON.parse(await call('Ranges', count, from));
+  const plan = JSON.parse(await call('Ranges', JSON.stringify(run), count, from));
   return plan.ranges.length > 1 ? { count, ...plan } : null;
 }
 
@@ -971,7 +952,7 @@ function show(r, seconds, workers, threads, restored = null) {
       'browser (IndexedDB) until the run is finished, another one is stopped, or Forget',
   } : {
     text: r.stopped
-      ? `Stopped at ${at}, after ${seconds.toFixed(1)} s (${rate}): ${wholeRun ? NOT_KEPT : 'Resume goes on from there'}`
+      ? `Stopped at ${at}, after ${seconds.toFixed(1)} s (${rate}): Resume goes on from there`
       : `Done in ${seconds.toFixed(1)} s, ${rate} (${(ranSeconds / seconds).toFixed(1)} times real time)` +
         `${resumeFrom > 0 || resumeAt > 0 ? `, resumed ${resumedFrom()}` : ''}`,
     title: `${count(ran)} frames, ${ranSeconds.toFixed(3)} s of video, in ${seconds.toFixed(3)} s` +
@@ -1199,6 +1180,46 @@ document.addEventListener('drop', e => {
   choose(e.dataTransfer.files[0]);
 });
 
+// The installed app (manifest.webmanifest; backlog "An installable app with Open with and a share target", issue #95),
+// in Chromium: a file opened with it (File Handling) arrives through launchQueue, a video shared to it on Android (the
+// share target) through sw.js, which keeps it and sends the page to ?shared. Either is opened as if it had been picked.
+// While one is on its way the page doesn't reload to become isolated (serve): the launch would be lost with the document.
+// Firefox and Safari have neither: the file input and the drop zone.
+let arriving = false;
+async function arrive(getting) {
+  arriving = true;
+  try {
+    const chosen = await getting;
+    if (chosen) await choose(chosen);
+  } catch (e) {
+    fail(`The file didn't open: ${e.message}`);
+  } finally {
+    arriving = false;
+  }
+}
+if ('launchQueue' in globalThis) {
+  launchQueue.setConsumer(params => {
+    const [handle] = params.files ?? [];
+    if (handle) arrive(handle.getFile());
+  });
+}
+if (new URLSearchParams(location.search).has('shared')) {
+  // Off the address, so that a reload or a bookmark doesn't look for it again.
+  const address = new URL(location.href);
+  address.searchParams.delete('shared');
+  history.replaceState(null, '', address);
+  arrive(sharedFile());
+}
+async function sharedFile() {
+  if (!('caches' in globalThis)) return null;
+  const cache = await caches.open('shotdetector-web-shared'), response = await cache.match('shared-file');
+  if (!response) return null;
+  await cache.delete('shared-file');
+  const name = decodeURIComponent(response.headers.get('x-file-name') ?? 'shared.mp4');
+  const lastModified = Number(response.headers.get('x-last-modified')) || Date.now();
+  return new File([await response.blob()], name, { type: response.headers.get('content-type') ?? '', lastModified });
+}
+
 // The service worker (sw.js): isolation for the threads, and the page offline. A first visit isn't controlled by it, so
 // not isolated: once it takes over, the page reloads, once a session, if nothing has been picked yet (else threads come
 // with the next visit). Without service workers (some private modes, file:) the page works as before, on one thread.
@@ -1221,7 +1242,7 @@ async function serve() {
   if (sw.controller) return; // taken over while registering: the controllerchange below would never come
   await new Promise(resolve => {
     sw.addEventListener('controllerchange', () => {
-      if (globalThis.crossOriginIsolated || file || state !== 'idle') return resolve();
+      if (globalThis.crossOriginIsolated || file || arriving || state !== 'idle') return resolve();
       try {
         sessionStorage.setItem('isolating', '1');
       } catch {

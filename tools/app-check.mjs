@@ -23,7 +23,8 @@
 // stopped in its second range split, the rest split again from the kept bytes' first frame (Ranges from it), merged
 // with them: the whole run's too (checkResume). Kept bytes of other options fail with NOT_RESUMED (checkNotResumed).
 // A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
-// the default run and the run with every detector (SPLIT_RUNS) split into ranges at keyframes (at most RANGES), each
+// the default run, the run with every detector and that run deinterlaced (SPLIT_RUNS) split into ranges at keyframes
+// (at most RANGES; Ranges for the run's options, which say how far past a keyframe a range starts), each
 // scored on its own and merged from their bytes, must give the whole run's CSVs and shots, the merge telling the shots
 // as Detect does (checkRanges); stopped half-way through the second range (and every range after it, as the page stops
 // every worker), the merge is the result for the frames from the start without a gap, held to the whole run as a
@@ -37,8 +38,8 @@
 // The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
 // check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
 // whole run's; a stopped run's the whole run's first frames, as many as its result read.
-// --light (tools/realworld.sh, for a real file over three minutes; the owner's choice, 2026-10-31): only the runs split
-// (SPLIT_RUNS: the default and every detector), each whole and split into ranges; no cancel, stop, pause or resume, and
+// --light (tools/realworld.sh, for a real file over three minutes; the owner's choice, 2026-10-31): only the default and
+// every detector (LIGHT_RUNS), each whole and split into ranges; no cancel, stop, pause or resume, and
 // no merges or resumes meant to fail, which the generated samples cover and which don't depend on the file.
 //   node tools/app-check.mjs <the publish's wwwroot> <out dir> <sample.mp4|.mov|.avi>... [--reject <file>...]
 //     [--no-aac <file>...] [--native <the native check's out dir>] [--light]
@@ -66,10 +67,12 @@ const RUNS = {
 const DEINTERLACED = ['deinterlace-auto', 'deinterlace-on'];
 
 // The most ranges a run is split into here, as the page splits a long video (app.js's MOST_WORKERS), and the runs split:
-// the page's default (one detector: the merge tells the shots as each cut is confirmed) and all five detectors at once
-// (each detector's scores merged), not each detector alone again, which would double the check's time.
+// the page's default (one detector: the merge tells the shots as each cut is confirmed), all five detectors at once
+// (each detector's scores merged) and those deinterlaced (wider margins: ShotDetector's RangeFrames), not each detector
+// alone again, which would double the check's time. --light splits the first two only.
 const RANGES = 4;
-const SPLIT_RUNS = ['adaptive', 'all'];
+const SPLIT_RUNS = ['adaptive', 'all', 'deinterlace-on'];
+const LIGHT_RUNS = ['adaptive', 'all'];
 // What a merge that fails says first (Api's NotMerged): the page then detects again with one worker.
 const NOT_MERGED = 'The ranges didn\'t merge: ';
 // What a resume that fails on its kept scores says first (Api's NotResumed): the page then detects from the start.
@@ -179,7 +182,7 @@ for (const [i, sample] of samples.entries()) {
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frames} frames, ${video.duration} s`);
   // Once: a run cancelled half-way fails as cancelled, keeps no result, and the next run goes on as if it hadn't been.
   if (i === 0 && !light) await checkCancel(sample, video);
-  for (const [run, options] of Object.entries(RUNS).filter(([run]) => !light || SPLIT_RUNS.includes(run))) {
+  for (const [run, options] of Object.entries(RUNS).filter(([run]) => !light || LIGHT_RUNS.includes(run))) {
     progress = [];
     told = [];
     toldAt = [];
@@ -612,7 +615,7 @@ function merge(options, bytes, kept = new Uint8Array(0)) {
 // frames from the start.
 async function checkRanges(sample, video, run, options, whole, wholeScenes, wholeStats, wholeShotFiles) {
   const name = `${basename(sample)} ${run} in ranges`;
-  const plan = JSON.parse(Ranges(RANGES, 0));
+  const plan = JSON.parse(Ranges(JSON.stringify(options), RANGES, 0));
   if (plan.frames !== whole.frameCount) fail(`${name}: Ranges says ${plan.frames} frames, the whole run read ${whole.frameCount}`);
   const started = performance.now();
   const bytes = await scoreRanges(options, plan);
@@ -638,15 +641,18 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
 
   const stopFrom = Math.min(1, plan.ranges.length - 1), stopped = plan.ranges[stopFrom];
   const partial = merge(options, await scoreRanges(options, plan, stopFrom));
-  // The range's frames start at the one before its first: stopped after half of them (scoreRanges), at least this many.
-  const n = partial.frameCount, half = stopped.firstFrame - 1 + Math.floor((stopped.endFrame - stopped.firstFrame) / 2);
+  // The range's frames start before its first (one frame, two deinterlaced): stopped after half of them (scoreRanges), at
+  // least this many.
+  const before = DEINTERLACED.includes(run) ? 2 : 1;
+  const n = partial.frameCount, half = stopped.firstFrame - before + Math.floor((stopped.endFrame - stopped.firstFrame) / 2);
   if (partial.stopped !== true || n < half || n >= stopped.endFrame) {
     fail(`${name} stopped in range ${stopFrom} (${stopped.firstFrame}-${stopped.endFrame - 1}) at ${half}: ` +
       `${n} frames, stopped ${partial.stopped}`);
     return;
   }
   checkPictureStopped(`${name} stopped in range ${stopFrom}`, partial);
-  checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, await statsText(), whole, wholeStats);
+  checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, await statsText(), whole, wholeStats,
+    DEINTERLACED.includes(run));
 }
 
 // The whole run's picture measures (Api's Picture): the native check's, which it compared with FFmpeg's filters,
@@ -692,7 +698,7 @@ function checkFrameTypes(sample, result) {
 // Ranges that don't make up the video fail the merge with NOT_MERGED and ShotDetector's reason: scored with other
 // options than the merge's (another fingerprint), or their bytes damaged (the checksum).
 async function checkNotMerged(sample) {
-  const plan = JSON.parse(Ranges(RANGES, 0));
+  const plan = JSON.parse(Ranges(JSON.stringify(RUNS.content), RANGES, 0));
   const bytes = await scoreRanges(RUNS.content, plan);
   const damaged = bytes.map(b => b.slice());
   damaged.at(-1)[damaged.at(-1).length >> 1] ^= 1;
@@ -753,7 +759,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     return fail(`${name}: resumed from ${keep1.from} and stopped at two thirds: ${second.frameCount} frames, stopped ${second.stopped}`);
   if (JSON.stringify(shots) !== JSON.stringify(second.shots)) fail(`${name}: stopped again, the shots shown aren't its result's`);
   if (progress.at(-1)?.[0] !== second.frameCount) fail(`${name}: stopped again, progress ended at ${JSON.stringify(progress.at(-1))}`);
-  checkStopped(`${name}, stopped again`, video, second, await statsText(), whole, wholeStats);
+  checkStopped(`${name}, stopped again`, video, second, await statsText(), whole, wholeStats, DEINTERLACED.includes(run));
   const keep2 = await kept();
 
   // Opened again and resumed to the end: the whole run's.
@@ -774,12 +780,12 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     `${seconds.toFixed(2)} s: the whole run's`);
 
   // Split: stopped in its second range, the rest split again from the kept bytes' first frame.
-  const plan = JSON.parse(Ranges(RANGES, 0));
+  const plan = JSON.parse(Ranges(json, RANGES, 0));
   if (plan.ranges.length < 2) return;
   const partial = merge(options, await scoreRanges(options, plan, 1));
   const keep = await kept();
   Open(fileBlob(sample));
-  const rest = JSON.parse(Ranges(RANGES, keep.from));
+  const rest = JSON.parse(Ranges(json, RANGES, keep.from));
   if (rest.ranges[0].firstFrame !== keep.from) fail(`${name} split: the rest's ranges start at ${rest.ranges[0].firstFrame}, not ${keep.from}`);
   const merged = merge(options, await scoreRanges(options, rest, rest.ranges.length, keep.from), keep.bytes);
   if (!await same(merged)) fail(`${name} split: the rest merged with the kept bytes isn't the whole run's`);
@@ -791,7 +797,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
 // at 90% of the frames, past the last place a range can start on every sample (the tone sample's is frame 252 of
 // 375): kept bytes with no place to resume from but frame 0 start over, and nothing of theirs is compared.
 async function checkNotResumed(sample) {
-  stopAt = Math.floor(JSON.parse(Ranges(1, 0)).frames * 9 / 10);
+  stopAt = Math.floor(JSON.parse(Ranges(JSON.stringify(RUNS.content), 1, 0)).frames * 9 / 10);
   try { await Detect(JSON.stringify(RUNS.content)); } finally { stopAt = null; }
   const { bytes, from } = await kept();
   if (from <= 0) return console.error(`${basename(sample)}: kept bytes of other options: no place to resume from but frame 0`);
