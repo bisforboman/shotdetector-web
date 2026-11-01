@@ -75,7 +75,7 @@ from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI ar
   - Done when: AudioCheck passes on every sample (silencedetect at 2 s and 1 s, ebur128) and app-check's `Audio()`
     comparison too.
   - Not: no silence counting of the page's own.
-  - Status: Open (needs the bump)
+  - Status: In progress (2026-11-01)
 
 - Odd heights
   - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
