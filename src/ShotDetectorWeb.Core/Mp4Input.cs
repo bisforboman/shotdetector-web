@@ -65,7 +65,7 @@ public sealed class Mp4Input : VideoInput
         var timeBase = new FrameReader.Rational(1, checked((int)header.Timescale));
         var packets = new VideoPackets.Builder(timeBase, (int)Math.Min(header.SampleCount, Array.MaxLength));
         var samples = new SampleDurations();
-        long? duration = FormatDuration(demuxer, packets, samples, header.Fragmented ? null : header.TotalDuration);
+        long? duration = FormatDuration(demuxer, packets, samples);
         Packets = packets.Build();
 
         // FFmpeg's average rate is mov.c's nb_frames_for_fps over duration_for_fps: every sample of 'stts' and of each
@@ -171,12 +171,12 @@ public sealed class Mp4Input : VideoInput
     /// latest stream end, video and audio, as the edit lists present them; null without packets. ShotDetector reports it
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
     /// result. Adds each video packet to <paramref name="packets"/> and its duration to <paramref name="samples"/> on the way.
-    /// The video's end is its start plus FFmpeg's stream duration: the samples' total (<paramref name="videoTotal"/>, the
-    /// 'stts' one; else the walk's, a fragmented file's 'trun' samples, its track_end), cut where the edit list ends
-    /// (mov.c's mov_read_stts and mov_fix_index: the least of the two). The last shown packet's end can be later: at a
-    /// variable rate, a packet lasts its decode-order delta, not its frame's.
+    /// The video's end is its start plus FFmpeg's stream duration (ManagedCodecs' <see cref="VideoStreamInfo.Duration"/>:
+    /// the edits' summed length, else 'mdhd''s, else the samples', a fragmented file's 'trun' ones), not the last shown
+    /// packet's end, which can be later (at a variable rate a packet lasts its decode-order delta, not its frame's) or
+    /// earlier (an edit list from media_time 0 before a composition offset discards the last packets inside it).
     /// </summary>
-    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples, long? videoTotal)
+    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples)
     {
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPacketInfo())
@@ -216,12 +216,9 @@ public sealed class Mp4Input : VideoInput
 
         if (spans.Count == 0)
             return null;
-        if (demuxer.Video is { } shown && spans.TryGetValue(shown.StreamIndex, out var videoSpan))
-        {
-            long total = videoTotal ?? samples.Total;
-            if (total > 0 && videoSpan.Start + total < videoSpan.End)
-                spans[shown.StreamIndex] = videoSpan with { End = videoSpan.Start + total };
-        }
+        // The video ends where its stream's duration says, from its first shown frame (above).
+        if (demuxer.Video is { } shown && spans.TryGetValue(shown.StreamIndex, out var videoSpan) && shown.Duration > 0)
+            spans[shown.StreamIndex] = videoSpan with { End = videoSpan.Start + shown.Duration };
 
         long first = long.MaxValue, last = long.MinValue, longest = long.MinValue;
         foreach (var (start, end, tb) in spans.Values)
