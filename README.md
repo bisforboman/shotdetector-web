@@ -298,6 +298,27 @@ it always did and its answer replaces the cached copy; offline, the cached copy 
 demo clip once it has been fetched. A new deploy reaches a visitor as it did before; a visit cut off half-way through a
 new deploy's files can leave a mix that fails offline until the next online visit.
 
+## The installed app
+
+The page is an installable app ([#95](https://github.com/bisforboman/shotdetector-web/issues/95)): `manifest.webmanifest`
+(its name, `display: standalone`, the icons `icon.svg`, `icon-192.png` and `icon-512.png`, the PNGs rendered once from
+the SVG and checked in: no build step), linked from `index.html`, so Chromium (Chrome, Edge) offers Install. The
+installed app works offline and on threads as the page does: the same service worker serves it, isolated.
+
+- **Open with** (File Handling, Chromium on the desktop): the manifest's `file_handlers` take `.mp4` and `.avi`; a file
+  opened with the app arrives through `launchQueue` (`app.js`) and is opened as if it had been picked. `launch_handler`
+  `focus-existing`: the app already open takes it, a run under way abandoned as when another file is picked.
+- **Share** (Web Share Target, Chrome on Android): a video shared to the app is POSTed as multipart form data to
+  `share`, which `sw.js` answers itself (Pages serves files, and nothing is uploaded): the file kept in a cache of its
+  own and the page sent to `?shared` (the action's own query kept), where `app.js` takes it out, off the address, and
+  opens it as if picked.
+- While a file is on its way the page doesn't reload to become isolated (a launch would be lost with the document).
+- Firefox and Safari have neither: the file input and the drop zone, as before.
+
+The page check installs the app in Chromium (CDP `PWA.install`, the full Chromium: the headless shell has no `PWA`
+domain), checks its manifest as Chromium reads it, and runs a sample opened with it (`PWA.launchFilesInApp`) and shared
+to it (the share target's POST), on threads and on `?threads=0`, to the same downloads as a picked file.
+
 ## Large files
 
 The page reads the picked file in place: the worker gets the `File` (no bytes copied), `Api.Open` takes it as a
@@ -772,7 +793,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
   in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on
-  threads to the whole run's downloads (screenshots of both in `out/page/`); the page reloaded offline (Playwright's network off), from the service worker's
+  threads to the whole run's downloads (screenshots of both in `out/page/`); the installed app ("The installed app"):
+  its manifest as Chromium reads it (no errors, installable, the icons served), the sample opened with it through
+  `launchQueue` and shared to it through `sw.js`, each on threads and on `?threads=0`, to the same downloads; the page reloaded offline (Playwright's network off), from the service worker's
   cache, still isolated, the demo run again from the cache on threads; the demo on two workers (`?workers=2`) stopped
   at 40% and resumed in the same visit, the rest split again; and in Firefox, on the page's worker (`?threads=0`), the
   demo stopped at 30%, the page reloaded, shown again and resumed (`PAGE_CHECK_FIREFOX=skip` leaves Firefox out, where
@@ -808,7 +831,8 @@ which wasm interpreted 19 min 10 s, wasm AOT 5 min, replace 2 min 10 s, native 1
     `tools/WebCodecsCheck/`, `tools/WebCodecsWasm/`): `build` runs and passes without a check, which can't see them;
   - **native** for `tools/NativeCheck/`: the native check alone;
   - **page** for the page's own files that no wasm check loads (`index.html`, `style.css`, `app.js`, `timeline.js`,
-    `versions.js`, `worker.js`, `threads.js`, `sw.js`, `panels/`) and `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
+    `versions.js`, `worker.js`, `threads.js`, `sw.js`, `panels/`, `manifest.webmanifest` and the icons) and
+    `tools/page-check/`: the native check, `DefaultsCheck.cs` reading
     `app.js` among it, then the page in Chromium on an interpreted publish (`tools/check.sh page`);
   - **all** for anything else, a path no rule names included (the core, the App's .NET side, `blob-read.js`,
     `blob-write.js` and `pause.js`, which the wasm checks import, the packages, the samples' recipe, the checks' scripts, the workflows).

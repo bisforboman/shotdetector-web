@@ -119,7 +119,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `ThreadedRunner` that speaks `worker.js`'s messages (only `Open`, `Detect`,
   `Resume`, the last run's result, stop, cancel, pause, resume), abandoned rather than terminated; `wwwroot/sw.js` the service
   worker: COOP/COEP on every response (cross-origin isolation, which the threads need) and the page offline, network
-  first. The page (no build step, no dependency, native ES modules; README "Running the page";
+  first, and the installed app's share target (a multipart POST to `share`: the file kept in the cache
+  `shotdetector-web-shared`, the page sent to `?shared`); `manifest.webmanifest` and `icon.svg`, `icon-192.png`,
+  `icon-512.png` the installable app (README "The installed app", issue #95: `file_handlers` for .mp4 and .avi,
+  `launch_handler` focus-existing, `share_target`). The page (no build step, no dependency, native ES modules; README "Running the page";
   decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`): `index.html` (the layout: the landing that folds into a
   toolbar once a file is picked, the status line, the result's four rows: the video beside the run's cards, the timeline
   across the width, the cards below it, the details' grid; and the list of panels), `style.css`, `app.js` (the
@@ -131,7 +134,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   say, the playhead `timeline.js`'s own, `held`; `frameAt(t)`, which `shots.js`' stills use too), a long video split
   across workers (`SPLIT_SECONDS`, `MOST_WORKERS`, `?workers=N` in the address; the page's own worker scores the first
   range and merges), a one-worker run on threads where the page is isolated (`MOST_THREADS`, `?threads=N`, 0 or 1 the
-  page's worker; `serve()` registers `sw.js` and reloads a first visit once, the page's worker started only once it won't reload or a file is picked, `startWorker`), the sound's worker, and a stopped run kept
+  page's worker; `serve()` registers `sw.js` and reloads a first visit once, the page's worker started only once it won't reload or a file is picked, `startWorker`), the sound's worker, a file arriving
+  through `launchQueue` (Open with) or `?shared` (the share target) opened as if picked (`arrive`, no reload to isolate
+  while one is on its way), and a stopped run kept
   in IndexedDB (`KEPT`, one record: the file by name, size and modified time, the options, `Kept()`'s Blob; shown again
   at once when its file is picked, Resume and Forget beside Detect, a rest over `SPLIT_SECONDS` split); the events panels listen to, `call(name, ...args)`, `card(title, {
   place, mark, markTitle })` and `frameSeconds(video, frames)` (where a frame starts: its number over the rate, or a
@@ -208,7 +213,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
   reloaded and resumed, each run's downloaded CSVs, JSON and HTML against the native run's (the only check of the
-  threaded bundle), the picture card's crop and colour bars the native run's, the layout (no hole under a details card, the shots unscrolled up to 15, no red in a lane but the playhead, the run's figures in the first screen, nothing wider than the window) with screenshots at 1280 and 390 px, light and dark, of the demo done, kept and resumed, any page or worker error failing it;
+  threaded bundle), the picture card's crop and colour bars the native run's, the layout (no hole under a details card, the shots unscrolled up to 15, no red in a lane but the playhead, the run's figures in the first screen, nothing wider than the window) with screenshots at 1280 and 390 px, light and dark, of the demo done, kept and resumed, the installed app (the full Chromium, `channel: 'chromium'`: CDP `Page.getAppManifest` without errors and installable, `PWA.install`, a sample
+  through `PWA.launchFilesInApp`'s `launchQueue` and through the share target's POST, on threads and on `?threads=0`, to the same downloads),
+  any page or worker error failing it;
   `tools/realworld.sh`: the real-world check (README "Real world"): Blender films pinned by SHA-256 and variants the
   pinned FFmpeg makes of them (fragmented, rotated, 1080i25), each expected "same" or "refused", the native check and
   the AOT bundle under Node on them (`app-check.mjs --light` on the long ones: the default and all-detector runs,

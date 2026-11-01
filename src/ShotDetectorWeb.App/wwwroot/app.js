@@ -1180,6 +1180,46 @@ document.addEventListener('drop', e => {
   choose(e.dataTransfer.files[0]);
 });
 
+// The installed app (manifest.webmanifest; backlog "An installable app with Open with and a share target", issue #95),
+// in Chromium: a file opened with it (File Handling) arrives through launchQueue, a video shared to it on Android (the
+// share target) through sw.js, which keeps it and sends the page to ?shared. Either is opened as if it had been picked.
+// While one is on its way the page doesn't reload to become isolated (serve): the launch would be lost with the document.
+// Firefox and Safari have neither: the file input and the drop zone.
+let arriving = false;
+async function arrive(getting) {
+  arriving = true;
+  try {
+    const chosen = await getting;
+    if (chosen) await choose(chosen);
+  } catch (e) {
+    fail(`The file didn't open: ${e.message}`);
+  } finally {
+    arriving = false;
+  }
+}
+if ('launchQueue' in globalThis) {
+  launchQueue.setConsumer(params => {
+    const [handle] = params.files ?? [];
+    if (handle) arrive(handle.getFile());
+  });
+}
+if (new URLSearchParams(location.search).has('shared')) {
+  // Off the address, so that a reload or a bookmark doesn't look for it again.
+  const address = new URL(location.href);
+  address.searchParams.delete('shared');
+  history.replaceState(null, '', address);
+  arrive(sharedFile());
+}
+async function sharedFile() {
+  if (!('caches' in globalThis)) return null;
+  const cache = await caches.open('shotdetector-web-shared'), response = await cache.match('shared-file');
+  if (!response) return null;
+  await cache.delete('shared-file');
+  const name = decodeURIComponent(response.headers.get('x-file-name') ?? 'shared.mp4');
+  const lastModified = Number(response.headers.get('x-last-modified')) || Date.now();
+  return new File([await response.blob()], name, { type: response.headers.get('content-type') ?? '', lastModified });
+}
+
 // The service worker (sw.js): isolation for the threads, and the page offline. A first visit isn't controlled by it, so
 // not isolated: once it takes over, the page reloads, once a session, if nothing has been picked yet (else threads come
 // with the next visit). Without service workers (some private modes, file:) the page works as before, on one thread.
@@ -1202,7 +1242,7 @@ async function serve() {
   if (sw.controller) return; // taken over while registering: the controllerchange below would never come
   await new Promise(resolve => {
     sw.addEventListener('controllerchange', () => {
-      if (globalThis.crossOriginIsolated || file || state !== 'idle') return resolve();
+      if (globalThis.crossOriginIsolated || file || arriving || state !== 'idle') return resolve();
       try {
         sessionStorage.setItem('isolating', '1');
       } catch {
