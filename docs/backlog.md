@@ -50,21 +50,6 @@ backlog-done); the rows below each need it and can run in any order, one pull re
 apply: the page's managed measures move upstream into FrameReader and the page drops its copies, and a format built
 from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI around it).
 
-- Deinterlaced runs split and resumed
-  - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,
-    since ShotDetector's ranges refused yadif before 3.25.0; a long broadcast file is where both matter most.
-    ShotDetector 3.25.0's `ScoreRange`/`ScoreRangeAsync`/`Merge` take deinterlacing (shotdetector#628), and
-    `ShotDetection.RangeFrames(video, options, firstFrame, endFrame)` says which frames a range reads (its margin: 1
-    frame each side, 2 when deinterlacing).
-  - Where: `Api`'s deinterlaced path (`Whole`) goes, `VideoInput.Deinterlaces` (a copy of ShotDetector's rule) and
-    the ranges' hard-coded 1-frame margins give way to `RangeFrames`; `app.js`'s `planFor` and `NOT_KEPT` with them.
-    The deinterlaced runs join RangeCheck, ThreadsCheck, ResumeCheck and app-check's `SPLIT_RUNS`; app-check's
-    stopped-run allowance for deinterlaced runs (`DEINTERLACED`: the last row, and the adaptive ratio whose window
-    reaches it) holds for split runs too. The page check's interlaced sample, asked for two workers, gets them.
-  - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
-  - Not: no margin of the page's own (ShotDetector's `RangeFrames` is the rule).
-  - Status: In progress (2026-11-01)
-
 - The picture's measures from FrameReader
   - Why: FrameReader 2.19.0's `PictureMeter`, `PictureFormat`, `PictureMeasures` and `PictureType` are the core's
     `PictureMeasures.cs` moved upstream (signalstats, blackdetect, cropdetect and the colour bars at 8 to 16 bits,
