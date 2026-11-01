@@ -54,7 +54,7 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
     start (CLAUDE.md, Gotchas: pts + skip); a sample in make-samples.sh (with-audio fragmented) that isolates it.
   - Done when: AudioCheck agrees on the sample and `tools/realworld.sh check caminandes-fragmented.mp4` passes.
   - Not: a shift in the core working around the demuxer, if it is the demuxer's.
-  - Status: Open (2026-11-01)
+  - Status: In progress (2026-11-01)
 
 - Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
   - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
