@@ -21,13 +21,6 @@ namespace ShotDetectorWeb;
 /// </remarks>
 public sealed class Mp4Input : VideoInput
 {
-    // FFmpeg's names of the H.264 / ISO matrix coefficients (libavutil's av_color_space_name); unspecified (2) is "".
-    static readonly string[] MatrixNames =
-    [
-        "gbr", "bt709", "", "reserved", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco", "bt2020nc", "bt2020c",
-        "smpte2085", "chroma-derived-nc", "chroma-derived-c", "ictcp", "ipt-c2", "ycgco-re", "ycgco-ro",
-    ];
-
     Mp4Input(Func<Stream> open)
         : base(open)
     {
@@ -90,7 +83,7 @@ public sealed class Mp4Input : VideoInput
         // yuvj420p or yuvj422p at 8 bits; at 10 bits there is no such format, only the range tag.
         bool fullRange = sps.VideoSignalTypePresent ? sps.FullRange : header.ColrFullRange ?? false;
         int? matrix = sps.MatrixCoefficients ?? header.ColrMatrix;
-        string colorSpace = matrix is int m && m < MatrixNames.Length ? MatrixNames[m] : "";
+        string colorSpace = matrix is int m ? MatrixName(m) ?? "" : "";
 
         var rate = ManagedCodecs.Rational.Reduce(header.Timescale * sampleCount, totalDuration);
         var fps = new Fps(rate.Numerator, rate.Denominator);
@@ -122,12 +115,6 @@ public sealed class Mp4Input : VideoInput
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
         };
     }
-
-    // FFmpeg's names of the chroma locations (libavutil's av_chroma_location_name); unspecified (0) is null, as ffprobe's
-    // "unspecified" is to FrameReader.
-    static readonly string?[] ChromaLocations = [null, "left", "center", "topleft", "top", "bottomleft", "bottom"];
-
-    static string? ChromaLocationName(int location) => location >= 0 && location < ChromaLocations.Length ? ChromaLocations[location] : null;
 
     /// <summary>
     /// The display rotation as ShotDetector's file path takes it from FFmpeg (VideoReader: the display matrix's angle

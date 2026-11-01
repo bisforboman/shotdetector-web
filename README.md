@@ -42,8 +42,11 @@ in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not 
 `docs/decisions/2026-10-30-scope-widening.md`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
-matrix or range that changes midway in band isn't seen: every frame is converted with the first SPS's (backlog,
-"Each frame's own colour tags"). Interlaced (two-field) MJPEG isn't checked: ffmpeg
+matrix, range or chroma location that changes midway in band (a splice: a later SPS with other VUI tags) is followed
+frame by frame, each frame given its own where they differ from the video's (ManagedCodecs 0.5.0's `VideoFrame` tags,
+ShotDetector's `YuvFrame.ColorSpace`, `FullRange` and `ChromaLocation`, shotdetector#626), as FFmpeg's decoder tags
+each frame: `samples/tags-change-320x240-25.mp4`. The picture's measures keep the video's range throughout, as one
+FFmpeg filter graph does (the picture check runs ffmpeg with `-reinit_filter 0`). Interlaced (two-field) MJPEG isn't checked: ffmpeg
 can't make a sample of it. Damaged files throw ManagedCodecs'
 `InvalidDataException`.
 
@@ -537,6 +540,7 @@ path's. ManagedCodecs doesn't expose all of it, so the library reads it itself. 
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); the SPS's chroma format and bit depth: yuv420p, yuv422p or yuv420p10le, full range yuvj420p or yuvj422p at 8 bits |
 | ChromaLocation | the SPS's VUI chroma_sample_loc_type_top_field (FFmpeg's location is it plus one), else left, FFmpeg's H.264 default; ShotDetector uses it for 10-bit only |
+| Each frame's ColorSpace, FullRange, ChromaLocation | the frame's own SPS's (ManagedCodecs' `VideoFrame`), given only where they say one and it differs from the video's (a tag the SPS doesn't carry stays the video's) |
 | Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
 In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which ManagedCodecs' `AviDemuxer` doesn't expose):

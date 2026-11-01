@@ -41,7 +41,7 @@ The performance pass's rows are all done ([backlog-done.md](backlog-done.md)).
 
 The owner chose on 2026-11-01 to adopt ManagedCodecs 0.5.0 in one session, a pull request each, in this order: the
 bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a track whose edit list starts at 0"
-(Waiting, ManagedCodecs#252, fixed in 0.5.0). The bump is done (backlog-done).
+(Waiting, ManagedCodecs#252, fixed in 0.5.0). The bump and each frame's colour tags are done (backlog-done).
 
 ## Waiting
 
@@ -104,20 +104,6 @@ since 3.23.0 also rotated, at a variable rate (`FrameTimestamps`) and deinterlac
 a frame of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
-
-- Each frame's own colour tags (a matrix or range that changes midway)
-  - Why: ShotDetector 3.24.0 converts each frame with its own `YuvFrame.ColorSpace` and `FullRange` (shotdetector#626),
-    as `Detect(path)` does with each frame's tags from FFmpeg's decoder: a spliced stream whose SPS changes its VUI
-    colour matrix or range midway gives other stats here, without a word, since `Mp4Input` describes every frame with
-    the first SPS's (`SpsInfo.FromAvcConfig`, the 'avcC''s). ManagedCodecs' `VideoFrame` carried no colour tags until
-    0.5.0, which gives each frame's (`VideoFrame.ColorMatrix`, `ColorRange`, ...) from its active SPS.
-  - Where: first upstream, ManagedCodecs: each `VideoFrame`'s colour description from its active SPS (matrix and range;
-    an MJPEG frame's are fixed); then `VideoInput`'s frames set `YuvFrame.ColorSpace`/`FullRange` where they differ
-    from `YuvVideo`'s, and a sample in make-samples.sh (two streams with other VUI tags, their Annex B concatenated as
-    `samples/reject/size-change.mp4`'s are) that NativeCheck runs as every sample.
-  - Done when: the native check passes on that sample, byte for byte.
-  - Not: no SPS parsing of every packet in the core (the decoder's job: CLAUDE.md, report it there).
-  - Status: Maybe (found adopting ShotDetector 3.24.0, 2026-10-31; not filed upstream yet)
 
 - Chapter titles kept with the kept run
   - Why: the titles typed for a run's YouTube chapters (the run card's Titles) last while the run is shown; a stopped
