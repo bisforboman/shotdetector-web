@@ -148,9 +148,11 @@ public abstract partial class VideoInput
         var (starts, frames) = RangeStarts(options);
         if (earlier.Count == 0)
             return new Continuation([], Range(options, 0, frames, 0));
-        long reached = earlier[^1].FirstFrame + earlier[^1].FrameCount - Lookahead(options);
+        // A range's last scores read frames past them (Lookahead), but for the video's last frames, which have none.
+        long reached = earlier[^1].FirstFrame + earlier[^1].FrameCount;
         if (reached >= frames)
             return new Continuation(earlier, null);
+        reached -= Lookahead(options);
         var start = starts.LastOrDefault(s => s.FirstFrame <= reached - 1);
         if (start.FirstFrame == 0)
             return new Continuation([], Range(options, 0, frames, 0));

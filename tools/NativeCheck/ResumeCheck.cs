@@ -66,6 +66,9 @@ internal static class ResumeCheck
                     var problems = Same(merged, baseName);
                     if (merged.FrameCount != frames)
                         problems.Add($"{merged.FrameCount} frames merged");
+                    // Resumed to the end, nothing is left to resume (Api's Kept says -1).
+                    if (input.Continue(kept, options).Rest is { } left)
+                        problems.Add($"a rest from frame {left.FirstFrame} left after the end");
                     string shots = Shots.Json(shown) == Shots.Json(merged.Shots) ? "the whole run's" : "DIFFER";
                     if (shots != "the whole run's")
                         problems.Add("the shots told differ");
