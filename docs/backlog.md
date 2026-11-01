@@ -67,20 +67,6 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Done when: the realworld clips job passes, the allowance explained by ShotDetector's rule.
   - Status: Open (2026-11-01)
 
-- Tears of Steel's every-detector stats under AOT (found by the real-world check)
-  - Why: realworld.yml on 2026-11-01 (run 41295044525, ManagedCodecs 0.5.0): the native check agrees with FFmpeg on
-    tears_of_steel_720p.mov, but the AOT bundle's `tears_of_steel_720p.all.stats.csv` differs from the native one (7 of
-    8 files identical; the shots, the default run's CSVs and the split runs the same). The first night Tears of Steel
-    downloaded, so no run on 0.4.0 to compare.
-  - Where: no cloud session can download the artifact (its blob host is blocked), but job logs and annotations come
-    through `gh api`: `tools/csv-diff.mjs` prints a differing CSV's first 3 rows (frame, column, native and wasm value)
-    to the log and as an `::error` annotation, from realworld.sh's and check.sh's "Differs:" and app-check.mjs's
-    comparisons with the whole run.
-  - Done when: realworld.yml's tears job, dispatched on `main`, has printed the rows, and they, its run and job ids are
-    here and with the shotdetector coordinator, who decides whether it is ShotDetector's arithmetic or the web core's.
-  - Not: the fix, a later row once that is decided.
-  - Status: In progress (2026-11-01): the diagnostic
-
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
