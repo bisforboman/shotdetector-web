@@ -76,19 +76,7 @@ correcting the cuts on the page.
 
 ### ShotDetector 3.26.0 and FrameReader 2.20.0
 
-The owner's queue of 2026-11-01: the bump first, then freeze spans on the page.
-
-- ShotDetector/FastYuv 3.26.0 and FrameReader 2.20.0, the ranges' end from `RangeScores.EndFrame`
-  - Why: 3.26.0's `RangeScores.EndFrame` says where a range's final scores end (`FirstFrame + FrameCount`, one less
-    when deinterlaced): where the next range, or a stopped run resumed, must start at the latest (`EndFrame - 1`).
-    The core works that out itself since #115 (`Lookahead`, `RangeFrames(...).To - 2`), ShotDetector's arithmetic
-    copied.
-  - Where: `Directory.Packages.props`; `VideoInput.Ranges.cs`' `FromStart` and `Continue` on `EndFrame`, `Lookahead`
-    gone; README and CLAUDE.md's package versions.
-  - Done when: `tools/check.sh native wasm aot page` passes (RangeCheck, ThreadsCheck, ResumeCheck, app-check's split,
-    stopped and resumed runs the whole run's; app-check's versions the pins).
-  - Not: freeze or black spans (the next row).
-  - Status: In progress (2026-11-01)
+The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
 
 ## Waiting
 

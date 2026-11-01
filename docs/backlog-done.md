@@ -1422,3 +1422,16 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     two bits of the hash), the other columns and the 7 other files identical. Frame 38: native 0.46875, wasm 0.5;
     frame 100: native 0.46875, wasm 0.5; frame 215: native 0.53125, wasm 0.5625; 5 more. Sent to the shotdetector
     coordinator, who decides; the fix is a later row)
+
+- ShotDetector/FastYuv 3.26.0 and FrameReader 2.20.0, the ranges' end from `RangeScores.EndFrame`
+  - Why: 3.26.0's `RangeScores.EndFrame` says where a range's final scores end (`FirstFrame + FrameCount`, one less
+    when deinterlaced): where the next range, or a stopped run resumed, must start at the latest (`EndFrame - 1`).
+    The core works that out itself since #115 (`Lookahead`, `RangeFrames(...).To - 2`), ShotDetector's arithmetic
+    copied.
+  - Where: `Directory.Packages.props`; `VideoInput.Ranges.cs`' `FromStart` and `Continue` on `EndFrame`, `Lookahead`
+    gone; README and CLAUDE.md's package versions.
+  - Done when: `tools/check.sh native wasm aot page` passes (RangeCheck, ThreadsCheck, ResumeCheck, app-check's split,
+    stopped and resumed runs the whole run's; app-check's versions the pins).
+  - Not: freeze or black spans (the next row).
+  - Status: Done (2026-11-01, #124: `tools/check.sh native` all agree on 34 samples, `wasm` and `wasm aot` 3978 of
+    3978 files identical, the page in Chromium on the AOT bundle passed, Firefox skipped in the session)
