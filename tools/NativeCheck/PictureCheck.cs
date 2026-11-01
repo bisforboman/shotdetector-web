@@ -1,6 +1,8 @@
 // The picture check (README, "Checks"; decision 2026-10-30-picture-measures.md): for each sample, the picture measures
 // of the default run (PictureMeter, alongside detection) against FFmpeg's filters on the same file, exactly: the frames
 // are FFmpeg's (the CSVs prove it) and the filters count integers over them.
+// The 10-bit samples as the others: FFmpeg's filters take yuv420p10le as it is and count 10-bit code values (their
+// thresholds by the depth), as PictureMeter does.
 // - signalstats=stat=brng per frame: YMIN and YMAX equal, YAVG and BRNG to the digits FFmpeg prints (%g);
 // - cropdetect=reset=1:skip=0 per frame: x1, x2, y1, y2, w, h, x, y equal; and cropdetect with its defaults (reset=0,
 //   skip=2, round=16) after the last frame, its crop equal;
@@ -8,7 +10,7 @@
 //   the stream's own pts, as ours);
 // - the colour bars, which no FFmpeg filter finds, by their definition: on the samples whose last shot is smptehdbars
 //   (make-samples.sh's three(), the interlaced ones woven, the rotated ones upright, the
-//   variable-rate ones at their own timestamps), one span, the last shot's frames (from the default run's last cut; decoded frame 100 on for
+//   variable-rate ones at their own timestamps, the 10-bit ones in 10-bit levels), one span, the last shot's frames (from the default run's last cut; decoded frame 100 on for
 //   the variable-rate ones, whose cuts are numbered by time at the average rate); on the fades sample
 //   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
@@ -68,24 +70,6 @@ static class PictureCheck
         if (ours.Count != result.FrameCount)
             problems.Add($"{ours.Count} frames measured, the run read {result.FrameCount}");
         cells.Add($"{ours.Count}");
-
-        // A 10-bit video's frames keep their types only (PictureMeter; backlog "Picture measures at 10 bits"): said so,
-        // and nothing for any other.
-        bool tenBit = input.Video.PixelFormat == "yuv420p10le";
-        if (tenBit != (ours.NotMeasured is not null))
-            problems.Add(ours.NotMeasured is null ? "a 10-bit video measured" : $"not measured: {ours.NotMeasured}");
-        if (ours.NotMeasured is not null)
-        {
-            cells.Add("not measured (10-bit)");
-            cells.Add("");
-            cells.Add("");
-            cells.Add("");
-            cells.Add(Ranges(input, ours, problems));
-            cells.Add($"{time.TotalSeconds:F2} s");
-            File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".picture.json"),
-                JsonSerializer.Serialize(PictureSummary.Of(ours), PictureJson.Default.PictureSummary));
-            return;
-        }
 
         var theirs = Ffmpeg(libs, sample);
         if (theirs.Frames.Count != ours.Count)
@@ -161,7 +145,8 @@ static class PictureCheck
             name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
             name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal) ||
             name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal) ||
-            name.StartsWith("yuv422p-", StringComparison.Ordinal) || name.StartsWith("yuvj422p-", StringComparison.Ordinal);
+            name.StartsWith("yuv422p-", StringComparison.Ordinal) || name.StartsWith("yuvj422p-", StringComparison.Ordinal) ||
+            name.StartsWith("yuv420p10-", StringComparison.Ordinal);
         if (three)
         {
             // The variable-rate samples' last shot is decoded frame 100 on (two shots of 50 before it): the cut's FrameNum

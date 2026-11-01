@@ -9,27 +9,27 @@ namespace ShotDetectorWeb;
 /// seconds are FFmpeg's (the frames' pts in the time base).
 /// </summary>
 /// <param name="Frames">The frames measured: the run's (a stopped run's, those it read).</param>
-/// <param name="FullRange">Full range (yuvj420p): blackdetect's threshold is 25, not 37, and BRNG means little.</param>
+/// <param name="FullRange">Full range (yuvj420p): blackdetect's threshold is 25, not 37 (102, not 151, at 10 bits), and BRNG means little.</param>
+/// <param name="BitDepth">
+/// The video's bits per sample, 8 or 10: the levels' code values (0 to 255 or 1023, FFmpeg's at that depth) and the
+/// thresholds they were counted against (<see cref="PictureMeter"/>).
+/// </param>
 /// <param name="Points">The lane's points, a few thousand at most, each over <see cref="PicturePoints.FramesPerPoint"/> frames.</param>
 /// <param name="Black">blackdetect's spans with <c>d=0</c>, every one; <see cref="PictureSpan.Long"/> those its default 2 s keeps.</param>
 /// <param name="Bars">The colour bars' spans (by their definition).</param>
 /// <param name="Brng">signalstats' BRNG over the frames.</param>
 /// <param name="Levels">signalstats' YMIN, YAVG and YMAX over the frames.</param>
 /// <param name="Crop">cropdetect's crop with its defaults after the last frame; null for three frames or fewer.</param>
-/// <param name="NotMeasured">
-/// Why the picture wasn't measured (a 10-bit video: <see cref="PictureMeasures.NotMeasured"/>), the rest then empty; null
-/// when it was.
-/// </param>
 public sealed record PictureSummary(
     int Frames,
     bool FullRange,
+    int BitDepth,
     PicturePoints Points,
     IReadOnlyList<PictureSpan> Black,
     IReadOnlyList<PictureSpan> Bars,
     PictureBrng Brng,
     PictureLevels Levels,
-    CropArea? Crop,
-    string? NotMeasured = null)
+    CropArea? Crop)
 {
     /// <summary>The most points the lane gets: a frame each up to this many frames, then several.</summary>
     public const int MostPoints = 2000;
@@ -40,12 +40,6 @@ public sealed record PictureSummary(
     public static PictureSummary Of(PictureMeasures m)
     {
         ArgumentNullException.ThrowIfNull(m);
-        if (m.NotMeasured is { } why)
-        {
-            return new PictureSummary(m.Count, m.FullRange, new PicturePoints(1, [], [], [], []), [], [],
-                new PictureBrng(0, 0, null), new PictureLevels(null, null, null), null, why);
-        }
-
         int per = Math.Max(1, (m.Count + MostPoints - 1) / MostPoints);
         int points = (m.Count + per - 1) / per;
         var min = new int[points];
@@ -55,7 +49,7 @@ public sealed record PictureSummary(
         for (int p = 0; p < points; p++)
         {
             int from = p * per, to = Math.Min(m.Count, from + per);
-            int lo = 255, hi = 0;
+            int lo = int.MaxValue, hi = 0;
             double sum = 0, worst = 0;
             for (int i = from; i < to; i++)
             {
@@ -77,7 +71,7 @@ public sealed record PictureSummary(
 
         int brngFrames = 0, largestAt = -1;
         double largest = 0;
-        int lowest = 255, highest = 0;
+        int lowest = int.MaxValue, highest = 0;
         double means = 0;
         for (int i = 0; i < m.Count; i++)
         {
@@ -92,7 +86,7 @@ public sealed record PictureSummary(
 
         var levels = m.Count == 0 ? new PictureLevels(null, null, null)
             : new PictureLevels(lowest, Math.Round(means / m.Count, 2), highest);
-        return new PictureSummary(m.Count, m.FullRange, new PicturePoints(per, min, mean, max, brng), black, bars,
+        return new PictureSummary(m.Count, m.FullRange, m.BitDepth, new PicturePoints(per, min, mean, max, brng), black, bars,
             new PictureBrng(brngFrames, largest, largestAt < 0 ? null : largestAt), levels, m.Crop());
     }
 

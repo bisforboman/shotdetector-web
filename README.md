@@ -33,8 +33,8 @@ field order says interlaced, as `--deinterlace auto`; on one worker, not resumed
 shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
 `docs/decisions/2026-10-30-interlaced.md`). A 10-bit video's samples go to ShotDetector as decoded (16-bit
 little-endian words, yuv420p10le), its chroma location the SPS's (left without one, FFmpeg's H.264 default), which its
-conversion interpolates from; its picture isn't measured yet, its frames' types are (backlog, "Picture measures at 10
-bits"). **And 4:2:0 or 4:2:2 MJPEG
+conversion interpolates from; its picture is measured in 10-bit code values, as FFmpeg's filters measure it ("The
+picture"). **And 4:2:0 or 4:2:2 MJPEG
 in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, greyscale, 10-bit 4:2:2 or more than
@@ -625,9 +625,13 @@ BT.601 or BT.709). It costs about 2% of a run: 0.12 ms a frame natively and 0.27
 854x480, where a run takes 4.7 and 12 ms a frame. A split run's ranges each measure their own frames and send them
 with their scores (`RangeBytes`); `Merge` joins them (`PictureMeasures.Join`), byte for byte the whole run's. A
 stopped run's are the frames it read. 8-bit 4:2:2 is measured as 4:2:0 is, a chroma row under each luma row (signalstats'
-`vsub`), checked the same way; a 10-bit video's frames keep their types only (`PictureMeasures.NotMeasured`, the
-summary's `notMeasured`, the page's card saying why): FFmpeg's filters count 10-bit values there with their own
-thresholds (backlog, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
+`vsub`), checked the same way. A 10-bit video is measured as FFmpeg's filters measure yuv420p10le (they take it as
+it is, no conversion): in 10-bit code values, YMIN, YAVG and YMAX up to 1023, against their thresholds at 10 bits from
+FFmpeg 8.1's sources (BRNG outside 64 to 940, chroma 64 to 960; blackdetect's 151, or 102 at full range; cropdetect's
+limit 24/255 of 1023, 96), and the colour bars by the same definition at 4 times its 8-bit levels and tolerance; the
+measures keep YMIN and YMAX as 16 bits (`ToBytes`' "PIC4", so a run kept before it doesn't resume and is detected
+again), the summary says `bitDepth`, and the page's card gives the values as FFmpeg does, a level's 8-bit equivalent
+in its tooltip, the lane's axis 0 to 1023 (backlog-done, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
 (CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
 
 ## Checks
@@ -757,7 +761,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
   every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
-  (a quarter turn) and `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times); `interlaced-tff-320x240-25.mp4` with
+  (a quarter turn), `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times) and
+  `yuv420p10-full-topleft-bt709-320x240-25.mp4` (10 bits: its picture card and lane in 10-bit values); `interlaced-tff-320x240-25.mp4` with
   Deinterlace auto, on threads and asked for two workers (it runs on one, the ranges lane saying why), its downloads
   the native check's `deinterlace-auto` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
@@ -833,8 +838,8 @@ High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagge
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
 measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does; 4:2:2);
-10-bit 4:2:0 (no chroma location in the VUI, and topleft with full range and BT.709) and 8-bit 4:2:2 (limited and full
-range) H.264; seven files to refuse (three of them AVIs: 4:4:4 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
+10-bit 4:2:0 (no chroma location in the VUI, and topleft with full range and BT.709, its sources tagged BT.709 before
+the concat so that its colour bars stay BT.709's) and 8-bit 4:2:2 (limited and full range) H.264; seven files to refuse (three of them AVIs: 4:4:4 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
 H.264; one MP4 whose size changes midway); and three whose audio isn't measured. A deinterlaced run over 10 bits is
 compared with FFmpeg's yadif with its SIMD off (FFmpeg 8.1's x86 SIMD yadif differs from run to run there; FastYuv's
 `Yadif`, the core's, follows its C code).
