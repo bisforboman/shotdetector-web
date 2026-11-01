@@ -751,16 +751,14 @@ async function pickedAvi() {
 }
 
 // The installed app: a Chromium of its own, the full one (the headless shell has no PWA domain), in a profile of its own
-// (an incognito context can't install), whose page open() isolates as any.
+// (an incognito context can't install), whose page open() isolates as any. The profile's folder goes once the context
+// has closed (removed: rm()).
 function appBrowser() {
   const dir = mkdtempSync(join(tmpdir(), 'page-check-app-'));
   return {
     isolates: true,
-    async newContext(options) {
-      const context = await chromium.launchPersistentContext(dir, { ...options, channel: 'chromium' });
-      context.on('close', () => rmSync(dir, { recursive: true, force: true }));
-      return context;
-    },
+    newContext: options => chromium.launchPersistentContext(dir, { ...options, channel: 'chromium' }),
+    rm: () => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }),
   };
 }
 
@@ -816,7 +814,8 @@ async function arrived(page, what, query) {
 
 // The app installed and the sample opened with it: launchQueue.
 async function launched(query, what) {
-  const { context, page, errors } = await open(query, appBrowser());
+  const app = appBrowser();
+  const { context, page, errors } = await open(query, app);
   try {
     const cdp = await context.newCDPSession(page);
     if (query === '') await manifestValid(page, cdp);
@@ -829,6 +828,7 @@ async function launched(query, what) {
   }
   report(what, errors);
   await context.close();
+  app.rm();
 }
 
 // The sample shared to the page: the share target's POST, multipart as Android sends it, to share with the page's query,
