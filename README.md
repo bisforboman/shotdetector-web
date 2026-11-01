@@ -563,7 +563,7 @@ path's. ManagedCodecs doesn't expose all of it, so the library reads it itself. 
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); the SPS's chroma format and bit depth: yuv420p, yuv422p or yuv420p10le, full range yuvj420p or yuvj422p at 8 bits |
 | ChromaLocation | the SPS's VUI chroma_sample_loc_type_top_field (FFmpeg's location is it plus one), else left, FFmpeg's H.264 default; ShotDetector uses it for 10-bit only |
 | Each frame's ColorSpace, FullRange, ChromaLocation | the frame's own SPS's (ManagedCodecs' `VideoFrame`), given only where they say one and it differs from the video's (a tag the SPS doesn't carry stays the video's) |
-| Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included; through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
+| Duration | the format's duration as FFmpeg computes it: earliest stream start to latest stream end, audio included, the video's end its first shown frame's pts plus its stream duration (ManagedCodecs' `VideoStreamInfo.Duration`: the edits' summed length, else 'mdhd''s, else the samples'), not its last shown packet's end (an edit list from media_time 0 discards the last packets inside it); through ffprobe's six decimals to the nearest tick, as ShotDetector reads it |
 
 In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which ManagedCodecs' `AviDemuxer` doesn't expose):
 

@@ -1370,6 +1370,29 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     before on every sample (the tone sample's silences 0 ms from silencedetect's at 2 s and 1 s), app-check's `Audio()`
     the native one's)
 
+- The first pts of a track whose edit list starts at 0 (found by the real-world check)
+  - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
+    (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and
+    ManagedCodecs' `Mp4Demuxer` doesn't: the core's `StartPts` is 1000 against FFmpeg's 0, and every packet's pts
+    (`PacketCheck`) is 1000 later than ffprobe's, and so the black spans' times (`PictureCheck`, blackdetect) a frame
+    later than FFmpeg's. The CSVs and the shots' JSON and HTML are still identical, but the description isn't.
+  - Where: upstream, [ManagedCodecs#252](https://github.com/bisforboman/ManagedCodecs/issues/252) (`Mp4Demuxer`); then here a
+    ManagedCodecs bump, and a sample with that edit list in make-samples.sh (ffmpeg's muxer writes media_time = the
+    first offset, so none of today's samples has it).
+  - Done when: `tools/realworld.sh check wasm caminandes_gran_dillama.mp4 caminandes-fragmented.mp4` passes, and the
+    native check passes on the new sample.
+  - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
+  - Status: Done (2026-11-01: ManagedCodecs 0.5.0 shifts the track as FFmpeg does; `samples/edit-zero-352x288-25.mp4`,
+    Caminandes' edit list on a three-shot sample, start pts 1024 and every packet 1024 late on 0.4.0. On 0.5.0 its format
+    duration still came out 4.52 s for FFmpeg's 4.56: the core ended the video at its last shown packet, and FFmpeg at
+    its start plus its stream duration (the last packets, past the edit, discarded inside it), which 0.5.0 gives as
+    `VideoStreamInfo.Duration`; `Mp4Input.FormatDuration` takes it, natively every check agreeing on every sample.
+    realworld.yml on the branch (run 41295044525): caminandes_gran_dillama.mp4 same, native and AOT, as bunny,
+    interlaced, and the clips' native check; caminandes-fragmented.mp4's video and CSVs the same but its audio
+    silences 42 ms early, already so on `main` (backlog "The audio's start in a fragmented file"); the clips' AOT check
+    and Tears of Steel's under AOT failing on what this row doesn't touch (backlog "Elephants Dream stopped in a
+    range" and "Tears of Steel's every-detector stats under AOT"))
+
 - Odd heights
   - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
     H.264 stream (its crop unit one row) or an MJPEG AVI can be that tall, and the core passes them on today without a
