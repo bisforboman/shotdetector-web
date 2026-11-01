@@ -24,7 +24,8 @@ the page").
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
-Supported so far: **8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 (High, High 4:2:2, High 10) in an MP4, fragmented or not, at a constant or variable frame rate (a screen
+Supported so far: **8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 (High, High 4:2:2, High 10; 8-bit of an odd height too,
+as 4:2:2 can be, since ShotDetector 3.25.0: `samples/odd-height-yuv422p-320x239-25.mp4`, and an MJPEG one) in an MP4, fragmented or not, at a constant or variable frame rate (a screen
 recording's: every frame at its own pts, as FFmpeg's path takes it, given up front where the rate varies), upright or turned a
 quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
 the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as

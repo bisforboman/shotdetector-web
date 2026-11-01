@@ -83,20 +83,10 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
-The owner asked on 2026-11-01 to move the page to the packages released that day. The bump came first (done:
-backlog-done); the rows below each need it and can run in any order, one pull request each. Shotdetector's decisions of 2026-10-31
-apply: the page's managed measures move upstream into FrameReader and the page drops its copies, and a format built
-from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI around it).
-
-- Odd heights
-  - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
-    H.264 stream (its crop unit one row) or an MJPEG AVI can be that tall, and the core passes them on today without a
-    sample proving the result is the FFmpeg path's.
-  - Where: `tools/make-samples.sh` (an H.264 4:2:2 sample and an MJPEG one of an odd height, checked with ffprobe);
-    `Mp4Input`/`AviInput`, `PictureMeter`'s format and FastYuv's conversion as they come out on them; CLAUDE.md's scope.
-  - Done when: the native and wasm checks pass on both, byte for byte.
-  - Not: odd widths, unless ShotDetector takes them.
-  - Status: Open (needs the bump)
+The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
+split and resumed, the picture's measures and the silences from FrameReader, and odd heights, all done
+([backlog-done.md](backlog-done.md)). Left for later, in Maybe: the reference tone left out of the detection, and
+correcting the cuts on the page.
 
 ## Waiting
 
