@@ -186,7 +186,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `DefaultsCheck.cs`: the defaults `app.js` prefills (read from it) vs ShotDetector's,
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
-  `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats`, `cropdetect` (per frame and whole) and
+  `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats` (one graph, `-reinit_filter 0`, where a frame's tags change), `cropdetect` (per frame and whole) and
   `blackdetect` (d=0 and 2 s) exactly, the 10-bit samples in 10-bit values, the colour bars by their definition on the samples that have them, the ranges'
   measures joined vs the whole run's (`out/native/<sample>.picture.json`, which app-check.mjs compares `Picture()` with);
   `tools/app-check.mjs`: the App's published bundle
@@ -252,7 +252,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - `main` requires CI's `build` check, and auto-merge is on (the owner's choice, 2026-10-24). Once the PR is finished,
   with nothing left to push, run `gh pr merge <n> --auto --merge --delete-branch`: it merges when CI is green. Not
   earlier, or a green run merges half a row.
-- Scope so far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 in MP4 (yuv420p, yuv422p, yuv420p10le, and yuvj420p/yuvj422p at full range; `YuvVideo.ChromaLocation` the SPS's or left; a 10-bit run's picture in 10-bit code values with FFmpeg's thresholds at 10 bits) (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
+- Scope so far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 in MP4 (yuv420p, yuv422p, yuv420p10le, and yuvj420p/yuvj422p at full range; `YuvVideo.ChromaLocation` the SPS's or left; each frame's own colour matrix, range and chroma location where its SPS's differ, `YuvFrame.ColorSpace`/`FullRange`/`ChromaLocation` from ManagedCodecs' `VideoFrame`; a 10-bit run's picture in 10-bit code values with FFmpeg's thresholds at 10 bits) (fragmented too), constant or variable frame rate (`YuvVideo.FrameTimestamps`, the
   shown packets' pts sorted, given where the frames leave the average rate's grid), upright or a quarter turn (`YuvVideo.Rotation`, the
   display matrix's angle as `av_display_rotation_get`; the picture's crop and bars the upright picture's), progressive or interlaced
   as MBAFF frames (`YuvVideo.FieldOrder` and each frame's flags from ManagedCodecs, deinterlaced by FastYuv's `Yadif` when
@@ -269,7 +269,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.25.0, FrameReader 2.19.0 and ManagedCodecs 0.4.0 (Containers, H264, Mjpeg, Aac, each
+- Packages: ShotDetector/FastYuv 3.25.0, FrameReader 2.19.0 and ManagedCodecs 0.5.0 (Containers, H264, Mjpeg, Aac, each
   pinning Core, and Core, whose `PictureType` `PictureMeter` keeps) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published

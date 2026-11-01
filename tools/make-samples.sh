@@ -200,6 +200,27 @@ want="1 2 2 0 High 10,yuv420p10le,tv,bt470bg,left
 mjpeg,yuvj422p"
 [[ $got == "$want" ]] || { printf '10-bit and 4:2:2 samples: chroma_format_idc, bit depths, chroma location, profile, pix_fmt, range, matrix, chroma location are\n%s\nnot\n%s\n' "$got" "$want" >&2; exit 1; }
 
+# A stream whose colour tags change midway (backlog "Each frame's own colour tags"): two streams' Annex B concatenated,
+# the first BT.709 at limited range, the second BT.601 (smpte170m) at full range, each with its own SPS, as a splice
+# makes them. FFmpeg's decoder tags each frame with its SPS's, the stream with the first's ('avcC'), and ShotDetector
+# converts each frame with its own (shotdetector#626).
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1.2 -c:v libx264 -bf 0 -pix_fmt yuv420p \
+  -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -f h264 "$out/tags-a.h264"
+enc -f lavfi -i "mandelbrot=s=320x240:r=25,trim=duration=1.2,format=yuvj420p" -c:v libx264 -bf 0 -pix_fmt yuvj420p \
+  -colorspace smpte170m -color_primaries smpte170m -color_trc smpte170m -color_range pc -f h264 "$out/tags-b.h264"
+cat "$out/tags-a.h264" "$out/tags-b.h264" > "$out/tags.h264"
+s="$out/tags-change-320x240-25.mp4"
+enc -r 25 -i "$out/tags.h264" -c copy "$s"
+rm "$out/tags-a.h264" "$out/tags-b.h264" "$out/tags.h264"
+# What it must be: the SPSs in the bitstream (trace_headers: the first stream's in 'avcC' and in band, then the
+# second's), BT.709 limited then BT.601 full; FFmpeg's frames tagged so, 30 each; the stream the first's.
+got=$("$ff" -hide_banner -i "$s" -c copy -bsf:v trace_headers -f null - 2>&1 \
+  | awk '$5 == "video_full_range_flag" || $5 == "matrix_coefficients" {print $5 "=" $NF}' | uniq | tr '\n' ' ')
+got+=$("$fp" -v error -show_entries frame=color_range,color_space -of csv=p=0 "$s" | cut -d, -f1,2 | uniq -c | tr -s ' ' | tr '\n' ' ')
+got+=$("$fp" -v error -show_entries stream=color_range,color_space -of csv=p=0 "$s")
+want="video_full_range_flag=0 matrix_coefficients=1 video_full_range_flag=0 matrix_coefficients=1 video_full_range_flag=1 matrix_coefficients=6  30 tv,bt709  30 pc,smpte170m tv,bt709"
+[[ $got == "$want" ]] || { printf 'tags-change: the SPSs, the frames and the stream (range, matrix) are\n%s\nnot\n%s\n' "$got" "$want" >&2; exit 1; }
+
 # Bars and tone, for the audio measures: 6 s of a 1 kHz sine at -20 dBFS (sine's amplitude of 1/8 times 0.8: a peak of
 # 0.1), 3 s of digital silence, 6 s of the tone again, in both channels of 48 kHz stereo AAC, under 15 s of video. The
 # gap is 3 s, not 2, because FFmpeg's AAC encoder spreads the tone's edges into it by a few milliseconds: a 2 s gap
