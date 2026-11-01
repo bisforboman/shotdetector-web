@@ -177,7 +177,11 @@ for w in "$out"/wasm/*.csv "$out"/wasm/*.shots.json "$out"/wasm/*.shots.html; do
   [[ -f $w ]] || continue
   files=$((files + 1))
   n=$out/native/${w#"$out"/wasm/}
-  if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
+  if ! cmp -s "$n" "$w"; then
+    echo "Differs: $w"; differ=$((differ + 1))
+    # A CSV's first differing rows: frame, column, native and wasm value (and an ::error annotation under Actions).
+    if [[ $w == *.csv && -f $n ]]; then node tools/csv-diff.mjs "$n" "$w" native wasm || true; fi
+  fi
 done
 for p in "${full[@]}" "${light[@]}"; do
   b=$(basename "${p%.*}")

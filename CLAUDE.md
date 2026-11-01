@@ -222,6 +222,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   pinned FFmpeg makes of them (fragmented, rotated, 1080i25), each expected "same" or "refused", the native check and
   the AOT bundle under Node on them (`app-check.mjs --light` on the long ones: the default and all-detector runs,
   whole and split), into `out/realworld/`;
+  `tools/csv-diff.mjs`: where two CSVs that should be equal differ, the first 3 rows (frame, column, both values), in the
+  log and as an `::error` annotation under Actions, from `check.sh`'s and `realworld.sh`'s "Differs:" and app-check.mjs's
+  comparisons with the whole run;
   `tools/Shared/Runs.cs`: the runs NativeCheck makes,
   which app-check.mjs holds as the App's options JSON (keep the two the same); `tools/check.sh`: the checks (sample files named after the options: only those);
   `tools/make-samples.sh`: the samples; `tools/WebCodecsCheck` (ManagedCodecs' access units and a hash per plane per

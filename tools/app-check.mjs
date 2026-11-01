@@ -48,6 +48,7 @@ import { createHash } from 'node:crypto';
 import { basename, extname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileBlob, host } from './node-host.mjs';
+import { report as csvRows } from './csv-diff.mjs';
 
 // tools/Shared/Runs.cs's runs as the page's options: each detector with scenedetect's defaults, all five in one run,
 // then deinterlaced (yadif): the default with deinterlace auto, all five with on.
@@ -135,6 +136,13 @@ const ffmpeg = () => LoadedAssemblies().filter(name => name.startsWith('FFmpeg')
 const atStart = ffmpeg();
 let failed = false;
 const fail = message => { console.error(message); failed = true; };
+// A run's CSVs against the whole run's: where they differ, the first differing rows told (tools/csv-diff.mjs: frame,
+// column, the two values; an ::error annotation under GitHub Actions), named for the whole run's file and `what`.
+const csvFile = (sample, run, kind) => join(outDir, `${basename(sample, extname(sample))}.${run}.${kind}.csv`);
+const tellCsvs = (sample, run, what, [wholeScenes, wholeStats], [scenes, stats]) => {
+  csvRows(`${csvFile(sample, run, 'scenes')} (${what})`, wholeScenes, scenes, ['whole', what]);
+  csvRows(`${csvFile(sample, run, 'stats')} (${what})`, wholeStats, stats, ['whole', what]);
+};
 // The stats CSV's text: StatsCsv gives a Blob of it, written in parts (BlobWriter, README "What the heap holds"), which
 // the page downloads as it is and the scores lane reads.
 const statsText = () => {
@@ -330,9 +338,12 @@ async function checkPause(sample, video, options, whole, wholeScenes, wholeStats
   const result = JSON.parse(await Detect(JSON.stringify(options)));
   if (still === null) fail(`${name}: never held (at ${half} of ${video.frames} frames)`);
   else if (still.moved > 0) fail(`${name}: ${still.moved} progress reports while held at frame ${still.framesRead}`);
-  if (result.stopped !== false || ScenesCsv() !== wholeScenes || await statsText() !== wholeStats ||
-    JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || !sameShotFiles(wholeShotFiles))
+  const scenes = ScenesCsv(), stats = await statsText();
+  if (result.stopped !== false || scenes !== wholeScenes || stats !== wholeStats ||
+    JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || !sameShotFiles(wholeShotFiles)) {
     fail(`${name}: resumed, the result isn't the run never paused's (stopped ${result.stopped})`);
+    tellCsvs(sample, 'adaptive', 'paused', [wholeScenes, wholeStats], [scenes, stats]);
+  }
   else console.error(`${name} at ${still?.framesRead} of ${video.frames} frames, held ${HELD_MS} ms with no ` +
     'frame read, then resumed: the CSVs and shots of the run never paused');
   if (!alsoStop) return;
@@ -376,9 +387,11 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterl
     if (reaching) continue;
     if (!late) wrong.push(i);
   }
-  if (ours.length !== rows || wrong.length > 0)
+  if (ours.length !== rows || wrong.length > 0) {
     fail(`${name}: ${ours.length - 1} stats rows, not the whole run's ${rows - 1} up to frame ${n}; differing: ` +
       `${wrong.slice(0, 5).map(i => `"${ours[i]}" for "${theirs[i]}"`).join(', ')}`);
+    if (wrong.length > 0) csvRows(`${name}: stats CSV`, wholeStats, statsCsv, ['whole', 'stopped'], { only: wrong });
+  }
 
   // The shots: the whole run's before the stop, the last one cut short there, but for a cut decided after it.
   const cuts = shots => shots.slice(1).map(s => s.startFrame);
@@ -621,7 +634,9 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
   const bytes = await scoreRanges(options, plan);
   const result = merge(options, bytes);
   const seconds = (performance.now() - started) / 1000;
-  const same = ScenesCsv() === wholeScenes && await statsText() === wholeStats && sameShotFiles(wholeShotFiles);
+  const scenes = ScenesCsv(), stats = await statsText();
+  const same = scenes === wholeScenes && stats === wholeStats && sameShotFiles(wholeShotFiles);
+  if (!same) tellCsvs(sample, run, 'in ranges', [wholeScenes, wholeStats], [scenes, stats]);
   if (!same || JSON.stringify(result.shots) !== JSON.stringify(whole.shots) || result.frameCount !== whole.frameCount ||
     result.stopped !== false || JSON.stringify(result.warnings) !== JSON.stringify(whole.warnings))
     fail(`${name}: ${same ? 'the same CSVs, JSON and HTML' : 'other CSVs, JSON or HTML'}, ${result.shots.length} shots of ${result.frameCount} frames ` +
@@ -733,9 +748,13 @@ function shown(stoppedShots, toldShots) {
 
 async function checkResume(sample, video, run, options, whole, wholeScenes, wholeStats, wholeShotFiles) {
   const name = `${basename(sample)} ${run} resumed`, json = JSON.stringify(options);
-  const same = async r => ScenesCsv() === wholeScenes && await statsText() === wholeStats && sameShotFiles(wholeShotFiles) &&
-    JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
-    Picture() === wholePicture && FrameTypes() === wholeTypes;
+  const same = async (r, what) => {
+    const scenes = ScenesCsv(), stats = await statsText();
+    if (scenes !== wholeScenes || stats !== wholeStats) tellCsvs(sample, run, what, [wholeScenes, wholeStats], [scenes, stats]);
+    return scenes === wholeScenes && stats === wholeStats && sameShotFiles(wholeShotFiles) &&
+      JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
+      Picture() === wholePicture && FrameTypes() === wholeTypes;
+  };
 
   // Stopped at a third, opened again (a later visit) and shown from the kept bytes, resumed and stopped at two thirds.
   told = [];
@@ -770,7 +789,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
   const last = JSON.parse(await Resume(json, keep2.bytes));
   const seconds = (performance.now() - started) / 1000;
   shots = shown(shots, told);
-  if (!await same(last)) fail(`${name}: resumed to the end, not the whole run's CSVs, shots, JSON, HTML or picture`);
+  if (!await same(last, 'resumed')) fail(`${name}: resumed to the end, not the whole run's CSVs, shots, JSON, HTML or picture`);
   if (JSON.stringify(shots) !== JSON.stringify(whole.shots)) fail(`${name}: the shots shown across the resumes aren't the whole run's`);
   if (progress.at(-1)?.[0] !== whole.frameCount) fail(`${name}: progress ended at ${JSON.stringify(progress.at(-1))}`);
   const kept3 = await kept();
@@ -788,7 +807,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
   const rest = JSON.parse(Ranges(json, RANGES, keep.from));
   if (rest.ranges[0].firstFrame !== keep.from) fail(`${name} split: the rest's ranges start at ${rest.ranges[0].firstFrame}, not ${keep.from}`);
   const merged = merge(options, await scoreRanges(options, rest, rest.ranges.length, keep.from), keep.bytes);
-  if (!await same(merged)) fail(`${name} split: the rest merged with the kept bytes isn't the whole run's`);
+  if (!await same(merged, 'resumed split')) fail(`${name} split: the rest merged with the kept bytes isn't the whole run's`);
   else console.error(`${name} split: stopped at ${partial.frameCount}, the rest from ${keep.from} in ` +
     `${rest.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}: the whole run's`);
 }
