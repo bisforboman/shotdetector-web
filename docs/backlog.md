@@ -39,19 +39,10 @@ The performance pass's rows are all done ([backlog-done.md](backlog-done.md)).
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
-The owner asked on 2026-11-01 to move the page to the packages released that day. The bump comes first; the rows
-after it each need it and can then run in any order, one pull request each. Shotdetector's decisions of 2026-10-31
+The owner asked on 2026-11-01 to move the page to the packages released that day. The bump came first (done:
+backlog-done); the rows below each need it and can run in any order, one pull request each. Shotdetector's decisions of 2026-10-31
 apply: the page's managed measures move upstream into FrameReader and the page drops its copies, and a format built
 from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI around it).
-
-- ShotDetector/FastYuv 3.25.0 and FrameReader 2.19.0
-  - Why: what the rows below build on; with nothing else changed the results must stay byte for byte the FFmpeg
-    path's, so a bump on its own shows any change in the packages before a row's code changes the page.
-  - Where: `Directory.Packages.props`; README's Packages and CLAUDE.md's pins.
-  - Done when: the native, wasm (interpreted and AOT) and page checks pass with the new pins, and app-check's
-    `Versions()` check holds them.
-  - Not: no use of the new APIs yet (the rows below).
-  - Status: In progress (2026-11-01)
 
 - Deinterlaced runs split and resumed
   - Why: a deinterlaced run (the page's Deinterlace option) goes on one worker and a stopped one can't be resumed,

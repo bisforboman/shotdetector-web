@@ -1251,3 +1251,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     is unmeasured now); the card gives FFmpeg's 10-bit values, a level's 8-bit equivalent in its tooltip, the
     thresholds by depth, and the lane's axis is 0 to 1023; app-check.mjs asserts the depth, page-check picks the
     full-range 10-bit sample on threads and on two workers)
+
+- ShotDetector/FastYuv 3.25.0 and FrameReader 2.19.0
+  - Why: what the rows below build on; with nothing else changed the results must stay byte for byte the FFmpeg
+    path's, so a bump on its own shows any change in the packages before a row's code changes the page.
+  - Where: `Directory.Packages.props`; README's Packages and CLAUDE.md's pins.
+  - Done when: the native, wasm (interpreted and AOT) and page checks pass with the new pins, and app-check's
+    `Versions()` check holds them.
+  - Not: no use of the new APIs yet (the rows below).
+  - Status: Done (2026-11-01: the pins moved, nothing else; native, wasm interpreted and AOT (3510 of 3510 files
+    identical) and the page check as before)
