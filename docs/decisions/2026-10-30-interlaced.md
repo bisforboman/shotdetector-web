@@ -100,3 +100,8 @@ and the backlog row "Deinterlacing interlaced H.264" took them on 2026-10-31: `M
 (`H264Decoder.FieldOrder`) and each frame's flags, the page's Deinterlace option (off, auto, on) runs FastYuv's yadif on
 one worker (ShotDetector's ranges still refuse it, shotdetector#628), and frames coded as field pictures are refused
 by ManagedCodecs' `IsCodedAsFields`, still without a sample.
+
+ShotDetector 3.25.0 (2026-11-01) took deinterlacing into its ranges (shotdetector#628), with
+`ShotDetection.RangeFrames` saying which frames a range reads (two on each side when deinterlacing): the backlog row
+"Deinterlaced runs split and resumed" dropped the page's whole-run path, and a deinterlaced run is split across workers
+and resumed as any other.

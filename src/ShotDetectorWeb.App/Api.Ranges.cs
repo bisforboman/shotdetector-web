@@ -29,21 +29,23 @@ public static partial class Api
     const string NotMerged = "The ranges didn't merge: ";
 
     /// <summary>
-    /// The opened file split into at most <paramref name="count"/> ranges at keyframes (<see cref="VideoInput.Ranges"/>),
-    /// as JSON: <c>{ frames, ranges: [{ firstFrame, endFrame }] }</c>, frames the video shows; fewer ranges when the
+    /// The opened file split into at most <paramref name="count"/> ranges at keyframes for a run with the page's options
+    /// (<see cref="VideoInput.Ranges"/>: where a range can start depends on whether the run deinterlaces), as JSON: <c>{ frames, ranges: [{ firstFrame, endFrame }] }</c>, frames the video shows; fewer ranges when the
     /// keyframes are too few. From <paramref name="from"/> (0, or a stopped run's rest's first frame: <see cref="Kept"/>),
     /// the frames from there on.
     /// </summary>
     [JSExport]
-    public static string Ranges(int count, int from)
+    public static string Ranges(string optionsJson, int count, int from)
     {
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var ranges = input.Ranges(count, from).Select(r => new RangeResponse(r.FirstFrame, r.EndFrame)).ToArray();
+        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
+            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var ranges = input.Ranges(request.ToOptions(), count, from).Select(r => new RangeResponse(r.FirstFrame, r.EndFrame)).ToArray();
         return JsonSerializer.Serialize(new RangesResponse(input.ShownFrames, ranges), RangesJson.Default.RangesResponse);
     }
 
     /// <summary>
-    /// Scores range <paramref name="index"/> of <see cref="Ranges"/>(<paramref name="count"/>, <paramref name="from"/>) with the page's options, as
+    /// Scores range <paramref name="index"/> of <see cref="Ranges"/>(<paramref name="optionsJson"/>, <paramref name="count"/>, <paramref name="from"/>) with the page's options, as
     /// <see cref="Detect"/> runs (progress, pauses, <see cref="Stop"/> and <see cref="Cancel"/>): a promise of
     /// <c>{ frames, stopped }</c>, the frames scored from the range's first; its scores' bytes then come from
     /// <see cref="RangeBytes"/>. A stop ends the range where it got to; one before its first frame leaves it empty. A
@@ -57,9 +59,9 @@ public static partial class Api
         _kept = null;
         _rangeBytes = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var range = input.Ranges(count, from)[index];
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var range = input.Ranges(request.ToOptions(), count, from)[index];
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
         // A range from frame 0 tells its shots as it finds them, as Detect does (ShotDetector 3.22.0): the page shows a
@@ -137,7 +139,7 @@ public static partial class Api
             {
                 // The rest's ranges start where the continuation does: the kept ranges from there on, and their
                 // measures, are scored again.
-                var go = input.Continue(earlier.Scores);
+                var go = input.Continue(earlier.Scores, request.ToOptions());
                 scores = [.. go.Earlier];
                 pictures = earlier.Picture is { } q && go.Rest is { } rest ? [q.Take(rest.FirstFrame)] : [];
             }
@@ -166,7 +168,7 @@ public static partial class Api
             throw new InvalidOperationException(NotMerged + e.Message, e);
         }
 
-        return Answered(input, result, merged, PictureMeasures.Join(pictures));
+        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures));
     }
 
     /// <summary>

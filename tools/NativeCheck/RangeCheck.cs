@@ -3,7 +3,8 @@ using ShotDetector;
 namespace ShotDetectorWeb.Checks;
 
 /// <summary>
-/// The range check (README, "Checks"): for each sample, the run with every detector (<see cref="Runs.Every"/>) split
+/// The range check (README, "Checks"): for each sample, the run with every detector and that run deinterlaced
+/// (<see cref="Runs.Split"/>) split
 /// into ranges at keyframes as the page splits a long video across workers (<see cref="VideoInput.Ranges"/>, at most 4),
 /// each range scored on its own (<see cref="VideoInput.ScoreRangeAsync"/>), carried as bytes and merged
 /// (<see cref="VideoInput.Merge"/>): the scene and stats CSVs must be the whole run's, which the main check wrote to the
@@ -18,17 +19,17 @@ internal static class RangeCheck
     public static int Run(IEnumerable<string> samples, string outDir)
     {
         int failures = 0;
-        var (run, options) = Runs.Every;
         Console.WriteLine();
-        Console.WriteLine($"| Sample | Ranges ({run}) | Shown frames | Against the whole run |");
-        Console.WriteLine("| --- | --- | --- | --- |");
+        Console.WriteLine("| Sample | Run | Ranges | Shown frames | Against the whole run |");
+        Console.WriteLine("| --- | --- | --- | --- | --- |");
         foreach (string sample in samples)
+        foreach (var (run, options) in Runs.Split)
         {
             string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
             try
             {
                 var input = VideoInput.Open(sample);
-                var ranges = input.Ranges(MostRanges);
+                var ranges = input.Ranges(options, MostRanges);
                 var scores = ranges
                     .Select(r => RangeScores.FromBytes(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options)
                         .GetAwaiter().GetResult().ToBytes()))
@@ -49,11 +50,11 @@ internal static class RangeCheck
                     problems.Add($"{merged.FrameCount} frames merged");
                 failures += problems.Count > 0 ? 1 : 0;
                 string split = string.Join(", ", ranges.Select(r => $"{r.FirstFrame}-{r.EndFrame - 1}"));
-                Console.WriteLine($"| {name} | {split} | {input.ShownFrames} | {(problems.Count == 0 ? "same" : string.Join("; ", problems))} |");
+                Console.WriteLine($"| {name} | {run} | {split} | {input.ShownFrames} | {(problems.Count == 0 ? "same" : string.Join("; ", problems))} |");
             }
             catch (Exception e)
             {
-                Console.WriteLine($"| {name} | - | - | failed: {e.GetType().Name}: {e.Message} |");
+                Console.WriteLine($"| {name} | {run} | - | - | failed: {e.GetType().Name}: {e.Message} |");
                 failures++;
             }
         }

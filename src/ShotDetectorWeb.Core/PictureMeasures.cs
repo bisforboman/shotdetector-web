@@ -50,11 +50,12 @@ public sealed class PictureMeter
     }
 
     /// <summary>
-    /// A meter of <paramref name="range"/>'s frames, as <see cref="VideoInput.RangeFramesAsync"/> gives them: from the
-    /// frame before its first (not measured: the range before measures it) to the next range's first (not measured).
+    /// A meter of <paramref name="range"/>'s frames, as <see cref="VideoInput.RangeFramesAsync"/> gives them: from its
+    /// <see cref="FrameRange.From"/> (the frames before its first not measured: the range before measures them) to its
+    /// <see cref="FrameRange.To"/> (the next range's first on not measured).
     /// </summary>
     public PictureMeter(YuvVideo video, FrameRange range)
-        : this(video, Math.Max(range.FirstFrame - 1, 0), range.FirstFrame, range.EndFrame)
+        : this(video, range.From, range.FirstFrame, range.EndFrame)
     {
     }
 

@@ -17,6 +17,9 @@ public static partial class Api
 {
     static KeptRun? _kept;
 
+    /// <summary>The options <see cref="_kept"/>'s run was scored with, which say where its rest would start.</summary>
+    static DetectionOptions? _keptOptions;
+
     /// <summary>What a resume that fails on its kept scores says first: the page then detects from the start.</summary>
     const string NotResumed = "The stopped run didn't resume: ";
 
@@ -50,7 +53,7 @@ public static partial class Api
     public static JSObject Kept()
     {
         var bytes = (_kept ?? throw new InvalidOperationException("Detect first."))
-            .ToBytes(_input ?? throw new InvalidOperationException("Open a file first."));
+            .ToBytes(_input ?? throw new InvalidOperationException("Open a file first."), _keptOptions);
         using var blob = new BlobWriter();
         blob.Write(bytes);
         return blob.ToBlob("application/octet-stream");
@@ -66,17 +69,18 @@ sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Pictur
     public static readonly KeptRun None = new([], null);
 
     /// <summary>
-    /// Little-endian: the rest's first frame for <paramref name="input"/> (-1: none left), the ranges' count, each one's
+    /// Little-endian: the rest's first frame for <paramref name="input"/> and <paramref name="options"/>, the run's
+    /// (-1: none left), the ranges' count, each one's
     /// length, the picture's length (0: none), then each range's <see cref="RangeScores.ToBytes"/> and the picture's
     /// <see cref="PictureMeasures.ToBytes"/>, each checked by its own hash.
     /// </summary>
-    public byte[] ToBytes(VideoInput input)
+    public byte[] ToBytes(VideoInput input, DetectionOptions? options)
     {
         var scores = Scores.Select(s => s.ToBytes()).ToList();
         var picture = Picture?.ToBytes() ?? [];
         var bytes = new byte[4 * (3 + scores.Count) + scores.Sum(s => s.Length) + picture.Length];
         var span = bytes.AsSpan();
-        BinaryPrimitives.WriteInt32LittleEndian(span, input.Continue(Scores).Rest?.FirstFrame ?? -1);
+        BinaryPrimitives.WriteInt32LittleEndian(span, input.Continue(Scores, options).Rest?.FirstFrame ?? -1);
         BinaryPrimitives.WriteInt32LittleEndian(span[4..], scores.Count);
         int at = 8;
         foreach (var s in scores)

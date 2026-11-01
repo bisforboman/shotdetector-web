@@ -63,7 +63,7 @@ from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI ar
     reaches it) holds for split runs too. The page check's interlaced sample, asked for two workers, gets them.
   - Done when: the native, wasm and page checks pass with a deinterlaced run split, stopped and resumed, byte for byte.
   - Not: no margin of the page's own (ShotDetector's `RangeFrames` is the rule).
-  - Status: Open (needs the bump)
+  - Status: In progress (2026-11-01)
 
 - The picture's measures from FrameReader
   - Why: FrameReader 2.19.0's `PictureMeter`, `PictureFormat`, `PictureMeasures` and `PictureType` are the core's

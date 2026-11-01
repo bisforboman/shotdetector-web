@@ -36,8 +36,14 @@ internal static class Runs
         }),
     ];
 
-    /// <summary>The run with every detector, not deinterlaced: the one the range, threads and resume checks split.</summary>
+    /// <summary>The run with every detector, not deinterlaced.</summary>
     public static (string Name, DetectionOptions Options) Every => All.Single(r => r.Name == "all");
+
+    /// <summary>
+    /// The runs the range, threads and resume checks split: every detector, and every detector deinterlaced (yadif reads
+    /// the frames on either side of each, so a range's margins are wider: ShotDetector's <c>RangeFrames</c>).
+    /// </summary>
+    public static (string Name, DetectionOptions Options)[] Split => [Every, All.Single(r => r.Name == "deinterlace-on")];
 
     /// <summary>The scene list CSV (as scenedetect list-scenes writes it) and the stats CSV (scenedetect -s).</summary>
     public static (string Scenes, string Stats) Csvs(DetectionResult result) =>

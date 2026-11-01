@@ -5,7 +5,8 @@ namespace ShotDetectorWeb.Checks;
 /// <summary>
 /// The threads check (README, "Checks"; decision 2026-10-30-threads.md): ManagedCodecs' decoder on
 /// <see cref="Threads"/> threads (<see cref="VideoInput.DecoderThreads"/>, as the page's threaded runtime decodes) must
-/// give every sample's run with every detector (<see cref="Runs.Every"/>; all of them read the same frames) the
+/// give every sample's run with every detector, and that run deinterlaced (<see cref="Runs.Split"/>; every detector
+/// reads the same frames), the
 /// one-thread run's CSVs, which the main check wrote, byte for byte; so must its ranges scored and merged
 /// (<see cref="VideoInput.ScoreRangeAsync"/>, as RangeCheck), and the run stopped half-way the one-thread run stopped
 /// there (its frames ended early, the decoder's pictures still in flight drained).
@@ -18,11 +19,11 @@ internal static class ThreadsCheck
     public static int Run(IEnumerable<string> samples, string outDir)
     {
         int failures = 0;
-        var (run, options) = Runs.Every;
         Console.WriteLine();
-        Console.WriteLine($"| Sample | {Threads} decoder threads ({run}) | Ranges | Stopped half-way |");
-        Console.WriteLine("| --- | --- | --- | --- |");
+        Console.WriteLine($"| Sample | Run | {Threads} decoder threads | Ranges | Stopped half-way |");
+        Console.WriteLine("| --- | --- | --- | --- | --- |");
         foreach (string sample in samples)
+        foreach (var (run, options) in Runs.Split)
         {
             string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
             try
@@ -31,7 +32,7 @@ internal static class ThreadsCheck
                 input.DecoderThreads = Threads;
                 string whole = Same(input.Detect(options), baseName);
 
-                var scores = input.Ranges(4)
+                var scores = input.Ranges(options, 4)
                     .Select(r => input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult())
                     .ToList();
                 string ranges = Same(input.Merge(VideoInput.FromStart(scores), options), baseName);
@@ -39,11 +40,11 @@ internal static class ThreadsCheck
                 string stopped = Stopped(input, options);
                 bool ok = whole == "same" && ranges == "same" && stopped.StartsWith("same", StringComparison.Ordinal);
                 failures += ok ? 0 : 1;
-                Console.WriteLine($"| {name} | {whole} | {ranges} | {stopped} |");
+                Console.WriteLine($"| {name} | {run} | {whole} | {ranges} | {stopped} |");
             }
             catch (Exception e)
             {
-                Console.WriteLine($"| {name} | failed: {e.GetType().Name}: {e.Message} | - | - |");
+                Console.WriteLine($"| {name} | {run} | failed: {e.GetType().Name}: {e.Message} | - | - |");
                 failures++;
             }
         }

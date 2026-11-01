@@ -29,8 +29,8 @@ recording's: every frame at its own pts, as FFmpeg's path takes it, given up fro
 quarter by its display matrix (a phone's: detected upright, as FFmpeg's path turns it; the picture's crop and colour bars
 the upright picture's): progressive, or interlaced coded as MBAFF frames** (libx264's `-flags +ilme+ildct`), detected on the frames as decoded, woven, as
 ShotDetector does by default, or deinterlaced by yadif when the page's Deinterlace option says so (`auto`: where the
-field order says interlaced, as `--deinterlace auto`; on one worker, not resumed, until ShotDetector's ranges take it,
-shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
+field order says interlaced, as `--deinterlace auto`; split and resumed as any run since ShotDetector 3.25.0's ranges
+deinterlace, shotdetector#628); field pictures (PAFF) are refused, having no sample to check them on (decision
 `docs/decisions/2026-10-30-interlaced.md`). A 10-bit video's samples go to ShotDetector as decoded (16-bit
 little-endian words, yuv420p10le), its chroma location the SPS's (left without one, FFmpeg's H.264 default), which its
 conversion interpolates from; its picture is measured in 10-bit code values, as FFmpeg's filters measure it ("The
@@ -670,12 +670,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   frame=pict_type`, frame by frame in display order, an MJPEG sample's all I, whole, on four decoder threads and in
   ranges joined (`FrameTypeCheck.cs`; ffprobe's go to `out/native/<sample>.frametypes.txt`); each frame's interlaced and
   top-field-first flags, which set yadif's parity, against `ffprobe -show_entries frame=interlaced_frame,top_field_first`
-  (`FieldCheck.cs`); each sample's run with all five detectors split
-  into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
+  (`FieldCheck.cs`); each sample's run with all five detectors, and the same run deinterlaced (wider margins:
+  ShotDetector's `RangeFrames`), split into ranges at keyframes as the page splits a long video (`VideoInput.Ranges`, at most 4: 2 to 4 on the samples), each
   scored on its own, carried as bytes and merged, against the whole run's CSVs byte for byte (`RangeCheck.cs`);
   the same run decoded on four threads (`VideoInput.DecoderThreads`, as the page's threaded runtime decodes), whole, in
   ranges, and stopped half-way against the same run stopped on one thread, byte for byte (`ThreadsCheck.cs`);
-  the default run and the run with all five detectors scored as the page's one-worker run is (one range from frame 0),
+  the default run and the run with all five detectors (as is and deinterlaced) scored as the page's one-worker run is (one range from frame 0),
   stopped at a third, its scores carried as bytes and resumed (`VideoInput.Continue`, the earlier ranges given to
   `ScoreRangeAsync`), stopped again at two thirds and resumed to the end, against the whole run's CSVs, JSON and HTML
   byte for byte, the shots told across the parts the whole run's and the picture measures joined the whole run's; and
@@ -767,7 +767,7 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
   (a quarter turn), `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times) and
   `yuv420p10-full-topleft-bt709-320x240-25.mp4` (10 bits: its picture card and lane in 10-bit values); `interlaced-tff-320x240-25.mp4` with
-  Deinterlace auto, on threads and asked for two workers (it runs on one, the ranges lane saying why), its downloads
+  Deinterlace auto, on threads and on two workers, its downloads
   the native check's `deinterlace-auto` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
