@@ -84,18 +84,6 @@ backlog-done); the rows below each need it and can run in any order, one pull re
 apply: the page's managed measures move upstream into FrameReader and the page drops its copies, and a format built
 from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI around it).
 
-- The silences and channel weights from FrameReader
-  - Why: FrameReader 2.19.0's `SilenceFinder` is silencedetect's counting upstream (the owner's decision, 2026-10-31:
-    Mp4Audio's silences move there), and `ChannelWeights.ForLayout` gives ebur128's weights by channel name, which
-    `Mp4Audio.Weights` writes out by hand for ManagedCodecs' AAC order.
-  - Where: `Mp4Audio.cs`: its internal `SilenceFinder` goes for FrameReader's (instants from the first sample, the
-    track's start added here); `Weights` for `ChannelWeights.ForLayout` with the AAC configuration's channel names in
-    ManagedCodecs' order. AudioCheck unchanged in what it compares.
-  - Done when: AudioCheck passes on every sample (silencedetect at 2 s and 1 s, ebur128) and app-check's `Audio()`
-    comparison too.
-  - Not: no silence counting of the page's own.
-  - Status: Open (needs the bump)
-
 - Odd heights
   - Why: ShotDetector 3.25.0 takes 8-bit 4:2:0 and 4:2:2 frames of an odd height, which it refused before; a 4:2:2
     H.264 stream (its crop unit one row) or an MJPEG AVI can be that tall, and the core passes them on today without a

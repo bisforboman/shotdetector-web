@@ -616,11 +616,11 @@ var audio = Mp4Audio.Measure("trailer.mp4");       // or Measure(a seekable stre
 One pass over the audio packets with ManagedCodecs' `AacDecoder` (AAC LC and HE-AAC), each packet's samples folded
 into the measures and dropped, so the track is never held; only the audio packets' data is read. The waveform is
 FrameReader's `WaveformBuilder` (BBC audiowaveform's min and max per point, about a thousand points by default), the
-reference tone its `ReferenceToneFinder` (ShotDetector's definition: mostly 1 kHz, steady, at least 5 s), silences as
-FFmpeg's `silencedetect` (every channel below -60 dBFS for 2 s or more), and FrameReader's `LoudnessMeter` (2.18.0,
+reference tone its `ReferenceToneFinder` (ShotDetector's definition: mostly 1 kHz, steady, at least 5 s), silences its
+`SilenceFinder` (2.19.0: FFmpeg's `silencedetect`, below -60 dBFS for 2 s or more, counted as it counts), and its `LoudnessMeter` (2.18.0,
 shotdetector#646: ebur128's arithmetic without FFmpeg) for the peaks per channel with how many samples reach full scale
 and the loudness per ITU-R BS.1770-4 and EBU R128 (integrated in LUFS, loudness range in LU, true peak in dBTP from the
-signal oversampled 4 times, BS.1770-4 Annex 2), given the channel weights of ManagedCodecs' AAC channel order. Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
+signal oversampled 4 times, BS.1770-4 Annex 2), given ebur128's channel weights by name in ManagedCodecs' AAC channel order (`ChannelWeights.ForLayout`). Times are on the file's timeline, from `Track.Start`. On the Sintel trailer the
 pass takes about 0.6 s natively. Checked against FFmpeg within tolerances (Checks, audio).
 
 On the page it is `Api.Audio()`, called in a worker of its own alongside a file's first run ("Running the page";

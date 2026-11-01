@@ -34,8 +34,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   expose, the audio codec's FFmpeg name and the display rotation among them), `SpsInfo` (the SPS's format and VUI colour
   fields), `VideoPackets` (each video packet's pts, size and keyframe/discard flags, by column, kept by the input's
   walk when it opens a file; an AVI's `Offsets` too, where each chunk's data, a JPEG, starts in the file), `UnsupportedVideoException`; `Mp4Audio` (the sound in one pass with ManagedCodecs'
-  `AacDecoder`: FrameReader's `WaveformBuilder` and `ReferenceToneFinder`, silences as `silencedetect`, peaks, and
-  FrameReader's `LoudnessMeter` (loudness and each channel's peaks, ebur128's arithmetic; the page's channel weights); `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
+  `AacDecoder`: FrameReader's `WaveformBuilder`, `ReferenceToneFinder`, `SilenceFinder` (`silencedetect`'s silences), and
+  `LoudnessMeter` (loudness and each channel's peaks, ebur128's arithmetic; `ChannelWeights.ForLayout` for the AAC
+  channels by name in ManagedCodecs' order); `NotMeasured` says why not, never an exception, for no audio, not AAC, or a track the
   decoder refuses); `PictureMeasures.cs`: `PictureMeter` (each frame measured as a run reads it, the `picture`
   parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: FrameReader's `PictureMeter` given a `YuvVideo`'s frames
   (its `PictureFormat`, a range's frames before its first skipped, ManagedCodecs' `VideoFrame.PictureType` as

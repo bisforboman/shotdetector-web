@@ -1355,6 +1355,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `PictureMeasures`, `FrameSpan` and `CropArea` are FrameReader's. PictureCheck and FrameTypeCheck exact on every
     sample, app-check's `Picture()` and `FrameTypes()` the native check's)
 
+- The silences and channel weights from FrameReader
+  - Why: FrameReader 2.19.0's `SilenceFinder` is silencedetect's counting upstream (the owner's decision, 2026-10-31:
+    Mp4Audio's silences move there), and `ChannelWeights.ForLayout` gives ebur128's weights by channel name, which
+    `Mp4Audio.Weights` writes out by hand for ManagedCodecs' AAC order.
+  - Where: `Mp4Audio.cs`: its internal `SilenceFinder` goes for FrameReader's (instants from the first sample, the
+    track's start added here); `Weights` for `ChannelWeights.ForLayout` with the AAC configuration's channel names in
+    ManagedCodecs' order. AudioCheck unchanged in what it compares.
+  - Done when: AudioCheck passes on every sample (silencedetect at 2 s and 1 s, ebur128) and app-check's `Audio()`
+    comparison too.
+  - Not: no silence counting of the page's own.
+  - Status: Done (2026-11-01: Mp4Audio's own silence finder gone for FrameReader's, fed the interleaved samples;
+    the channel weights `ChannelWeights.ForLayout` of the AAC channels' names in ManagedCodecs' order. AudioCheck as
+    before on every sample (the tone sample's silences 0 ms from silencedetect's at 2 s and 1 s), app-check's `Audio()`
+    the native one's)
+
 - The first pts of a track whose edit list starts at 0 (found by the real-world check)
   - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
     (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and

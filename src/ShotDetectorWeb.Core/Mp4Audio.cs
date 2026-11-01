@@ -119,13 +119,28 @@ public static class Mp4Audio
     const double AbsoluteGate = -70;
 
     /// <summary>
-    /// BS.1770-4's channel weights in ManagedCodecs' AAC output order (FL FR FC LFE BL BR, configuration 7 then SL SR; four
-    /// channels FL FR FC BC; three FC FL FR, all front): 1 for the front, 0 for the LFE, 1.41 for the rest, as FFmpeg's
-    /// ebur128 weighs them. Not FrameReader's <see cref="ChannelWeights.Default"/>, which is FFmpeg's default layout (three
-    /// channels are 2.1 there, an LFE third).
+    /// ebur128's channel weights (FrameReader's <see cref="ChannelWeights.ForLayout"/>) for the channels in ManagedCodecs'
+    /// AAC output order, by name: FL FR FC LFE BL BR (configuration 6; 7 then SL SR), five FL FR FC BL BR, four FL FR FC
+    /// BC, three FC FL FR (all front), two FL FR, one FC; any other count as channels without positions (each 1, as
+    /// ebur128 weighs those). Not FrameReader's <see cref="ChannelWeights.Default"/>, which is FFmpeg's default layout
+    /// (three channels are 2.1 there, an LFE third).
     /// </summary>
-    static ChannelWeights Weights(int channels) =>
-        new(Enumerable.Range(0, channels).Select(c => c < 3 ? 1 : c == 3 && channels is 6 or 8 ? 0 : 1.41));
+    static ChannelWeights Weights(int channels)
+    {
+        string layout = channels switch
+        {
+            1 => "FC",
+            2 => "FL+FR",
+            3 => "FC+FL+FR",
+            4 => "FL+FR+FC+BC",
+            5 => "FL+FR+FC+BL+BR",
+            6 => "FL+FR+FC+LFE+BL+BR",
+            8 => "FL+FR+FC+LFE+BL+BR+SL+SR",
+            _ => $"{channels} channels",
+        };
+        return ChannelWeights.ForLayout(layout)
+            ?? throw new InvalidOperationException($"FrameReader has no weights for the layout {layout}.");
+    }
 
     /// <summary>Everything measured, fed each decoded frame in turn.</summary>
     sealed class Measurer
@@ -146,7 +161,7 @@ public static class Mp4Audio
             _start = start;
             _waveform = new WaveformBuilder(sampleRate, channels, waveform);
             _tone = new ReferenceToneFinder(sampleRate, channels, options.ReferenceTone);
-            _silence = new SilenceFinder(sampleRate, channels, options);
+            _silence = new SilenceFinder(sampleRate, channels, options.SilenceLevel, options.SilenceDuration);
             _loudness = new LoudnessMeter(sampleRate, channels, Weights(channels));
         }
 
@@ -158,9 +173,8 @@ public static class Mp4Audio
         {
             int count = frame.SampleCount;
             var samples = frame.Samples;
-            _silence.Add(samples, count);
 
-            // FrameReader's builders and loudness meter take the samples interleaved.
+            // FrameReader's builders, silence finder and loudness meter take the samples interleaved.
             int length = count * Channels;
             if (_interleaved.Length < length)
                 _interleaved = new float[length];
@@ -172,6 +186,7 @@ public static class Mp4Audio
             }
 
             var interleaved = _interleaved.AsSpan(0, length);
+            _silence.Add(interleaved);
             _loudness.Add(interleaved);
             var time = _start + TimeSpan.FromTicks(_samples * TimeSpan.TicksPerSecond / SampleRate);
             _waveform.Add(interleaved, time);
@@ -194,7 +209,8 @@ public static class Mp4Audio
                 Track = new AudioTrack("aac", SampleRate, Channels, _start, _samples, _packetSamples),
                 Waveform = _waveform.Finish(),
                 ReferenceTone = _tone.Finish(),
-                Silences = _silence.Finish(_start),
+                // FrameReader's SilenceFinder (silencedetect's counting): instants from the track's first sample.
+                Silences = [.. _silence.Finish().Select(s => new Silence(_start + s.Start(SampleRate), _start + s.End(SampleRate)))],
                 Peaks = peaks,
                 Loudness = loudness,
             };
@@ -224,7 +240,7 @@ public sealed record AudioOptions
     /// <summary>What counts as reference tone, as ShotDetector's <c>FindReferenceTone</c> takes it; null: 1 kHz, at least 5 s, breaks up to 1 s.</summary>
     public ReferenceToneOptions? ReferenceTone { get; init; }
 
-    /// <summary>Silence is every channel below this level, in dBFS (FFmpeg's silencedetect: -60 dB, 0.001).</summary>
+    /// <summary>Silence is the samples below this level, in dBFS (FFmpeg's silencedetect's <c>n</c>: -60 dB, 0.001).</summary>
     public double SilenceLevel { get; init; } = -60;
 
     /// <summary>The shortest silence reported (silencedetect's default: 2 s).</summary>
@@ -249,7 +265,7 @@ public sealed record AudioMeasures
     /// <summary>The reference tone's segments (FrameReader's <see cref="ReferenceToneFinder"/>, ShotDetector's definition).</summary>
     public IReadOnlyList<ToneSegment> ReferenceTone { get; init; } = [];
 
-    /// <summary>The silences, as FFmpeg's silencedetect finds them: every channel below <see cref="AudioOptions.SilenceLevel"/> for at least <see cref="AudioOptions.SilenceDuration"/>.</summary>
+    /// <summary>The silences, as FFmpeg's silencedetect finds them (FrameReader's <see cref="SilenceFinder"/>): the samples below <see cref="AudioOptions.SilenceLevel"/> for at least <see cref="AudioOptions.SilenceDuration"/>.</summary>
     public IReadOnlyList<Silence> Silences { get; init; } = [];
 
     /// <summary>Each channel's peaks, in the decoder's channel order (FL FR FC LFE BL BR for 5.1).</summary>
@@ -282,55 +298,3 @@ public sealed record Silence(TimeSpan Start, TimeSpan End);
 /// <param name="True">The true peak (the signal between the samples too, oversampled), in dBTP.</param>
 /// <param name="FullScale">How many samples reach full scale (a magnitude of 1 or more): clipped, or about to be.</param>
 public sealed record ChannelPeak(double Sample, double True, long FullScale);
-
-/// <summary>
-/// Silence as FFmpeg's silencedetect (default mode) finds it: a run of instants where every channel's sample is below
-/// the level (strictly, in single precision), at least the duration long (rounded to samples); reported from its first
-/// instant to the first that isn't silent, or to the end of the audio.
-/// </summary>
-internal sealed class SilenceFinder(int sampleRate, int channels, AudioOptions options)
-{
-    readonly float _level = (float)Math.Pow(10, options.SilenceLevel / 20);
-    readonly long _shortest = (long)Math.Round(options.SilenceDuration.Ticks * (double)sampleRate / TimeSpan.TicksPerSecond, MidpointRounding.AwayFromZero);
-    readonly List<(long Start, long End)> _found = [];
-    long _position;
-    long _run = -1;
-
-    public void Add(float[][] samples, int count)
-    {
-        for (int i = 0; i < count; i++, _position++)
-        {
-            bool silent = true;
-            for (int c = 0; c < channels && silent; c++)
-            {
-                float s = samples[c][i];
-                silent = s < _level && s > -_level;
-            }
-
-            if (silent)
-            {
-                if (_run < 0)
-                    _run = _position;
-            }
-            else
-            {
-                End();
-            }
-        }
-    }
-
-    public IReadOnlyList<Silence> Finish(TimeSpan start)
-    {
-        End();
-        return [.. _found.Select(f => new Silence(start + Time(f.Start), start + Time(f.End)))];
-    }
-
-    void End()
-    {
-        if (_run >= 0 && _position - _run >= _shortest)
-            _found.Add((_run, _position));
-        _run = -1;
-    }
-
-    TimeSpan Time(long sample) => TimeSpan.FromTicks(sample * TimeSpan.TicksPerSecond / sampleRate);
-}
