@@ -90,21 +90,6 @@ that waited on them are open.
   - Not: no shift in `Mp4Input` working around the demuxer (CLAUDE.md: report it there).
   - Status: Waiting on upstream (ManagedCodecs#252, filed 2026-10-31)
 
-- Picture measures at 10 bits
-  - Why: a 10-bit video (yuv420p10le, in scope since the row "10-bit 4:2:0 and 8-bit 4:2:2") keeps only its frames'
-    types: `PictureMeter` counts 8-bit values, while FFmpeg's `signalstats` reports YMIN, YAVG and YMAX in 10-bit code
-    values and BRNG against 64 to 940 (chroma 64 to 960), `blackdetect`'s threshold and `cropdetect`'s limit (24/255 of
-    1023) scale with the depth, and the colour bars' definition needs its 10-bit levels. So the page's picture card says
-    why it isn't measured (`PictureMeasures.NotMeasured`) and shows no lane, rather than figures FFmpeg wouldn't give.
-  - Where: `PictureMeasures.cs` (16-bit samples in `PictureMeter`'s passes; YMIN and YMAX kept as 16 bits, so
-    `ToBytes` changes again; the thresholds by depth, from FFmpeg 8.1's sources), `PictureSummary` (the depth, for the
-    page's scale), `panels/picture.js` (the lane's luma axis 0 to 1023, the card's thresholds), `PictureCheck.cs` (the
-    10-bit samples compared as the others, no longer skipped).
-  - Done when: `PictureCheck` passes on `samples/yuv420p10-*.mp4` exactly as on the 8-bit samples, and the page check
-    shows a 10-bit sample's picture lane.
-  - Not: anything of the detection (its CSVs are already byte for byte).
-  - Status: In progress (2026-11-01)
-
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 of an even height;

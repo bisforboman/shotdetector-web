@@ -1226,3 +1226,28 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     wasm and AOT byte for byte; 4:2:2's picture measures FFmpeg's exactly, 10-bit's not measured (row "Picture
     measures at 10 bits"); a deinterlaced 10-bit run compared with FFmpeg's C yadif, its SIMD differing run to run;
     `tools/realworld.sh` had no refused file to move)
+
+- Picture measures at 10 bits
+  - Why: a 10-bit video (yuv420p10le, in scope since the row "10-bit 4:2:0 and 8-bit 4:2:2") keeps only its frames'
+    types: `PictureMeter` counts 8-bit values, while FFmpeg's `signalstats` reports YMIN, YAVG and YMAX in 10-bit code
+    values and BRNG against 64 to 940 (chroma 64 to 960), `blackdetect`'s threshold and `cropdetect`'s limit (24/255 of
+    1023) scale with the depth, and the colour bars' definition needs its 10-bit levels. So the page's picture card says
+    why it isn't measured (`PictureMeasures.NotMeasured`) and shows no lane, rather than figures FFmpeg wouldn't give.
+  - Where: `PictureMeasures.cs` (16-bit samples in `PictureMeter`'s passes; YMIN and YMAX kept as 16 bits, so
+    `ToBytes` changes again; the thresholds by depth, from FFmpeg 8.1's sources), `PictureSummary` (the depth, for the
+    page's scale), `panels/picture.js` (the lane's luma axis 0 to 1023, the card's thresholds), `PictureCheck.cs` (the
+    10-bit samples compared as the others, no longer skipped).
+  - Done when: `PictureCheck` passes on `samples/yuv420p10-*.mp4` exactly as on the 8-bit samples, and the page check
+    shows a 10-bit sample's picture lane.
+  - Not: anything of the detection (its CSVs are already byte for byte).
+  - Status: Done (2026-11-01: `PictureMeter` reads a 10-bit frame's 16-bit words and counts it as FFmpeg 8.1's filters
+    do at 10 bits, which take yuv420p10le as it is: BRNG outside 64 to 940 (chroma 64 to 960), blackdetect's 151 (102
+    at full range), cropdetect's limit 96 (lrint of the float 24/255 times 1023); YMIN and YMAX kept as 16 bits
+    ("PIC4"); the colour bars by the same definition at 4 times their 8-bit levels and tolerance (FFmpeg draws them at
+    8 bits; a 10-bit file of them is those levels converted). `PictureCheck` exact on both 10-bit samples, the bars
+    found on both: the full-range one's sources are now tagged BT.709 before make-samples.sh's concat, which had
+    converted its bars to BT.601's and the output's tag back again, so they were neither. Ad hoc 10-bit fades, limited
+    and full range: blackdetect's spans FFmpeg's. `PictureSummary` gains `bitDepth` and loses `notMeasured` (nothing
+    is unmeasured now); the card gives FFmpeg's 10-bit values, a level's 8-bit equivalent in its tooltip, the
+    thresholds by depth, and the lane's axis is 0 to 1023; app-check.mjs asserts the depth, page-check picks the
+    full-range 10-bit sample on threads and on two workers)
