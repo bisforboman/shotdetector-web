@@ -2,6 +2,7 @@ using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FrameReader;
 using ShotDetector;
 
 namespace ShotDetectorWeb.App;

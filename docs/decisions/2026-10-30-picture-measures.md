@@ -140,3 +140,11 @@ page-check.mjs looks for the card's cropdetect line and colour bars.
 - The pass doesn't change the CSVs or the shots: it reads the frames ShotDetector reads, and the native, wasm and page
   checks keep comparing those byte for byte.
 - No new FFmpeg dependency in the page: the oracle is NativeCheck's, with the FFmpeg it already loads.
+
+## Afterwards (2026-11-01)
+
+The measures moved upstream into FrameReader 2.19.0 (`PictureMeter`, `PictureFormat`, `PictureMeasures`,
+`PictureType`; shotdetector's decision of 2026-10-31), 8 to 16 bits, 4:2:0, 4:2:2 and 4:4:4. The backlog row "The
+picture's measures from FrameReader" dropped the core's copy: the core's `PictureMeter` gives FrameReader's a
+`YuvVideo`'s frames, and PictureCheck holds them to FFmpeg's filters as before.
+

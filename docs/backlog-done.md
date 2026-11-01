@@ -1337,6 +1337,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     app-check's `SPLIT_RUNS`; the page check splits the interlaced sample across two workers. Upstream suggestion, told
     the coordinator: `RangeScores` saying where its scores reach)
 
+- The picture's measures from FrameReader
+  - Why: FrameReader 2.19.0's `PictureMeter`, `PictureFormat`, `PictureMeasures` and `PictureType` are the core's
+    `PictureMeasures.cs` moved upstream (signalstats, blackdetect, cropdetect and the colour bars at 8 to 16 bits,
+    4:2:0, 4:2:2 and 4:4:4); the owner's decision (2026-10-31) is that the page calls them and drops its copy.
+  - Where: `PictureMeasures.cs` goes but for the adapter from a `YuvVideo` and a `YuvFrame` to FrameReader's
+    `PictureFormat` and `Add` (the frame's planes, pts and ManagedCodecs' picture type as FrameReader's);
+    `PictureSummary`, `Api.Picture.cs`, `Api.FrameTypes.cs`, `KeptRun` and `RangeBytes` on FrameReader's types.
+    PictureCheck, FrameTypeCheck and app-check unchanged in what they compare. A kept run's bytes from before (in a
+    visitor's IndexedDB) may not read with FrameReader's `FromBytes`: they then don't resume, as kept bytes of other
+    options don't ("The stopped run didn't resume", the page detects from the start).
+  - Done when: the native check's PictureCheck and FrameTypeCheck pass on every sample with the core's copy deleted,
+    and app-check's `Picture()` and `FrameTypes()` comparisons (whole, split, stopped and resumed) too.
+  - Not: no measure of the page's own beside FrameReader's; a measure missing or wrong there goes upstream.
+  - Status: Done (2026-11-01: `PictureMeasures.cs` is the adapter, 90 lines for 1,138: a `YuvVideo`'s
+    `PictureFormat`, a range's frames before its first skipped, ManagedCodecs' picture type as FrameReader's;
+    `PictureMeasures`, `FrameSpan` and `CropArea` are FrameReader's. PictureCheck and FrameTypeCheck exact on every
+    sample, app-check's `Picture()` and `FrameTypes()` the native check's)
+
 - The first pts of a track whose edit list starts at 0 (found by the real-world check)
   - Why: Caminandes: Gran Dillama's video has an edit list with media_time 0 and a first composition offset of 1000
     (timescale 24000). FFmpeg's mov demuxer (`mov_fix_index`) shifts such a track so its first pts is 0, and

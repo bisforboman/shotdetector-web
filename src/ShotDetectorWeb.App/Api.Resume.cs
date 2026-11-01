@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
+using FrameReader;
 using ShotDetector;
 
 namespace ShotDetectorWeb.App;
