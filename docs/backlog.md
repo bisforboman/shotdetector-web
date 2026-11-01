@@ -41,7 +41,7 @@ The performance pass's rows are all done ([backlog-done.md](backlog-done.md)).
 
 The owner chose on 2026-11-01 to adopt ManagedCodecs 0.5.0 in one session, a pull request each, in this order: the
 bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a track whose edit list starts at 0"
-(Waiting, ManagedCodecs#252, fixed in 0.5.0). The bump is done (backlog-done).
+(Waiting, ManagedCodecs#252, fixed in 0.5.0). The bump and each frame's colour tags are done (backlog-done).
 
 ## Waiting
 
