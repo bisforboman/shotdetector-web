@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using ManagedCodecs;
 using ShotDetector;
@@ -13,18 +15,23 @@ namespace ShotDetectorWeb;
 /// <c>blackdetect</c>'s black pixels, <c>cropdetect</c>'s first and last lines over its limit, and whether the frame is
 /// colour bars (by their definition: FFmpeg has no filter for them). With them it keeps the decoder's picture type
 /// (I, P, B: FFmpeg's <c>pict_type</c>, ManagedCodecs' <see cref="VideoFrame.PictureType"/>), which costs nothing.
-/// 8-bit 4:2:0 and 4:2:2 are measured; a 10-bit video's frames keep their types only (<see cref="PictureMeasures.NotMeasured"/>:
-/// FFmpeg's filters count 10-bit values there, with thresholds of their own, which these measures don't do yet).
+/// 8-bit 4:2:0 and 4:2:2 and 10-bit 4:2:0 are measured, a 10-bit frame in 10-bit code values with FFmpeg's thresholds
+/// at 10 bits (FFmpeg 8.1's sources: signalstats' broadcast range times 4, blackdetect's threshold from the depth's
+/// largest value, cropdetect's limit 24/255 of 1023), as FFmpeg's filters measure it without converting it.
 /// </summary>
 public sealed class PictureMeter
 {
     // blackdetect's pixel_black_th (0.10) and picture_black_ratio_th (0.98), cropdetect's limit (24/255), FFmpeg 8.1's
     // defaults.
     const double PixelBlack = 0.10;
-    const int CropLimit = 24;
+    const double CropLimit = 24.0 / 255;
 
-    readonly int _width, _height, _black;
-    readonly bool _fullRange, _measured;
+    readonly int _width, _height, _black, _cropLimit;
+    readonly bool _fullRange;
+
+    // The bits per sample (8, or 10: 16-bit little-endian words, strides in bytes) and signalstats' broadcast range in
+    // them: luma 16 to 235, chroma 16 to 240, times 1 << (depth - 8) (its filter16_brng's mult).
+    readonly int _depth, _low, _lumaHigh, _chromaHigh;
 
     // How many luma rows a chroma row covers, as a shift: 1 for 4:2:0, 0 for 4:2:2 (a chroma row for every row).
     readonly int _chromaShift;
@@ -58,13 +65,19 @@ public sealed class PictureMeter
         _height = video.Height;
         _fullRange = video.FullRange;
         int depth = video.PixelFormat == "yuv420p10le" ? 10 : 8;
-        _measured = depth == 8;
+        _depth = depth;
+        int mult = 1 << (depth - 8), largest = (1 << depth) - 1;
+        (_low, _lumaHigh, _chromaHigh) = (16 * mult, 235 * mult, 240 * mult);
         _chromaShift = video.PixelFormat is "yuv422p" or "yuvj422p" ? 0 : 1;
         _turn = ((-video.Rotation % 360) + 360) % 360;
         (_uprightWidth, _uprightHeight) = _turn % 180 == 90 ? (_height, _width) : (_width, _height);
-        // blackdetect's pixel_black_th_i, an unsigned int: 16 + 0.1 * 219 = 37.9 is 37, 0.1 * 255 = 25.5 is 25.
-        _black = (int)(_fullRange ? PixelBlack * 255 : 16 + PixelBlack * (235 - 16));
-        _bars = BarColours.For(_fullRange);
+        // blackdetect's pixel_black_th_i, an unsigned int: 16 + 0.1 * 219 = 37.9 is 37, 0.1 * 255 = 25.5 is 25; at 10
+        // bits 64 + 0.1 * 219 * 4 = 151.6 is 151, 0.1 * 1023 = 102.3 is 102.
+        _black = (int)(_fullRange ? PixelBlack * largest : 16 * mult + PixelBlack * (235 - 16) * mult);
+        // cropdetect's limit_upscaled, a float (the option's 24/255, a float, times the largest value), rounded by lrint:
+        // 24 at 8 bits, 96.28 is 96 at 10.
+        _cropLimit = (int)Math.Round((double)((float)CropLimit * largest), MidpointRounding.ToEven);
+        _bars = BarColours.For(_fullRange, depth);
         _from = from;
         _first = first;
         _end = end;
@@ -84,21 +97,24 @@ public sealed class PictureMeter
         int index = _from + _index++;
         if (index < _first || index >= _end)
             return;
-        if (!_measured)
-        {
-            Measures.Add(frame.Pts, 0, 0, 0, 0, 0, -1, -1, -1, -1, false, type);
-            return;
-        }
-
-        var luma = Luma(frame.Y.Span, frame.YStride);
-        int brng = luma.OutOfRange + ChromaOutOfRange(frame);
-        var (top, bottom, left, right) = _turn == 0 ? ContentLines(frame.Y.Span, frame.YStride) : TurnedContentLines(frame.Y.Span, frame.YStride);
+        var luma = _depth == 8 ? Luma(frame.Y.Span, frame.YStride) : Luma16(Words(frame.Y), frame.YStride / 2);
+        int brng = luma.OutOfRange + (_depth == 8
+            ? ChromaOutOfRange(frame.U.Span, frame.UStride, frame.V.Span, frame.VStride, frame)
+            : ChromaOutOfRange(Words(frame.U), frame.UStride / 2, Words(frame.V), frame.VStride / 2, frame));
+        var (top, bottom, left, right) = _turn == 0 ? ContentLines(frame) : TurnedContentLines(frame);
         bool bars = IsBars(frame);
         Measures.Add(frame.Pts, luma.Min, luma.Max, luma.Sum, luma.Black, brng, top, bottom, left, right, bars, type);
     }
 
+    /// <summary>A 10-bit plane's samples: 16-bit little-endian words (the platforms .NET runs this on are little-endian).</summary>
+    static ReadOnlySpan<ushort> Words(ReadOnlyMemory<byte> plane) => MemoryMarshal.Cast<byte, ushort>(plane.Span);
+
+    /// <summary>Sample (<paramref name="x"/>, <paramref name="y"/>) of a plane, 8-bit or 10-bit.</summary>
+    int Sample(ReadOnlySpan<byte> plane, int stride, int x, int y) =>
+        _depth == 8 ? plane[y * stride + x] : BinaryPrimitives.ReadUInt16LittleEndian(plane.Slice(y * stride + 2 * x, 2));
+
     /// <summary>The luma's sum, minimum and maximum, the pixels at or under blackdetect's threshold and those outside 16 to 235.</summary>
-    (long Sum, byte Min, byte Max, int Black, int OutOfRange) Luma(ReadOnlySpan<byte> y, int stride)
+    (long Sum, int Min, int Max, int Black, int OutOfRange) Luma(ReadOnlySpan<byte> y, int stride)
     {
         var low = Vector128.Create((byte)255);
         var high = Vector128<byte>.Zero;
@@ -159,7 +175,7 @@ public sealed class PictureMeter
             }
         }
 
-        return (sum, (byte)min, (byte)max, (int)blacks, (int)outside);
+        return (sum, min, max, (int)blacks, (int)outside);
     }
 
     static long Sum(Vector128<byte> counts)
@@ -168,61 +184,132 @@ public sealed class PictureMeter
         return Vector128.Sum(a + b);
     }
 
-    /// <summary>
-    /// signalstats' BRNG counts a luma pixel when it or its chroma sample is out of range (16 to 240): the luma pixels
-    /// in range under each chroma sample out of range, which <see cref="Luma"/> didn't count. A chroma row is under two
-    /// luma rows at 4:2:0, one at 4:2:2 (signalstats' <c>j &gt;&gt; vsub</c>).
-    /// </summary>
-    int ChromaOutOfRange(YuvFrame frame)
+    /// <summary><see cref="Luma"/> of a 10-bit frame (<paramref name="stride"/> in samples), out of range outside 64 to 940.</summary>
+    (long Sum, int Min, int Max, int Black, int OutOfRange) Luma16(ReadOnlySpan<ushort> y, int stride)
     {
-        var u = frame.U.Span;
-        var v = frame.V.Span;
-        var y = frame.Y.Span;
+        var low = Vector128.Create(ushort.MaxValue);
+        var high = Vector128<ushort>.Zero;
+        var black = Vector128.Create((ushort)_black);
+        var under = Vector128.Create((ushort)(_low - 1));
+        var over = Vector128.Create((ushort)_lumaHigh);
+        long sum = 0, blacks = 0, outside = 0;
+        int min = ushort.MaxValue, max = 0;
+        for (int r = 0; r < _height; r++)
+        {
+            var row = y.Slice(r * stride, _width);
+            var rowSum = Vector128<uint>.Zero;
+            var rowBlack = Vector128<ushort>.Zero;
+            var rowOutside = Vector128<ushort>.Zero;
+            int x = 0, n = 0;
+            for (; x + 8 <= _width; x += 8)
+            {
+                var v = Vector128.Create(row.Slice(x, 8));
+                low = Vector128.Min(low, v);
+                high = Vector128.Max(high, v);
+                var (a, b) = Vector128.Widen(v);
+                rowSum += a + b;
+                rowBlack -= Vector128.LessThanOrEqual(v, black);
+                rowOutside -= Vector128.LessThanOrEqual(v, under) | Vector128.GreaterThan(v, over);
+                if (++n == ushort.MaxValue)
+                {
+                    blacks += Sum(rowBlack);
+                    outside += Sum(rowOutside);
+                    rowBlack = rowOutside = Vector128<ushort>.Zero;
+                    n = 0;
+                }
+            }
+
+            blacks += Sum(rowBlack);
+            outside += Sum(rowOutside);
+            sum += Vector128.Sum(rowSum);
+            for (; x < _width; x++)
+            {
+                int p = row[x];
+                sum += p;
+                min = Math.Min(min, p);
+                max = Math.Max(max, p);
+                if (p <= _black)
+                    blacks++;
+                if (p < _low || p > _lumaHigh)
+                    outside++;
+            }
+        }
+
+        if (_width >= 8)
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                min = Math.Min(min, low.GetElement(i));
+                max = Math.Max(max, high.GetElement(i));
+            }
+        }
+
+        return (sum, min, max, (int)blacks, (int)outside);
+    }
+
+    static long Sum(Vector128<ushort> counts)
+    {
+        var (a, b) = Vector128.Widen(counts);
+        return Vector128.Sum(a + b);
+    }
+
+    /// <summary>
+    /// signalstats' BRNG counts a luma pixel when it or its chroma sample is out of range (16 to 240, times 4 at 10 bits):
+    /// the luma pixels in range under each chroma sample out of range, which <see cref="Luma"/> didn't count. A chroma row
+    /// is under two luma rows at 4:2:0, one at 4:2:2 (signalstats' <c>j &gt;&gt; vsub</c>). <paramref name="u"/> and
+    /// <paramref name="v"/> are the frame's chroma planes as samples, their strides in samples.
+    /// </summary>
+    int ChromaOutOfRange<T>(ReadOnlySpan<T> u, int uStride, ReadOnlySpan<T> v, int vStride, YuvFrame frame)
+        where T : unmanaged, IBinaryInteger<T>
+    {
         int width = (_width + 1) / 2, height = (_height + (1 << _chromaShift) - 1) >> _chromaShift;
-        var under16 = Vector128.Create((byte)15);
-        var over240 = Vector128.Create((byte)240);
+        int lanes = Vector128<T>.Count;
+        var under = Vector128.Create(T.CreateTruncating(_low - 1));
+        var over = Vector128.Create(T.CreateTruncating(_chromaHigh));
         int count = 0;
         for (int r = 0; r < height; r++)
         {
-            var ur = u.Slice(r * frame.UStride, width);
-            var vr = v.Slice(r * frame.VStride, width);
+            var ur = u.Slice(r * uStride, width);
+            var vr = v.Slice(r * vStride, width);
             int x = 0;
-            for (; x + 16 <= width; x += 16)
+            for (; x + lanes <= width; x += lanes)
             {
-                var a = Vector128.Create(ur.Slice(x, 16));
-                var b = Vector128.Create(vr.Slice(x, 16));
-                var outside = Vector128.LessThanOrEqual(a, under16) | Vector128.GreaterThan(a, over240) |
-                    Vector128.LessThanOrEqual(b, under16) | Vector128.GreaterThan(b, over240);
-                if (outside == Vector128<byte>.Zero)
+                var a = Vector128.Create(ur.Slice(x, lanes));
+                var b = Vector128.Create(vr.Slice(x, lanes));
+                var outside = Vector128.LessThanOrEqual(a, under) | Vector128.GreaterThan(a, over) |
+                    Vector128.LessThanOrEqual(b, under) | Vector128.GreaterThan(b, over);
+                if (outside == Vector128<T>.Zero)
                     continue;
-                for (int i = 0; i < 16; i++)
+                for (int i = 0; i < lanes; i++)
                 {
-                    if (outside.GetElement(i) != 0)
-                        count += LumaInRange(y, frame.YStride, x + i, r);
+                    if (outside.GetElement(i) != T.Zero)
+                        count += LumaInRange(frame, x + i, r);
                 }
             }
 
             for (; x < width; x++)
             {
-                if (ur[x] < 16 || ur[x] > 240 || vr[x] < 16 || vr[x] > 240)
-                    count += LumaInRange(y, frame.YStride, x, r);
+                int cu = int.CreateTruncating(ur[x]), cv = int.CreateTruncating(vr[x]);
+                if (cu < _low || cu > _chromaHigh || cv < _low || cv > _chromaHigh)
+                    count += LumaInRange(frame, x, r);
             }
         }
 
         return count;
     }
 
-    /// <summary>The luma pixels of chroma sample (<paramref name="cx"/>, <paramref name="cy"/>) within 16 to 235.</summary>
-    int LumaInRange(ReadOnlySpan<byte> y, int stride, int cx, int cy)
+    /// <summary>The luma pixels of chroma sample (<paramref name="cx"/>, <paramref name="cy"/>) within 16 to 235 (times 4 at 10 bits).</summary>
+    int LumaInRange(YuvFrame frame, int cx, int cy)
     {
+        var y = frame.Y.Span;
         int n = 0;
         int top = cy << _chromaShift;
         for (int r = top; r < Math.Min(_height, top + (1 << _chromaShift)); r++)
         {
             for (int x = 2 * cx; x < Math.Min(_width, 2 * cx + 2); x++)
             {
-                int p = y[r * stride + x];
-                if (p is >= 16 and <= 235)
+                int p = Sample(y, frame.YStride, x, r);
+                if (p >= _low && p <= _lumaHigh)
                     n++;
             }
         }
@@ -235,29 +322,29 @@ public sealed class PictureMeter
     /// row with content above the last (cropdetect never looks at the last for it), the last row with content, the same
     /// for columns; -1 for none. <see cref="PictureMeasures"/> replays cropdetect's scan over them.
     /// </summary>
-    (short Top, short Bottom, short Left, short Right) ContentLines(ReadOnlySpan<byte> y, int stride)
+    (short Top, short Bottom, short Left, short Right) ContentLines(YuvFrame frame)
     {
         int top = -1, bottom = -1, left = -1, right = -1;
         for (int r = 0; r < _height - 1 && top < 0; r++)
         {
-            if (RowSum(y.Slice(r * stride, _width)) / _width > CropLimit)
+            if (RowHasContent(frame, r))
                 top = r;
         }
 
         // Without content above the last row, only the last row can have it.
         for (int r = _height - 1; r >= Math.Max(top, top < 0 ? _height - 1 : 0) && bottom < 0; r--)
         {
-            if (RowSum(y.Slice(r * stride, _width)) / _width > CropLimit)
+            if (RowHasContent(frame, r))
                 bottom = r;
         }
 
         Span<uint> sums = stackalloc uint[16];
         for (int c0 = 0; c0 < _width - 1 && left < 0; c0 += 16)
         {
-            int n = ColumnSums(y, stride, c0, sums);
+            int n = ColumnSums(frame, c0, sums);
             for (int j = 0; j < n && c0 + j < _width - 1; j++)
             {
-                if (sums[j] / (uint)_height > CropLimit)
+                if (sums[j] / (uint)_height > _cropLimit)
                 {
                     left = c0 + j;
                     break;
@@ -269,10 +356,10 @@ public sealed class PictureMeter
         for (int c1 = _width - 1; c1 >= lowest && right < 0; c1 -= 16)
         {
             int c0 = Math.Max(0, c1 - 15);
-            ColumnSums(y, stride, c0, sums);
+            ColumnSums(frame, c0, sums);
             for (int c = c1; c >= Math.Max(c0, lowest); c--)
             {
-                if (sums[c - c0] / (uint)_height > CropLimit)
+                if (sums[c - c0] / (uint)_height > _cropLimit)
                 {
                     right = c;
                     break;
@@ -288,18 +375,18 @@ public sealed class PictureMeter
     /// content (a line's mean is the same whichever way it is read), then cropdetect's first and last lines in the
     /// upright picture's order.
     /// </summary>
-    (short Top, short Bottom, short Left, short Right) TurnedContentLines(ReadOnlySpan<byte> y, int stride)
+    (short Top, short Bottom, short Left, short Right) TurnedContentLines(YuvFrame frame)
     {
         var rows = new bool[_height];
         for (int r = 0; r < _height; r++)
-            rows[r] = RowSum(y.Slice(r * stride, _width)) / _width > CropLimit;
+            rows[r] = RowHasContent(frame, r);
         var columns = new bool[_width];
         Span<uint> sums = stackalloc uint[16];
         for (int c0 = 0; c0 < _width; c0 += 16)
         {
-            int n = ColumnSums(y, stride, c0, sums);
+            int n = ColumnSums(frame, c0, sums);
             for (int j = 0; j < n; j++)
-                columns[c0 + j] = sums[j] / (uint)_height > CropLimit;
+                columns[c0 + j] = sums[j] / (uint)_height > _cropLimit;
         }
 
         // The upright picture's lines (cv::rotate's): turned clockwise by 90, its row r is decoded column r and its column
@@ -342,6 +429,16 @@ public sealed class PictureMeter
         }
     }
 
+    /// <summary>Whether row <paramref name="r"/>'s mean luma (rounded down, as cropdetect's checkline) is over its limit.</summary>
+    bool RowHasContent(YuvFrame frame, int r) => (_depth == 8
+        ? RowSum(frame.Y.Span.Slice(r * frame.YStride, _width))
+        : RowSum(Words(frame.Y).Slice(r * (frame.YStride / 2), _width))) / _width > _cropLimit;
+
+    /// <summary>The sums over every row of columns <paramref name="c0"/> on, sixteen or up to the last: how many.</summary>
+    int ColumnSums(YuvFrame frame, int c0, Span<uint> sums) => _depth == 8
+        ? ColumnSums(frame.Y.Span, frame.YStride, c0, sums)
+        : ColumnSums(Words(frame.Y), frame.YStride / 2, c0, sums);
+
     static long RowSum(ReadOnlySpan<byte> row)
     {
         var sum = Vector128<uint>.Zero;
@@ -359,7 +456,22 @@ public sealed class PictureMeter
         return total;
     }
 
-    /// <summary>The sums over every row of columns <paramref name="c0"/> on, sixteen or up to the last: how many.</summary>
+    static long RowSum(ReadOnlySpan<ushort> row)
+    {
+        var sum = Vector128<uint>.Zero;
+        int x = 0;
+        for (; x + 8 <= row.Length; x += 8)
+        {
+            var (a, b) = Vector128.Widen(Vector128.Create(row.Slice(x, 8)));
+            sum += a + b;
+        }
+
+        long total = Vector128.Sum(sum);
+        for (; x < row.Length; x++)
+            total += row[x];
+        return total;
+    }
+
     int ColumnSums(ReadOnlySpan<byte> y, int stride, int c0, Span<uint> sums)
     {
         int n = Math.Min(16, _width - c0);
@@ -371,6 +483,39 @@ public sealed class PictureMeter
                 var (a, b) = Vector128.Widen(Vector128.Create(y.Slice(r * stride + c0, 16)));
                 var (a0, a1) = Vector128.Widen(a);
                 var (b0, b1) = Vector128.Widen(b);
+                s0 += a0;
+                s1 += a1;
+                s2 += b0;
+                s3 += b1;
+            }
+
+            s0.CopyTo(sums);
+            s1.CopyTo(sums[4..]);
+            s2.CopyTo(sums[8..]);
+            s3.CopyTo(sums[12..]);
+            return 16;
+        }
+
+        sums.Clear();
+        for (int r = 0; r < _height; r++)
+        {
+            for (int j = 0; j < n; j++)
+                sums[j] += y[r * stride + c0 + j];
+        }
+
+        return n;
+    }
+
+    int ColumnSums(ReadOnlySpan<ushort> y, int stride, int c0, Span<uint> sums)
+    {
+        int n = Math.Min(16, _width - c0);
+        if (n == 16)
+        {
+            Vector128<uint> s0 = default, s1 = default, s2 = default, s3 = default;
+            for (int r = 0; r < _height; r++)
+            {
+                var (a0, a1) = Vector128.Widen(Vector128.Create(y.Slice(r * stride + c0, 8)));
+                var (b0, b1) = Vector128.Widen(Vector128.Create(y.Slice(r * stride + c0 + 8, 8)));
                 s0 += a0;
                 s1 += a1;
                 s2 += b0;
@@ -407,25 +552,32 @@ public sealed class PictureMeter
         if (_turn == 0)
         {
             int chromaRow = row >> _chromaShift;
-            return _bars.InRow(frame.Y.Span.Slice(row * frame.YStride), frame.U.Span.Slice(chromaRow * frame.UStride, columns),
-                frame.V.Span.Slice(chromaRow * frame.VStride, columns), _width);
+            if (_depth == 8)
+            {
+                return _bars.InRow(frame.Y.Span.Slice(row * frame.YStride), frame.U.Span.Slice(chromaRow * frame.UStride, columns),
+                    frame.V.Span.Slice(chromaRow * frame.VStride, columns), _width);
+            }
+
+            return _bars.InRow(Words(frame.Y).Slice(row * (frame.YStride / 2)), Words(frame.U).Slice(chromaRow * (frame.UStride / 2), columns),
+                Words(frame.V).Slice(chromaRow * (frame.VStride / 2), columns), _width);
         }
 
         // The upright row's luma and the chroma row under it, read from the decoded planes as cv::rotate turns them
         // (TurnedContentLines); a chroma plane is half the size each way, rounded up.
         ReadOnlySpan<byte> y = frame.Y.Span, u = frame.U.Span, v = frame.V.Span;
         var (W, H, cw, ch, half) = (_width, _height, (_width + 1) / 2, (_height + 1) / 2, row >> 1);
-        var luma = new byte[_uprightWidth];
-        var blue = new byte[columns];
-        var red = new byte[columns];
+        var luma = new ushort[_uprightWidth];
+        var blue = new ushort[columns];
+        var red = new ushort[columns];
         for (int x = 0; x < _uprightWidth; x++)
         {
-            luma[x] = _turn switch
+            var (lx, ly) = _turn switch
             {
-                90 => y[((H - 1 - x) * frame.YStride) + row],
-                180 => y[((H - 1 - row) * frame.YStride) + (W - 1 - x)],
-                _ => y[(x * frame.YStride) + (W - 1 - row)],
+                90 => (row, H - 1 - x),
+                180 => (W - 1 - x, H - 1 - row),
+                _ => (W - 1 - row, x),
             };
+            luma[x] = (ushort)Sample(y, frame.YStride, lx, ly);
         }
 
         for (int c = 0; c < columns && _chromaShift == 0; c++)
@@ -438,23 +590,23 @@ public sealed class PictureMeter
                 180 => (W - 1 - 2 * c, H - 1 - row),
                 _ => (W - 1 - row, 2 * c),
             };
-            blue[c] = u[(dy * frame.UStride) + (dx >> 1)];
-            red[c] = v[(dy * frame.VStride) + (dx >> 1)];
+            blue[c] = (ushort)Sample(u, frame.UStride, dx >> 1, dy);
+            red[c] = (ushort)Sample(v, frame.VStride, dx >> 1, dy);
         }
 
         for (int c = 0; c < columns && _chromaShift == 1; c++)
         {
-            int at(int stride) => _turn switch
+            var (cx, cy) = _turn switch
             {
-                90 => ((ch - 1 - c) * stride) + half,
-                180 => ((ch - 1 - half) * stride) + (cw - 1 - c),
-                _ => (c * stride) + (cw - 1 - half),
+                90 => (half, ch - 1 - c),
+                180 => (cw - 1 - c, ch - 1 - half),
+                _ => (cw - 1 - half, c),
             };
-            blue[c] = u[at(frame.UStride)];
-            red[c] = v[at(frame.VStride)];
+            blue[c] = (ushort)Sample(u, frame.UStride, cx, cy);
+            red[c] = (ushort)Sample(v, frame.VStride, cx, cy);
         }
 
-        return _bars.InRow(luma, blue, red, _uprightWidth);
+        return _bars.InRow<ushort>(luma, blue, red, _uprightWidth);
     }
 }
 
@@ -463,45 +615,71 @@ public sealed class PictureMeter
 /// <c>pal100bars</c>): seven bars side by side, left to right white, yellow, cyan, green, magenta, red and blue, each
 /// within <see cref="Tolerance"/> code values of its Y, U and V at 75% or 100%, in BT.601's or BT.709's matrix (one set
 /// for all seven), each at least a twelfth of the width and none more than 1.5 times another, other columns between them
-/// at most three chroma samples (a coded edge).
+/// at most three chroma samples (a coded edge). At 10 bits the same levels and tolerance in 10-bit code values (times 4:
+/// FFmpeg draws the bars at 8 bits, and a 10-bit file of them is those levels converted).
 /// </summary>
 sealed class BarColours
 {
     const int Tolerance = 24;
 
     // Y, U, V in limited range (vsrc_testsrc.c's rainbow, rainbow100, rainbowhd; BT.709 at 100% from its matrix).
-    static readonly byte[][,] Limited =
+    static readonly int[][,] Limited =
     [
-        new byte[,] { { 180, 128, 128 }, { 162, 44, 142 }, { 131, 156, 44 }, { 112, 72, 58 }, { 84, 184, 198 }, { 65, 100, 212 }, { 35, 212, 114 } },
-        new byte[,] { { 235, 128, 128 }, { 210, 16, 146 }, { 170, 166, 16 }, { 145, 54, 34 }, { 106, 202, 222 }, { 81, 90, 240 }, { 41, 240, 110 } },
-        new byte[,] { { 180, 128, 128 }, { 168, 44, 136 }, { 145, 147, 44 }, { 133, 63, 52 }, { 63, 193, 204 }, { 51, 109, 212 }, { 28, 212, 120 } },
-        new byte[,] { { 235, 128, 128 }, { 219, 16, 138 }, { 188, 154, 16 }, { 173, 42, 26 }, { 78, 214, 230 }, { 63, 102, 240 }, { 32, 240, 118 } },
+        new int[,] { { 180, 128, 128 }, { 162, 44, 142 }, { 131, 156, 44 }, { 112, 72, 58 }, { 84, 184, 198 }, { 65, 100, 212 }, { 35, 212, 114 } },
+        new int[,] { { 235, 128, 128 }, { 210, 16, 146 }, { 170, 166, 16 }, { 145, 54, 34 }, { 106, 202, 222 }, { 81, 90, 240 }, { 41, 240, 110 } },
+        new int[,] { { 180, 128, 128 }, { 168, 44, 136 }, { 145, 147, 44 }, { 133, 63, 52 }, { 63, 193, 204 }, { 51, 109, 212 }, { 28, 212, 120 } },
+        new int[,] { { 235, 128, 128 }, { 219, 16, 138 }, { 188, 154, 16 }, { 173, 42, 26 }, { 78, 214, 230 }, { 63, 102, 240 }, { 32, 240, 118 } },
     ];
 
-    static readonly BarColours LimitedRange = new(Limited);
-    static readonly BarColours FullRange = new(Limited.Select(ToFull).ToArray());
+    static readonly BarColours LimitedRange = new(Limited, 0);
+    static readonly BarColours FullRange = new(Limited.Select(ToFull).ToArray(), 0);
+    static readonly BarColours LimitedRange10 = new(Limited, 2);
+    static readonly BarColours FullRange10 = new(Limited.Select(ToFull).ToArray(), 2);
 
-    readonly byte[][,] _sets;
+    readonly int[][,] _sets;
+    readonly int _tolerance;
 
-    BarColours(byte[][,] sets) => _sets = sets;
-
-    public static BarColours For(bool fullRange) => fullRange ? FullRange : LimitedRange;
-
-    static byte[,] ToFull(byte[,] set)
+    BarColours(int[][,] sets, int shift)
     {
-        var full = new byte[7, 3];
+        _sets = sets.Select(set =>
+        {
+            var scaled = new int[7, 3];
+            for (int i = 0; i < 7; i++)
+            {
+                for (int c = 0; c < 3; c++)
+                    scaled[i, c] = set[i, c] << shift;
+            }
+
+            return scaled;
+        }).ToArray();
+        _tolerance = Tolerance << shift;
+    }
+
+    /// <summary>The bars' levels for a video's range and bits per sample (8 or 10).</summary>
+    public static BarColours For(bool fullRange, int depth) => (fullRange, depth) switch
+    {
+        (true, 8) => FullRange,
+        (false, 8) => LimitedRange,
+        (true, _) => FullRange10,
+        _ => LimitedRange10,
+    };
+
+    static int[,] ToFull(int[,] set)
+    {
+        var full = new int[7, 3];
         for (int i = 0; i < 7; i++)
         {
-            full[i, 0] = (byte)Math.Clamp(Math.Round((set[i, 0] - 16) * 255 / 219.0), 0, 255);
+            full[i, 0] = (int)Math.Clamp(Math.Round((set[i, 0] - 16) * 255 / 219.0), 0, 255);
             for (int c = 1; c < 3; c++)
-                full[i, c] = (byte)Math.Clamp(Math.Round((set[i, c] - 128) * 255 / 224.0 + 128), 0, 255);
+                full[i, c] = (int)Math.Clamp(Math.Round((set[i, c] - 128) * 255 / 224.0 + 128), 0, 255);
         }
 
         return full;
     }
 
     /// <summary>Whether a luma row <paramref name="y"/> (and its chroma row, <paramref name="u"/> and <paramref name="v"/>) is the seven bars in one of the sets.</summary>
-    public bool InRow(ReadOnlySpan<byte> y, ReadOnlySpan<byte> u, ReadOnlySpan<byte> v, int width)
+    public bool InRow<T>(ReadOnlySpan<T> y, ReadOnlySpan<T> u, ReadOnlySpan<T> v, int width)
+        where T : unmanaged, IBinaryInteger<T>
     {
         int columns = (width + 1) / 2;
         Span<sbyte> labels = columns <= 4096 ? stackalloc sbyte[columns] : new sbyte[columns];
@@ -509,8 +687,9 @@ sealed class BarColours
         {
             for (int c = 0; c < columns; c++)
             {
-                int luma = 2 * c + 1 < width ? (y[2 * c] + y[2 * c + 1] + 1) >> 1 : y[2 * c];
-                labels[c] = Nearest(set, luma, u[c], v[c]);
+                int y0 = int.CreateTruncating(y[2 * c]);
+                int luma = 2 * c + 1 < width ? (y0 + int.CreateTruncating(y[2 * c + 1]) + 1) >> 1 : y0;
+                labels[c] = Nearest(set, luma, int.CreateTruncating(u[c]), int.CreateTruncating(v[c]), _tolerance);
             }
 
             if (Sequence(labels, columns))
@@ -520,11 +699,11 @@ sealed class BarColours
         return false;
     }
 
-    static sbyte Nearest(byte[,] set, int y, int u, int v)
+    static sbyte Nearest(int[,] set, int y, int u, int v, int tolerance)
     {
         for (int i = 0; i < 7; i++)
         {
-            if (Math.Abs(y - set[i, 0]) <= Tolerance && Math.Abs(u - set[i, 1]) <= Tolerance && Math.Abs(v - set[i, 2]) <= Tolerance)
+            if (Math.Abs(y - set[i, 0]) <= tolerance && Math.Abs(u - set[i, 1]) <= tolerance && Math.Abs(v - set[i, 2]) <= tolerance)
                 return (sbyte)i;
         }
 
@@ -575,10 +754,10 @@ sealed class BarColours
 /// </summary>
 public sealed class PictureMeasures
 {
-    const uint Magic = 0x33434950; // "PIC3"
+    const uint Magic = 0x34434950; // "PIC4": YMIN and YMAX as 16 bits, for 10-bit videos
 
     readonly List<long> _pts = [];
-    readonly List<byte> _min = [], _max = [];
+    readonly List<ushort> _min = [], _max = [];
     readonly List<long> _sum = [];
     readonly List<int> _black = [], _brng = [];
     readonly List<short> _top = [], _bottom = [], _left = [], _right = [];
@@ -595,12 +774,11 @@ public sealed class PictureMeasures
         FirstFrame = firstFrame;
     }
 
-    /// <summary>The video's bits per sample: 8, or 10, whose frames keep only their types (<see cref="NotMeasured"/>).</summary>
+    /// <summary>
+    /// The video's bits per sample, 8 or 10: the figures' code values (YMIN, YAVG, YMAX up to 255 or 1023) and the
+    /// thresholds they were counted against (<see cref="PictureMeter"/>).
+    /// </summary>
     public int BitDepth { get; }
-
-    /// <summary>Why the frames' picture wasn't measured (their types were kept); null when it was.</summary>
-    public string? NotMeasured => BitDepth == 8 ? null
-        : $"The video is {BitDepth}-bit: FFmpeg's signalstats, blackdetect and cropdetect count {BitDepth}-bit values there, which these measures don't do yet (only 8-bit is measured).";
 
     public int Width { get; }
 
@@ -619,12 +797,12 @@ public sealed class PictureMeasures
 
     int Pixels => Width * Height;
 
-    internal void Add(long pts, byte min, byte max, long sum, int black, int brng, short top, short bottom, short left,
+    internal void Add(long pts, int min, int max, long sum, int black, int brng, short top, short bottom, short left,
         short right, bool bars, PictureType type)
     {
         _pts.Add(pts);
-        _min.Add(min);
-        _max.Add(max);
+        _min.Add((ushort)min);
+        _max.Add((ushort)max);
         _sum.Add(sum);
         _black.Add(black);
         _brng.Add(brng);
@@ -647,7 +825,10 @@ public sealed class PictureMeasures
     /// <summary>signalstats' YAVG: the luma's mean.</summary>
     public double YAvg(int i) => 1.0 * _sum[i] / Pixels;
 
-    /// <summary>signalstats' BRNG: the share of pixels out of broadcast range, luma 16 to 235 or chroma 16 to 240.</summary>
+    /// <summary>
+    /// signalstats' BRNG: the share of pixels out of broadcast range, luma 16 to 235 or chroma 16 to 240 (64 to 940 and
+    /// 960 at 10 bits).
+    /// </summary>
     public double Brng(int i) => 1.0 * _brng[i] / Pixels;
 
     /// <summary>The pixels BRNG counts.</summary>
@@ -793,7 +974,7 @@ public sealed class PictureMeasures
     public byte[] ToBytes()
     {
         const int header = 4 * 4 + 1 + 1 + 4 * 2 + 4;
-        const int perFrame = 8 + 1 + 1 + 8 + 4 + 4 + 2 * 4 + 1 + 1;
+        const int perFrame = 8 + 2 + 2 + 8 + 4 + 4 + 2 * 4 + 1 + 1;
         var bytes = new byte[header + perFrame * Count + 8];
         var w = new Writer(bytes);
         w.UInt(Magic);
@@ -808,8 +989,8 @@ public sealed class PictureMeasures
         for (int i = 0; i < Count; i++)
         {
             w.Long(_pts[i]);
-            w.Byte(_min[i]);
-            w.Byte(_max[i]);
+            w.Short((short)_min[i]);
+            w.Short((short)_max[i]);
             w.Long(_sum[i]);
             w.Int(_black[i]);
             w.Int(_brng[i]);
@@ -842,7 +1023,7 @@ public sealed class PictureMeasures
         int count = r.Int();
         for (int i = 0; i < count; i++)
         {
-            measures.Add(r.Long(), r.Byte(), r.Byte(), r.Long(), r.Int(), r.Int(), r.Short(), r.Short(), r.Short(), r.Short(),
+            measures.Add(r.Long(), (ushort)r.Short(), (ushort)r.Short(), r.Long(), r.Int(), r.Int(), r.Short(), r.Short(), r.Short(), r.Short(),
                 r.Byte() != 0, (PictureType)r.Byte());
         }
 
