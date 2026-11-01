@@ -3,9 +3,9 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="FrameReader" Version="2.18.0" />
-    <PackageVersion Include="ShotDetector" Version="3.24.0" />
-    <PackageVersion Include="ShotDetector.FastYuv" Version="3.24.0" />
+    <PackageVersion Include="FrameReader" Version="2.19.0" />
+    <PackageVersion Include="ShotDetector" Version="3.25.0" />
+    <PackageVersion Include="ShotDetector.FastYuv" Version="3.25.0" />
     <PackageVersion Include="ManagedCodecs.Aac" Version="0.5.0" />
     <PackageVersion Include="ManagedCodecs.Core" Version="0.5.0" />
     <PackageVersion Include="ManagedCodecs.Containers" Version="0.5.0" />
