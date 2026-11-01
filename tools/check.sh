@@ -115,7 +115,11 @@ if [[ $wasm == true ]]; then
       [[ $n == *.ffmpeg.* ]] && continue
       files=$((files + 1))
       w=out/wasm/${n#out/native/}
-      if ! cmp -s "$n" "$w"; then echo "Differs: $w"; differ=$((differ + 1)); fi
+      if ! cmp -s "$n" "$w"; then
+        echo "Differs: $w"; differ=$((differ + 1))
+        # A CSV's first differing rows: frame, column, native and wasm value (and an ::error annotation under Actions).
+        if [[ $w == *.csv && -f $w ]]; then node tools/csv-diff.mjs "$n" "$w" native wasm || true; fi
+      fi
     done
   done
   for w in out/wasm/*.csv out/wasm/*.shots.json out/wasm/*.shots.html out/wasm/*.edl out/wasm/*.fcpxml out/wasm/*.fcp7.xml \
