@@ -215,7 +215,9 @@ static class PictureCheck
     /// <summary>
     /// One pass of FFmpeg 8.1 (the ffmpeg beside the libraries) over the video with every filter: signalstats and the
     /// per-frame cropdetect printed by metadata=print, blackdetect at d=0 and at its default, cropdetect with its defaults
-    /// in the log. -copyts keeps the stream's own timestamps.
+    /// in the log. -copyts keeps the stream's own timestamps. -reinit_filter 0 keeps one graph, configured from the first
+    /// frame, when a frame's tags change (tags-change-*.mp4): ffmpeg would otherwise build the graph again there, which
+    /// starts the metadata file and the filters' state over, and the meter measures every frame with the video's range.
     /// </summary>
     static FfmpegPicture Ffmpeg(string libs, string sample)
     {
@@ -224,7 +226,7 @@ static class PictureCheck
         {
             string graph = $"signalstats=stat=brng,cropdetect=reset=1:skip=0,metadata=mode=print:file={metadata}," +
                 "blackdetect=d=0,blackdetect,cropdetect";
-            string log = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-copyts", "-i", sample,
+            string log = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-copyts", "-reinit_filter", "0", "-i", sample,
                 "-map", "0:v:0", "-vf", graph, "-f", "null", "-");
 
             var frames = new List<Dictionary<string, string>>();

@@ -174,16 +174,52 @@ public abstract partial class VideoInput
                 var s = frame.Strides;
                 // FFmpeg's interlaced_frame and top_field_first, which set yadif's parity when the run deinterlaces. A
                 // 10-bit frame's planes are 16-bit little-endian words, its strides in bytes: YuvFrame's layout as is.
+                // Each frame's own colour tags, from the SPS it was decoded with (FFmpeg's h264 decoder tags each frame
+                // so, and ShotDetector converts each with its own, shotdetector#626): given only where they differ from
+                // the video's, so a stream whose tags never change converts as before. A tag the frame's SPS doesn't
+                // carry is the video's (the decoder's context keeps the container's, as FFmpeg's).
                 var yuv = new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2])
                 {
                     Pts = frame.Pts,
                     Interlaced = frame.IsInterlaced,
                     TopFieldFirst = frame.IsTopFieldFirst,
+                    ColorSpace = OwnMatrix(frame.ColorMatrix),
+                    FullRange = OwnRange(frame.ColorRange),
+                    ChromaLocation = OwnChromaLocation(frame.ChromaLocation),
                 };
                 yield return (yuv, frame.PictureType);
             }
         }
     }
+
+    /// <summary>The frame's matrix as ffprobe names it where the frame says one and it isn't the video's; else null.</summary>
+    string? OwnMatrix(ColorMatrix matrix) =>
+        matrix != ColorMatrix.Unspecified && MatrixName((int)matrix) is { } name && name != Video.ColorSpace ? name : null;
+
+    /// <summary>The frame's range where the frame says one and it isn't the video's; else null.</summary>
+    bool? OwnRange(ColorRange range) =>
+        range != ColorRange.Unspecified && (range == ColorRange.Full) != Video.FullRange ? range == ColorRange.Full : null;
+
+    /// <summary>The frame's chroma location as ffprobe names it where the frame says one and it isn't the video's; else null.</summary>
+    string? OwnChromaLocation(ChromaLocation location) =>
+        ChromaLocationName((int)location) is { } name && name != (Video.ChromaLocation ?? "left") ? name : null;
+
+    // FFmpeg's names of the H.264 / ISO matrix coefficients (libavutil's av_color_space_name); unspecified (2) is "".
+    static readonly string[] MatrixNames =
+    [
+        "gbr", "bt709", "", "reserved", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco", "bt2020nc", "bt2020c",
+        "smpte2085", "chroma-derived-nc", "chroma-derived-c", "ictcp", "ipt-c2", "ycgco-re", "ycgco-ro",
+    ];
+
+    /// <summary>FFmpeg's name of H.273 matrix <paramref name="matrix"/>, "" for unspecified; null for one it doesn't name.</summary>
+    private protected static string? MatrixName(int matrix) => matrix >= 0 && matrix < MatrixNames.Length ? MatrixNames[matrix] : null;
+
+    // FFmpeg's names of the chroma locations (libavutil's av_chroma_location_name); unspecified (0) is null, as ffprobe's
+    // "unspecified" is to FrameReader.
+    static readonly string?[] ChromaLocations = [null, "left", "center", "topleft", "top", "bottomleft", "bottom"];
+
+    private protected static string? ChromaLocationName(int location) =>
+        location >= 0 && location < ChromaLocations.Length ? ChromaLocations[location] : null;
 
     /// <summary>ManagedCodecs' layout of the frames of FFmpeg's pixel format <paramref name="pixelFormat"/> (the video's).</summary>
     private protected static PixelFormat DecodedFormat(string pixelFormat) => pixelFormat switch
