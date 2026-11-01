@@ -399,8 +399,13 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterl
   const kept = result.shots.slice(0, -1), last = result.shots.at(-1);
   const prefix = JSON.stringify(kept) === JSON.stringify(whole.shots.slice(0, kept.length));
   const cutShort = last.startFrame === whole.shots[kept.length]?.startFrame && last.endFrame === n;
-  const missed = cuts(whole.shots).filter(c => c > last.startFrame && c <= n);
-  if (!prefix || !cutShort || missed.some(c => c <= n - lag)) {
+  // Where the stop is among the cuts: the last frame read's number, its stats row's Frame Number. A cut's number is the
+  // frame's time at the average rate (scenedetect's), so at a variable rate it isn't the count of frames read: Elephants
+  // Dream's 5736th frame is number 5656, its cuts 5683 and 5721 past the stop. The last shot still ends at the count, n,
+  // as scenedetect ends a file's last shot at its frames read. At a constant rate the two are the same.
+  const stop = Number(ours.at(-1).split(',')[0]);
+  const missed = cuts(whole.shots).filter(c => c > last.startFrame && c <= stop);
+  if (!prefix || !cutShort || missed.some(c => c <= stop - lag)) {
     fail(`${name} at ${n}: shots ${JSON.stringify(result.shots.map(s => [s.startFrame, s.endFrame]))}, the whole ` +
       `run's ${JSON.stringify(whole.shots.map(s => [s.startFrame, s.endFrame]))}`);
   }
@@ -408,7 +413,7 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterl
   const htmlRows = htmlShots(ShotsHtml());
   if (JSON.stringify(JSON.parse(ShotsJson())) !== JSON.stringify(result.shots) || htmlRows !== result.shots.length)
     fail(`${name}: ShotsJson or ShotsHtml (${htmlRows} rows) isn't the stopped run's ${result.shots.length} shots`);
-  console.error(`${name} at ${n} of ${whole.frameCount} frames: ${result.shots.length} shots, ` +
+  console.error(`${name} at ${n} of ${whole.frameCount} frames${stop !== n ? ` (frame number ${stop})` : ''}: ${result.shots.length} shots, ` +
     `the whole run's ${kept.length} and the next cut short; ${ours.length - 1} stats rows, the whole run's` +
     `${window > 0 ? `, the adaptive ratio None in the last ${window}` : ''}` +
     `${missed.length > 0 ? `; cuts decided after the stop: ${missed.join(', ')}` : ''}`);
