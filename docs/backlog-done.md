@@ -1293,3 +1293,25 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Not: no use of the new APIs yet (the rows below).
   - Status: Done (2026-11-01: the pins moved, nothing else; native, wasm interpreted and AOT (3510 of 3510 files
     identical) and the page check as before)
+
+- An installable app with Open with and a share target
+  - Why: an installed app with "Open with" is used again where a bookmarked page is forgotten, and an app on the
+    machine, offline, with nothing uploaded, strengthens the privacy story
+    ([#95](https://github.com/bisforboman/shotdetector-web/issues/95)). The service worker already serves the page
+    offline and isolated (decision `2026-10-30-threads.md`), so an installed app works without a network, on threads.
+  - Where: the page only, no build step, no dependency: a web app manifest (`manifest.webmanifest`: name, icons,
+    `display: standalone`), linked from `index.html`, so Chromium offers Install; File Handling (`file_handlers` for
+    .mp4 and .avi), the file arriving through `launchQueue` in `app.js` and opened as if picked; Web Share Target
+    (Android: a multipart POST to `share`), which `sw.js` answers by keeping the file in a cache of its own and sending
+    the page to `?shared`, where `app.js` opens it. Firefox and Safari keep the drop zone. The page check: the manifest
+    served and valid (Chromium's own reading of it, CDP `Page.getAppManifest`), and a file delivered through
+    `launchQueue` and through the share target's POST, on threads and on `?threads=0`, to the same downloads as a
+    picked file.
+  - Done when: the page check passes with those runs.
+  - Not: no install prompt of the page's own (the browser's Install is enough); no change to the .NET side.
+  - Status: Done (2026-11-01, #116: the manifest with an SVG and two PNG icons, `file_handlers` for .mp4 and .avi with
+    `launch_handler` focus-existing, a multipart share target that `sw.js` answers (the file in the cache
+    `shotdetector-web-shared`, the page sent to `?shared`); the page check installs the app in the full Chromium (CDP
+    `PWA.install`), finds its manifest without errors and installable, and runs a sample opened with it
+    (`PWA.launchFilesInApp`, through `launchQueue`) and shared to it (the POST), on threads and on `?threads=0`, to the
+    picked file's downloads. A real Android share isn't checked: CDP can't make one, so the check sends its POST)
