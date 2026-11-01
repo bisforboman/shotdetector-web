@@ -50,21 +50,6 @@ backlog-done); the rows below each need it and can run in any order, one pull re
 apply: the page's managed measures move upstream into FrameReader and the page drops its copies, and a format built
 from a cut list lives on ShotDetector's `Timeline` (the page owns only the UI around it).
 
-- The picture's measures from FrameReader
-  - Why: FrameReader 2.19.0's `PictureMeter`, `PictureFormat`, `PictureMeasures` and `PictureType` are the core's
-    `PictureMeasures.cs` moved upstream (signalstats, blackdetect, cropdetect and the colour bars at 8 to 16 bits,
-    4:2:0, 4:2:2 and 4:4:4); the owner's decision (2026-10-31) is that the page calls them and drops its copy.
-  - Where: `PictureMeasures.cs` goes but for the adapter from a `YuvVideo` and a `YuvFrame` to FrameReader's
-    `PictureFormat` and `Add` (the frame's planes, pts and ManagedCodecs' picture type as FrameReader's);
-    `PictureSummary`, `Api.Picture.cs`, `Api.FrameTypes.cs`, `KeptRun` and `RangeBytes` on FrameReader's types.
-    PictureCheck, FrameTypeCheck and app-check unchanged in what they compare. A kept run's bytes from before (in a
-    visitor's IndexedDB) may not read with FrameReader's `FromBytes`: they then don't resume, as kept bytes of other
-    options don't ("The stopped run didn't resume", the page detects from the start).
-  - Done when: the native check's PictureCheck and FrameTypeCheck pass on every sample with the core's copy deleted,
-    and app-check's `Picture()` and `FrameTypes()` comparisons (whole, split, stopped and resumed) too.
-  - Not: no measure of the page's own beside FrameReader's; a measure missing or wrong there goes upstream.
-  - Status: Open (needs the bump)
-
 - The silences and channel weights from FrameReader
   - Why: FrameReader 2.19.0's `SilenceFinder` is silencedetect's counting upstream (the owner's decision, 2026-10-31:
     Mp4Audio's silences move there), and `ChannelWeights.ForLayout` gives ebur128's weights by channel name, which

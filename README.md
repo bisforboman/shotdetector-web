@@ -640,13 +640,15 @@ var m = meter.Measures;                              // per frame: YMin, YAvg, Y
 ```
 
 Every run measures each frame as it reads it, before ShotDetector converts it (decision
-[2026-10-30-picture-measures.md](docs/decisions/2026-10-30-picture-measures.md)): one pass of `Vector128` code over
+[2026-10-30-picture-measures.md](docs/decisions/2026-10-30-picture-measures.md)), with FrameReader's `PictureMeter`
+(2.19.0: the page's own code moved upstream, shotdetector's decision of 2026-10-31; the core's `PictureMeter` gives it a
+`YuvVideo`'s frames and `PictureMeasures` is FrameReader's): one pass of vector code over
 the luma (its sum, lowest and highest, the pixels blackdetect counts black and those outside 16 to 235), a compare
 over the chroma (signalstats' BRNG), cropdetect's scan from each edge, and two rows for the colour bars. What it keeps
 per frame is what FFmpeg's filters count, so the figures are theirs exactly: `signalstats`' YMIN, YAVG, YMAX and BRNG,
 `blackdetect`'s spans (any `d`), `cropdetect`'s per frame (`reset=1`) and with its defaults after the last frame. The
 colour bars, which no FFmpeg filter finds, are found by their definition (SMPTE's and EBU's seven bars, 75% or 100%,
-BT.601 or BT.709). It costs about 2% of a run: 0.12 ms a frame natively and 0.27 ms on the AOT bundle under Node at
+BT.601 or BT.709). It cost about 2% of a run as the page's own code (measured before it moved upstream): 0.12 ms a frame natively and 0.27 ms on the AOT bundle under Node at
 854x480, where a run takes 4.7 and 12 ms a frame. A split run's ranges each measure their own frames and send them
 with their scores (`RangeBytes`); `Merge` joins them (`PictureMeasures.Join`), byte for byte the whole run's. A
 stopped run's are the frames it read. 8-bit 4:2:2 is measured as 4:2:0 is, a chroma row under each luma row (signalstats'
@@ -654,8 +656,8 @@ stopped run's are the frames it read. 8-bit 4:2:2 is measured as 4:2:0 is, a chr
 it is, no conversion): in 10-bit code values, YMIN, YAVG and YMAX up to 1023, against their thresholds at 10 bits from
 FFmpeg 8.1's sources (BRNG outside 64 to 940, chroma 64 to 960; blackdetect's 151, or 102 at full range; cropdetect's
 limit 24/255 of 1023, 96), and the colour bars by the same definition at 4 times its 8-bit levels and tolerance; the
-measures keep YMIN and YMAX as 16 bits (`ToBytes`' "PIC4", so a run kept before it doesn't resume and is detected
-again), the summary says `bitDepth`, and the page's card gives the values as FFmpeg does, a level's 8-bit equivalent
+measures keep YMIN and YMAX as 16 bits (a run kept with other measures' bytes, the page's own before FrameReader's, doesn't
+resume and is detected again), the summary says `bitDepth`, and the page's card gives the values as FFmpeg does, a level's 8-bit equivalent
 in its tooltip, the lane's axis 0 to 1023 (backlog-done, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
 (CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
 
