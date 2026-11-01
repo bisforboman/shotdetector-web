@@ -1422,3 +1422,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     two bits of the hash), the other columns and the 7 other files identical. Frame 38: native 0.46875, wasm 0.5;
     frame 100: native 0.46875, wasm 0.5; frame 215: native 0.53125, wasm 0.5625; 5 more. Sent to the shotdetector
     coordinator, who decides; the fix is a later row)
+
+- Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
+  - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
+    of the whole run missing; its allowance (the adaptive window plus 0.6 s plus 1 frame, 18 frames at its rate) admits
+    5721 but not 5683, 53 frames before the stop. The native check agrees; the realworld clips job fails on it every
+    night (2026-11-01, on 0.4.0 and 0.5.0).
+  - Where: `tools/app-check.mjs` `checkStopped` (the lag), against what ShotDetector decides at a stop (the flash
+    filter's or a detector's own look-ahead at a variable rate: Elephants Dream is one); upstream if a stop changes a
+    cut that far back.
+  - Done when: the realworld clips job passes, the allowance explained by ShotDetector's rule.
+  - Status: Done (2026-11-01: the check's, neither the core's nor ShotDetector's. A cut's number is the frame's time at
+    the average rate (scenedetect's), and the check took the count of frames read for where the stop is: Elephants
+    Dream's 5736th frame read is number 5656 (4:01.750), its cuts 5683 (4:02.875) and 5721 (4:04.500) past it. The core
+    natively stopped at 5736 gives the same shots and the whole run's stats rows. The last shot ends at the count,
+    5736, as scenedetect ends a file's last shot at its frames read (the whole run's at 15294). `checkStopped` now takes
+    the last stats row's Frame Number as the stop; at a constant rate that is the count, as before)

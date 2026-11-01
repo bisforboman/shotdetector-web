@@ -56,17 +56,6 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Not: a shift in the core working around the demuxer, if it is the demuxer's.
   - Status: Open (2026-11-01)
 
-- Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
-  - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
-    of the whole run missing; its allowance (the adaptive window plus 0.6 s plus 1 frame, 18 frames at its rate) admits
-    5721 but not 5683, 53 frames before the stop. The native check agrees; the realworld clips job fails on it every
-    night (2026-11-01, on 0.4.0 and 0.5.0).
-  - Where: `tools/app-check.mjs` `checkStopped` (the lag), against what ShotDetector decides at a stop (the flash
-    filter's or a detector's own look-ahead at a variable rate: Elephants Dream is one); upstream if a stop changes a
-    cut that far back.
-  - Done when: the realworld clips job passes, the allowance explained by ShotDetector's rule.
-  - Status: Open (2026-11-01)
-
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
