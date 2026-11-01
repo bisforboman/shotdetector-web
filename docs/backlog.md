@@ -74,6 +74,10 @@ split and resumed, the picture's measures and the silences from FrameReader, and
 ([backlog-done.md](backlog-done.md)). Left for later, in Maybe: the reference tone left out of the detection, and
 correcting the cuts on the page.
 
+### ShotDetector 3.26.0 and FrameReader 2.20.0
+
+The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:

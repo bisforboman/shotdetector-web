@@ -35,7 +35,7 @@ internal static class ThreadsCheck
                 var scores = input.Ranges(options, 4)
                     .Select(r => input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult())
                     .ToList();
-                string ranges = Same(input.Merge(input.FromStart(scores, options), options), baseName);
+                string ranges = Same(input.Merge(input.FromStart(scores), options), baseName);
 
                 string stopped = Stopped(input, options);
                 bool ok = whole == "same" && ranges == "same" && stopped.StartsWith("same", StringComparison.Ordinal);
