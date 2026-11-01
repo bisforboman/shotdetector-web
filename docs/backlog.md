@@ -45,16 +45,15 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
 
 ### Found by the real-world check (2026-11-01)
 
-- The audio's start in a fragmented file (found by the real-world check)
-  - Why: on caminandes-fragmented.mp4 (Caminandes remuxed `frag_keyframe+empty_moov+default_base_moof`, the streams
-    copied) the core's silences are 42 ms (2048 samples at 48 kHz) earlier than `silencedetect`'s, start and end, while
-    on the unfragmented file they agree: the audio's priming is skipped where FFmpeg, which applies no edit list in a
-    fragmented file, keeps it. Seen on `main`'s nightly of 2026-11-01 (run 41262305295) and on the 0.5.0 branches.
-  - Where: first find whose it is: ManagedCodecs' `Mp4Demuxer` (`SkipSamples` in a fragmented track) or `Mp4Audio`'s
-    start (CLAUDE.md, Gotchas: pts + skip); a sample in make-samples.sh (with-audio fragmented) that isolates it.
-  - Done when: AudioCheck agrees on the sample and `tools/realworld.sh check caminandes-fragmented.mp4` passes.
-  - Not: a shift in the core working around the demuxer, if it is the demuxer's.
-  - Status: Open (2026-11-01)
+- Tears of Steel's hash_dist under AOT: ShotDetector's fix
+  - Why: realworld.yml's tears job fails on 8 rows of `tears_of_steel_720p.all.stats.csv` whose `hash_dist` is 2/64
+    off under AOT (backlog-done, "Tears of Steel's every-detector stats under AOT"). The shotdetector coordinator found
+    it ShotDetector's (the hash's float path: the cosine table, the median on near-flat frames); the owner chose to fix
+    it there (2026-11-01).
+  - Where: `Directory.Packages.props`, once ShotDetector releases the fix.
+  - Done when: realworld.yml's tears job passes on the release.
+  - Not: a workaround here.
+  - Status: Waiting (2026-11-01): ShotDetector's fix and release
 
 - Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
   - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721

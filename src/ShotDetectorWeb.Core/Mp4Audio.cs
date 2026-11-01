@@ -80,12 +80,15 @@ public static class Mp4Audio
             // list (or an iTunSMPB tag) skips: FFmpeg's first decoded frame's time, which its filters count from. With
             // an edit list that is its start_time; without one (Big Buck Bunny's 2008 MP4, the real-world check) the
             // decoder's first packet gives no samples, in FFmpeg too, and the audio starts at the second's pts.
-            if (start is null && !packet.Discard)
+            // Each shown frame's own time, the same way: where FFmpeg's silencedetect places its samples.
+            TimeSpan? time = null;
+            if (!packet.Discard)
             {
                 long skip = packet.SkipSamples;
                 if (info.SampleRate > 0 && info.SampleRate != info.TimeBase.Denominator)
                     skip = skip * info.TimeBase.Denominator / info.SampleRate;
-                start = Seconds(packet.Pts + skip, info.TimeBase);
+                time = Seconds(packet.Pts + skip, info.TimeBase);
+                start ??= time;
             }
             if (measurer is null)
             {
@@ -100,13 +103,14 @@ public static class Mp4Audio
                 }
 
                 measurer = new Measurer(frame.SampleRate, frame.Channels, start ?? TimeSpan.Zero, waveform, options);
+                time = null; // the first frame starts the timeline
             }
             else if (frame.SampleRate != measurer.SampleRate || frame.Channels != measurer.Channels)
             {
                 return AudioMeasures.Without($"The audio changes from {measurer.SampleRate} Hz, {measurer.Channels} channels to {frame.SampleRate} Hz, {frame.Channels}: not measured.");
             }
 
-            measurer.Add(frame);
+            measurer.Add(frame, time);
         }
 
         return measurer?.Finish() ?? AudioMeasures.Without("The audio track decodes to no samples.");
@@ -150,15 +154,24 @@ public static class Mp4Audio
         readonly ReferenceToneFinder _tone;
         readonly SilenceFinder _silence;
         readonly LoudnessMeter _loudness;
+        readonly long _silenceInstants;
         float[] _interleaved = [];
         long _samples;
         int _packetSamples;
+        // Where a frame's own time isn't the one after the samples before it (a fragmented file's first packet keeps
+        // its priming as a longer duration, no edit list taking it out): from which instant, and by how many ticks the
+        // times from there on move. FFmpeg's silencedetect times each silence by its frames' pts, so the gap counts there.
+        readonly List<(long Instant, long Ticks)> _gaps = [];
+        long _gapTicks;
 
         public Measurer(int sampleRate, int channels, TimeSpan start, WaveformOptions waveform, AudioOptions options)
         {
             SampleRate = sampleRate;
             Channels = channels;
             _start = start;
+            // silencedetect's duration in instants (av_rescale of its whole microseconds, to the nearest).
+            long micros = options.SilenceDuration.Ticks / (TimeSpan.TicksPerSecond / 1_000_000);
+            _silenceInstants = (micros * sampleRate + 500_000) / 1_000_000;
             _waveform = new WaveformBuilder(sampleRate, channels, waveform);
             _tone = new ReferenceToneFinder(sampleRate, channels, options.ReferenceTone);
             _silence = new SilenceFinder(sampleRate, channels, options.SilenceLevel, options.SilenceDuration);
@@ -169,10 +182,23 @@ public static class Mp4Audio
 
         public int Channels { get; }
 
-        public void Add(AudioFrame frame)
+        /// <summary>The next frame's samples; <paramref name="frameTime"/> its own start, null for the time after the samples before it.</summary>
+        public void Add(AudioFrame frame, TimeSpan? frameTime)
         {
             int count = frame.SampleCount;
             var samples = frame.Samples;
+
+            if (frameTime is { } t)
+            {
+                var expected = _start + TimeSpan.FromTicks(_samples * TimeSpan.TicksPerSecond / SampleRate + _gapTicks);
+                long gap = (t - expected).Ticks;
+                // Less than a sample either way is the ticks' rounding, not a gap.
+                if (Math.Abs(gap) * SampleRate >= TimeSpan.TicksPerSecond)
+                {
+                    _gapTicks += gap;
+                    _gaps.Add((_samples, _gapTicks));
+                }
+            }
 
             // FrameReader's builders, silence finder and loudness meter take the samples interleaved.
             int length = count * Channels;
@@ -209,11 +235,28 @@ public static class Mp4Audio
                 Track = new AudioTrack("aac", SampleRate, Channels, _start, _samples, _packetSamples),
                 Waveform = _waveform.Finish(),
                 ReferenceTone = _tone.Finish(),
-                // FrameReader's SilenceFinder (silencedetect's counting): instants from the track's first sample.
-                Silences = [.. _silence.Finish().Select(s => new Silence(_start + s.Start(SampleRate), _start + s.End(SampleRate)))],
+                // FrameReader's SilenceFinder (silencedetect's counting): instants from the track's first sample, moved by
+                // the gaps before the frame silencedetect times each from: a start from the instant its count reaches
+                // the duration, back by the duration; an end from its own instant.
+                Silences = [.. _silence.Finish().Select(s => new Silence(
+                    _start + s.Start(SampleRate) + Gap(s.StartSample + _silenceInstants - 1),
+                    _start + s.End(SampleRate) + Gap(s.EndSample)))],
                 Peaks = peaks,
                 Loudness = loudness,
             };
+        }
+
+        /// <summary>How far the frames' own times have moved by <paramref name="instant"/>: the gaps at or before it.</summary>
+        TimeSpan Gap(long instant)
+        {
+            long ticks = 0;
+            foreach (var (from, total) in _gaps)
+            {
+                if (from > instant)
+                    break;
+                ticks = total;
+            }
+            return TimeSpan.FromTicks(ticks);
         }
     }
 }
