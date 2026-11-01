@@ -1264,3 +1264,22 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-11-01: natively every check agrees on every sample, the CSVs, JSON, HTML, packets, frame types,
     picture and audio unchanged; CI's AOT check with the page green, `Versions()` the pins. `Mp4Header`, `SpsInfo`
     and `AviHeader` stay: what 0.5.0 exposes of theirs the next rows use where the checks prove it)
+
+- Each frame's own colour tags (a matrix or range that changes midway)
+  - Why: ShotDetector 3.24.0 converts each frame with its own `YuvFrame.ColorSpace` and `FullRange` (shotdetector#626),
+    as `Detect(path)` does with each frame's tags from FFmpeg's decoder: a spliced stream whose SPS changes its VUI
+    colour matrix or range midway gives other stats here, without a word, since `Mp4Input` describes every frame with
+    the first SPS's (`SpsInfo.FromAvcConfig`, the 'avcC''s). ManagedCodecs' `VideoFrame` carried no colour tags until
+    0.5.0, which gives each frame's (`VideoFrame.ColorMatrix`, `ColorRange`, ...) from its active SPS.
+  - Where: first upstream, ManagedCodecs: each `VideoFrame`'s colour description from its active SPS (matrix and range;
+    an MJPEG frame's are fixed); then `VideoInput`'s frames set `YuvFrame.ColorSpace`/`FullRange` where they differ
+    from `YuvVideo`'s, and a sample in make-samples.sh (two streams with other VUI tags, their Annex B concatenated as
+    `samples/reject/size-change.mp4`'s are) that NativeCheck runs as every sample.
+  - Done when: the native check passes on that sample, byte for byte.
+  - Not: no SPS parsing of every packet in the core (the decoder's job: CLAUDE.md, report it there).
+  - Status: Done (2026-11-01: ManagedCodecs 0.5.0's `VideoFrame.ColorMatrix`, `ColorRange` and `ChromaLocation`, given
+    to `YuvFrame` where they say one and it differs from `YuvVideo`'s; `samples/tags-change-320x240-25.mp4`, BT.709
+    limited then BT.601 full range, two SPSs checked with trace_headers: natively every check agrees on it, its stats
+    CSV differing without the frames' tags. ffmpeg builds its filter graph again where a frame's format changes,
+    starting the metadata file over: the picture check runs it with `-reinit_filter 0`, one graph over the frames as
+    decoded, as the meter measures them with the video's range)
