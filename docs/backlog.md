@@ -55,17 +55,6 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Not: a workaround here.
   - Status: Waiting (2026-11-01): ShotDetector's fix and release
 
-- Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
-  - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
-    of the whole run missing; its allowance (the adaptive window plus 0.6 s plus 1 frame, 18 frames at its rate) admits
-    5721 but not 5683, 53 frames before the stop. The native check agrees; the realworld clips job fails on it every
-    night (2026-11-01, on 0.4.0 and 0.5.0).
-  - Where: `tools/app-check.mjs` `checkStopped` (the lag), against what ShotDetector decides at a stop (the flash
-    filter's or a detector's own look-ahead at a variable rate: Elephants Dream is one); upstream if a stop changes a
-    cut that far back.
-  - Done when: the realworld clips job passes, the allowance explained by ShotDetector's rule.
-  - Status: Open (2026-11-01)
-
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
@@ -77,7 +66,7 @@ correcting the cuts on the page.
 
 The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
 
-### Chosen by the owner, 2026-11-02
+### The contact sheet (issue #93)
 
 - A contact sheet of the shots, as PNG and PDF ([#93](https://github.com/bisforboman/shotdetector-web/issues/93))
   - Why: editors, directors and archivists review footage and plan edits on a printed sheet of the shots; browser
@@ -85,12 +74,33 @@ The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then
   - Where: `wwwroot/panels/sheet.js` (a card under the run's, marked `page`: the stills are the browser's decode,
     not exact), the stills through `shots.js`' own grabber (the hidden `<video>`, or an AVI's JPEG through
     `frameAt(t)`), the PDF written by hand with the JPEGs embedded (no dependency, no build step); `index.html`,
-    `style.css`, `tools/page-check`, `tools/ci-scope.sh`.
+    `style.css`, `tools/page-check` (`tools/ci-scope.sh`'s `panels/*` already puts `sheet.js` in the page tier).
   - Done when: the run's card has a contact sheet to download as PNG and as a PDF on A4 or Letter, each shot's still
     (1 or 3) with its number, start timecode and length, the columns chosen, a header with the file's name, duration,
     shot count and average shot length; page-check downloads both, a still per shot in each, a valid PNG and PDF.
   - Not: the exact sheet from the decoded frames, ShotDetector CLI's (shotdetector#649); a print stylesheet.
   - Status: In progress (2026-11-02)
+
+### The npm package (issue #92)
+
+- The npm package
+  - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
+    trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner
+    2026-11-02, design in decision [2026-11-02-npm-package.md](decisions/2026-11-02-npm-package.md)).
+  - Where: `package/` (`index.js`, `index.d.ts`, `package.json`, README): `detectShots(file, options)` and
+    `ShotDetector` over `worker.js`' call-by-name (and `threads.js`' runner for threads), stills from the browser's
+    decode; `tools/package.sh` (the App's AOT, interpreted and threaded AOT publishes copied into `aot/`,
+    `interpreted/`, `threads/`, FastYuv's licence, `-p:FastYuvAssembly` passed on); `tools/check.sh package` and a test
+    page under `tools/page-check/`; `tools/ci-scope.sh`; `.github/workflows/npm.yml` (on a tag `package-v<version>`,
+    the checks, then `npm publish --provenance` by trusted publishing); README and CLAUDE.md.
+  - Done when: the packed tarball, installed into a test page in Chromium, gives each sample's shots, scenes and stats
+    CSVs byte for byte the native run's on each bundle (threads on an isolated page; asked for on one that isn't, the
+    worker); a run stopped, one paused and resumed, one cancelled; a still per shot; a changed FastYuv rebuilt through
+    `tools/package.sh` runs; CI green. Publishing itself waits for the owner to create `shotdetector-web` on npmjs.com
+    with this workflow as its trusted publisher.
+  - Not: a `<shot-detector>` element or split runs across workers (the owner, 2026-11-02: later rows if asked); a
+    change to `worker.js`' messages or the page.
+  - Status: Open (2026-11-02)
 
 ## Waiting
 
