@@ -173,7 +173,7 @@ public abstract partial class VideoInput
     {
         ArgumentNullException.ThrowIfNull(range);
         int limit = range.EndFrame >= ShownFrames ? int.MaxValue : (int)(range.To - range.From);
-        return Paused(Measured(Frames(range.Keyframe), picture), limit, every, between, cancellationToken);
+        return Paused(Measured(FramesAsync(range.Keyframe, cancellationToken), picture), limit, every, between, cancellationToken);
     }
 
     /// <summary>

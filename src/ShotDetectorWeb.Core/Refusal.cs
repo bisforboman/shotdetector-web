@@ -5,10 +5,10 @@ namespace ShotDetectorWeb;
 /// 2026-11-02-browser-decoder.md, option 3): the codec or container named as a viewer knows it and as FFmpeg names it
 /// (what <c>ffprobe</c> and the <c>shotdetect</c> CLI say), then what the page reads. What to do instead is the page's.
 /// </summary>
-static class Refusal
+public static class Refusal
 {
     /// <summary>What the core reads, the end of every codec and container refusal.</summary>
-    public const string Scope = "this page reads H.264 in MP4 and MJPEG in AVI so far.";
+    public const string Scope = "this page reads H.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM so far.";
 
     /// <summary>
     /// An MP4 video track's sample entry as a viewer and FFmpeg name its codec: <c>HEVC (H.265, FFmpeg's hevc; 'hvc1')</c>;
@@ -73,6 +73,16 @@ static class Refusal
         if (head.StartsWith((ReadOnlySpan<byte>)[0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11]))
             return "a Windows Media file (FFmpeg's asf; .wmv)";
         return null;
+    }
+
+    /// <summary>Whether the file starts with an EBML header: WebM or Matroska.</summary>
+    public static bool IsMatroska(Stream stream)
+    {
+        Span<byte> head = stackalloc byte[4];
+        stream.Position = 0;
+        int n = stream.ReadAtLeast(head, head.Length, throwOnEndOfStream: false);
+        stream.Position = 0;
+        return n == 4 && head.SequenceEqual((ReadOnlySpan<byte>)[0x1A, 0x45, 0xDF, 0xA3]);
     }
 
     // The EBML header's DocType (element 0x4282), an ASCII string, if it is in the first bytes.

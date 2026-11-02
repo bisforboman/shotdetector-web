@@ -87,6 +87,9 @@ public sealed class VideoPackets
             Add(packet);
         }
 
+        /// <summary>A packet by its pts, size and keyframe flag (a Matroska block).</summary>
+        public void Add(long pts, int size, bool keyframe) => Add(pts, size, keyframe, false);
+
         void Add(long pts, int size, bool keyframe, bool discard)
         {
             // An edit list can repeat samples (several edits) beyond the sample count.

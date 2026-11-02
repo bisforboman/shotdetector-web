@@ -33,7 +33,7 @@ internal static class ResumeCheck
                 string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
                 try
                 {
-                    var input = VideoInput.Open(sample);
+                    var input = FfmpegDecoder.Open(sample);
                     int frames = input.ShownFrames;
                     var told = new List<Shot>();
                     var telling = options with { OnShot = new Told(told) };
