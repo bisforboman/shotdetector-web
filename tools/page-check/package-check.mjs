@@ -63,7 +63,7 @@ mkdirSync(sampleDir);
 for (const { file } of samples) writeFileSync(join(sampleDir, basename(file)), readFileSync(file));
 
 const TYPES = {
-  '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm',
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.wasm': 'application/wasm',
   '.mp4': 'video/mp4', '.avi': 'video/x-msvideo', '.dat': 'application/octet-stream',
 };
 // Two origins: one cross-origin isolated (COOP/COEP, as a site would set for threads), one not.
@@ -90,6 +90,15 @@ const plain = await serve(false), isolated = await serve(true);
 const browser = await playwright.chromium.launch();
 const failures = [];
 const fail = message => { failures.push(message); console.log(`FAIL ${message}`); };
+// A step that hasn't answered by then fails with what the page said, instead of hanging the check.
+const STEP_MS = 180000;
+function within(promise, what, errors) {
+  let timer;
+  const late = new Promise(resolve => {
+    timer = setTimeout(() => resolve({ error: `no answer in ${STEP_MS / 1000} s (${errors.slice(-3).join('; ') || 'nothing said'})` }), STEP_MS);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
 const pass = message => console.log(`ok   ${message}`);
 
 async function open(origin) {
@@ -116,8 +125,8 @@ function same(what, got, want) {
 }
 
 // detectShots in the page: the result's JSON-able parts, the files as text, the stills' types and sizes.
-async function detect(page, file, run, settings) {
-  return page.evaluate(async ({ name, options }) => {
+async function detect({ page, errors }, file, run, settings) {
+  return within(page.evaluate(async ({ name, options }) => {
     const blob = await (await fetch(`/samples/${name}`)).blob();
     const file = new File([blob], name);
     const before = document.body.childElementCount + document.head.childElementCount;
@@ -132,7 +141,7 @@ async function detect(page, file, run, settings) {
     } catch (e) {
       return { error: `${e.name}: ${e.message}` };
     }
-  }, { name: basename(file), options: { ...RUNS[run], ...settings } });
+  }, { name: basename(file), options: { ...RUNS[run], ...settings } }), `${basename(file)} ${run}`, errors);
 }
 
 function compare(label, r, file, run) {
@@ -159,17 +168,17 @@ if (replaced) {
   const { file, run } = samples[0];
   for (const [label, origin, settings] of [['aot', plain, { bundle: 'aot' }], ['interpreted', plain, { bundle: 'interpreted' }],
     ['threads', isolated, { threads: 2 }]]) {
-    const { page } = await open(origin.url);
-    const r = await detect(page, file, run, { ...settings, stills: false });
+    const opened = await open(origin.url);
+    const r = await detect(opened, file, run, { ...settings, stills: false });
     if (r.error?.includes(MARK)) pass(`replaced FastYuv, ${label}: "${MARK}"`);
     else fail(`replaced FastYuv, ${label}: not the replaced FastYuv: ${r.error ?? '(no exception: the package\'s FastYuv ran)'}`);
-    await page.close();
+    await opened.page.close();
   }
 } else {
   // 1. Each sample with each bundle.
   for (const bundle of ['aot', 'interpreted']) {
-    const { page, errors } = await open(plain.url);
-    for (const { file, run } of samples) compare(`${basename(file)} ${run}, ${bundle}`, await detect(page, file, run, { bundle }), file, run);
+    const opened = await open(plain.url), { page, errors } = opened;
+    for (const { file, run } of samples) compare(`${basename(file)} ${run}, ${bundle}`, await detect(opened, file, run, { bundle }), file, run);
     noErrors(bundle, errors);
     await page.close();
   }
@@ -177,15 +186,15 @@ if (replaced) {
   // 2. Threads where the page is isolated; asked for where it isn't, the worker.
   {
     const { file, run } = samples[0];
-    const { page, errors } = await open(isolated.url);
+    const opened = await open(isolated.url), { page, errors } = opened;
     if (!await page.evaluate(() => crossOriginIsolated)) fail('the isolated origin isn\'t crossOriginIsolated');
-    const r = await detect(page, file, run, { threads: 2 });
+    const r = await detect(opened, file, run, { threads: 2 });
     compare(`${basename(file)} ${run}, threads (isolated)`, r, file, run);
     if (!r.error && r.threads !== 2) fail(`threads (isolated): the run had ${r.threads} threads, not 2`);
     noErrors('threads (isolated)', errors);
     await page.close();
     const other = await open(plain.url);
-    const s = await detect(other.page, file, run, { threads: 2 });
+    const s = await detect(other, file, run, { threads: 2 });
     compare(`${basename(file)} ${run}, threads asked for, not isolated`, s, file, run);
     if (!s.error && s.threads !== 1) fail(`threads (not isolated): the run had ${s.threads} threads, not 1`);
     noErrors('threads (not isolated)', other.errors);
@@ -196,7 +205,7 @@ if (replaced) {
   {
     const { file, run } = samples[0];
     const { page, errors } = await open(plain.url);
-    const r = await page.evaluate(async name => {
+    const r = await within(page.evaluate(async name => {
       const file = new File([await (await fetch(`/samples/${name}`)).blob()], name);
       const out = {};
       const d = new window.sd.ShotDetector();
@@ -226,19 +235,22 @@ if (replaced) {
       out.again = { stopped: again.stopped, scenes: await d.scenesCsv() };
       d.close();
       return out;
-    }, basename(file));
-    const nativeStats = native(file, run, 'stats.csv').split('\n');
-    const stoppedRows = r.stopped.stats.trimEnd().split('\n');
-    if (!r.stopped.stopped || r.stopped.frames >= nativeStats.length - 2) fail(`stop: not stopped (${JSON.stringify(r.stopped.frames)} frames)`);
-    else if (stoppedRows.some((row, i) => row !== nativeStats[i])) fail('stop: the stats CSV isn\'t the native run\'s rows up to the stop');
-    else pass(`stopped at frame ${r.stopped.frames}: the native run's ${stoppedRows.length - 1} stats rows`);
-    if (r.paused.pausedAt < 0 || r.paused.during > 0) fail(`pause: progress went on while paused (${JSON.stringify(r.paused)})`);
-    else if (r.paused.stopped) fail('pause: the resumed run ended stopped');
-    else if (same('paused and resumed, scenes CSV', r.paused.scenes, native(file, run, 'scenes.csv'))
-      && same('paused and resumed, stats CSV', r.paused.stats, native(file, run, 'stats.csv'))) pass(`paused at frame ${r.paused.pausedAt} and resumed: the native run's CSVs`);
-    if (r.cancelled !== 'AbortError') fail(`cancel: ${r.cancelled}, not an AbortError`);
-    else if (r.again.stopped || !same('detected after a cancel, scenes CSV', r.again.scenes, native(file, run, 'scenes.csv'))) fail('detected after a cancel: not the whole run');
-    else pass('cancelled with an AbortSignal (AbortError), then detected again: the native run\'s scenes CSV');
+    }, basename(file)), 'stop, pause, cancel', errors);
+    if (r.error) fail(`stop, pause, cancel: ${r.error}`);
+    else {
+      const nativeStats = native(file, run, 'stats.csv').split('\n');
+      const stoppedRows = r.stopped.stats.trimEnd().split('\n');
+      if (!r.stopped.stopped || r.stopped.frames >= nativeStats.length - 2) fail(`stop: not stopped (${JSON.stringify(r.stopped.frames)} frames)`);
+      else if (stoppedRows.some((row, i) => row !== nativeStats[i])) fail('stop: the stats CSV isn\'t the native run\'s rows up to the stop');
+      else pass(`stopped at frame ${r.stopped.frames}: the native run's ${stoppedRows.length - 1} stats rows`);
+      if (r.paused.pausedAt < 0 || r.paused.during > 0) fail(`pause: progress went on while paused (${JSON.stringify(r.paused)})`);
+      else if (r.paused.stopped) fail('pause: the resumed run ended stopped');
+      else if (same('paused and resumed, scenes CSV', r.paused.scenes, native(file, run, 'scenes.csv'))
+        && same('paused and resumed, stats CSV', r.paused.stats, native(file, run, 'stats.csv'))) pass(`paused at frame ${r.paused.pausedAt} and resumed: the native run's CSVs`);
+      if (r.cancelled !== 'AbortError') fail(`cancel: ${r.cancelled}, not an AbortError`);
+      else if (r.again.stopped || !same('detected after a cancel, scenes CSV', r.again.scenes, native(file, run, 'scenes.csv'))) fail('detected after a cancel: not the whole run');
+      else pass('cancelled with an AbortSignal (AbortError), then detected again: the native run\'s scenes CSV');
+    }
     noErrors('stop, pause, cancel', errors);
     await page.close();
   }

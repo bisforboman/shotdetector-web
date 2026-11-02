@@ -71,7 +71,8 @@ detector.close();
 ## Serving the files
 
 The module starts a Web Worker from `aot/worker.js` (or `interpreted/worker.js`), and .NET's `dotnet.js` loads the
-`.wasm` files next to it, at run time. Serve the package's folder as it is (`.wasm` as `application/wasm`), and don't
+`.wasm` files next to it, at run time. Serve the package's folder as it is (`.wasm` as `application/wasm`, `.js` and
+`.mjs` as `text/javascript`: the threaded runtime's own workers are `.mjs`), and don't
 let a bundler rewrite those files: copy `node_modules/shotdetector-web/` to your static files and pass `base`, or load
 the module itself from there:
 
