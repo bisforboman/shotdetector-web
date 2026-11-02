@@ -253,7 +253,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg;
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
   `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
-  `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line); `docs/mockups/`: static HTML
+  `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
+  `2026-11-02-npm-package.md`: the npm package, its API over `worker.js`, AOT and interpreted bundles, opt-in threads,
+  its size, FastYuv rebuilt through it, npm by CI); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
