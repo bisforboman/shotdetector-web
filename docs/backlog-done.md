@@ -1493,6 +1493,21 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     dialog; page-check makes it on each sample picked on threads and the AVI: a PNG, an A4 and a Letter PDF, each valid,
     a still per shot)
 
+- A refusal that says what to do
+  - Why: HEVC (most phone video), VP9, AV1 and WebM files get an error and nothing else; the decision's option 3.
+  - Where: the core's `UnsupportedVideoException` messages (`Mp4Input`, `VideoInput.Open` for a container it doesn't
+    read: name the codec as FFmpeg does, `hevc`, `vp9`, `av1`, and WebM/Matroska as such); the page's error state
+    (`app.js`, `index.html`, `style.css`): a line under the message pointing to the `shotdetect` CLI and its release
+    binaries (same results, FFmpeg reads everything) and, for HEVC, the iPhone's Camera > Formats > Most Compatible or
+    an export to H.264; README.
+  - Done when: `make-samples.sh` makes an HEVC MP4 and a VP9 WebM (refused samples, checked to be what they say with
+    ffprobe); NativeCheck, app-check.mjs and page-check open each and expect the message and, on the page, the link.
+  - Not: decoding anything new; a hidden `<video>` or WebCodecs.
+  - Status: Done (2026-11-02, #133): `Refusal` names the codec or container as FFmpeg does (HEVC, VP9, AV1, MPEG-4
+    Part 2, ProRes in MP4 and AVI; WebM, Matroska, MPEG-TS and others by the first bytes) and ends with what the page
+    reads; the page's `#refused` links the `shotdetect` command, and for HEVC the iPhone's Most Compatible;
+    `samples/reject/hevc.mp4`, `vp9.webm`, `av1.mp4` checked by NativeCheck, app-check.mjs and page-check
+
 - The npm package
   - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
     trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner

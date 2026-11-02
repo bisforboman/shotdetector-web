@@ -28,6 +28,15 @@ string libs = Environment.GetEnvironmentVariable("SHOTDETECTOR_FFMPEG_LIBS")
 string outDir = "out/native";
 var samples = new List<string>();
 var rejects = new List<string>();
+// What the refusal of each codec and container sample must name (tools/make-samples.sh; app-check.mjs keeps the same).
+var RefusalNames = new Dictionary<string, string>
+{
+    ["hevc.mp4"] = "FFmpeg's hevc",
+    ["vp9.webm"] = "a WebM file",
+    ["av1.mp4"] = "FFmpeg's av1",
+    ["mpeg4.mp4"] = "FFmpeg's mpeg4",
+    ["h264.avi"] = "FFmpeg's h264",
+};
 var list = samples;
 for (int i = 0; i < args.Length; i++)
 {
@@ -187,6 +196,13 @@ foreach (string reject in rejects)
     catch (UnsupportedVideoException e)
     {
         Console.WriteLine($"Refused {Path.GetFileName(reject)}: {e.Message}");
+        // A codec or container the core doesn't read is named as FFmpeg names it (backlog "A refusal that says what to
+        // do"); the page's own words about what to do instead are page-check's.
+        if (RefusalNames.TryGetValue(Path.GetFileName(reject), out string? named) && !e.Message.Contains(named, StringComparison.Ordinal))
+        {
+            Console.WriteLine($"  Its message doesn't name {named}.");
+            failures++;
+        }
     }
     catch (Exception e)
     {
