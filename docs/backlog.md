@@ -55,17 +55,6 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Not: a workaround here.
   - Status: Waiting (2026-11-01): ShotDetector's fix and release
 
-- Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
-  - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
-    of the whole run missing; its allowance (the adaptive window plus 0.6 s plus 1 frame, 18 frames at its rate) admits
-    5721 but not 5683, 53 frames before the stop. The native check agrees; the realworld clips job fails on it every
-    night (2026-11-01, on 0.4.0 and 0.5.0).
-  - Where: `tools/app-check.mjs` `checkStopped` (the lag), against what ShotDetector decides at a stop (the flash
-    filter's or a detector's own look-ahead at a variable rate: Elephants Dream is one); upstream if a stop changes a
-    cut that far back.
-  - Done when: the realworld clips job passes, the allowance explained by ShotDetector's rule.
-  - Status: Open (2026-11-01)
-
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
@@ -76,6 +65,60 @@ correcting the cuts on the page.
 ### ShotDetector 3.26.0 and FrameReader 2.20.0
 
 The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
+
+### The files the page refuses (issue #89)
+
+The owner's choice of 2026-11-02 ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)):
+a refusal that says what to do first, then VP9 and AV1 through the browser's decoder, held to the FFmpeg path's CSVs.
+
+- A refusal that says what to do
+  - Why: HEVC (most phone video), VP9, AV1 and WebM files get an error and nothing else; the decision's option 3.
+  - Where: the core's `UnsupportedVideoException` messages (`Mp4Input`, `VideoInput.Open` for a container it doesn't
+    read: name the codec as FFmpeg does, `hevc`, `vp9`, `av1`, and WebM/Matroska as such); the page's error state
+    (`app.js`, `index.html`, `style.css`): a line under the message pointing to the `shotdetect` CLI and its release
+    binaries (same results, FFmpeg reads everything) and, for HEVC, the iPhone's Camera > Formats > Most Compatible or
+    an export to H.264; README.
+  - Done when: `make-samples.sh` makes an HEVC MP4 and a VP9 WebM (refused samples, checked to be what they say with
+    ffprobe); NativeCheck, app-check.mjs and page-check open each and expect the message and, on the page, the link.
+  - Not: decoding anything new; a hidden `<video>` or WebCodecs.
+  - Status: Open
+
+- VP9 and AV1 in WebM through the browser's decoder
+  - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
+    I420/I420P10, which FastYuv and the frame source take; a visitor's YouTube download gets a result.
+  - Where: the core: a WebM/Matroska reader and VP9 frame header / AV1 sequence header readers (`YuvVideo` as ffprobe
+    says it: rate, frames, duration, time base, colour tags, never `VideoFrame.colorSpace`, which Chromium defaults
+    to bt709), a `VideoInput` whose frames come from the page; the App: an export taking frames from JavaScript; the
+    page: `VideoDecoder` (`prefer-software` first), `copyTo` I420/I420P10 (NV12 de-interleaved), a `browser` chip and
+    a status line saying the browser decoded it; a browser giving RGB (Firefox) or no decoder gets row 1's refusal.
+    A design question the row doesn't settle (ranges and resume over the browser's decoder, the frames crossing on
+    threads) goes to `docs/decisions/` first.
+  - Done when: VP9 and AV1 WebM samples in `make-samples.sh`; NativeCheck compares the description with ffprobe field
+    by field; page-check picks them in Chromium, their CSVs, shots and timeline files the FFmpeg path's byte for byte.
+  - Not: H.264 or MJPEG through the browser (always ManagedCodecs); HEVC (no decoder CI can run); RGB frames.
+  - Depends on: "A refusal that says what to do".
+  - Status: Open
+
+### The npm package (issue #92)
+
+- The npm package
+  - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
+    trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner
+    2026-11-02, design in decision [2026-11-02-npm-package.md](decisions/2026-11-02-npm-package.md)).
+  - Where: `package/` (`index.js`, `index.d.ts`, `package.json`, README): `detectShots(file, options)` and
+    `ShotDetector` over `worker.js`' call-by-name (and `threads.js`' runner for threads), stills from the browser's
+    decode; `tools/package.sh` (the App's AOT, interpreted and threaded AOT publishes copied into `aot/`,
+    `interpreted/`, `threads/`, FastYuv's licence, `-p:FastYuvAssembly` passed on); `tools/check.sh package` and a test
+    page under `tools/page-check/`; `tools/ci-scope.sh`; `.github/workflows/npm.yml` (on a tag `package-v<version>`,
+    the checks, then `npm publish --provenance` by trusted publishing); README and CLAUDE.md.
+  - Done when: the packed tarball, installed into a test page in Chromium, gives each sample's shots, scenes and stats
+    CSVs byte for byte the native run's on each bundle (threads on an isolated page; asked for on one that isn't, the
+    worker); a run stopped, one paused and resumed, one cancelled; a still per shot; a changed FastYuv rebuilt through
+    `tools/package.sh` runs; CI green. Publishing itself waits for the owner to create `shotdetector-web` on npmjs.com
+    with this workflow as its trusted publisher.
+  - Not: a `<shot-detector>` element or split runs across workers (the owner, 2026-11-02: later rows if asked); a
+    change to `worker.js`' messages or the page.
+  - Status: Open (2026-11-02)
 
 ## Waiting
 
@@ -146,15 +189,6 @@ file out of `samples/reject/`, and passes the native check.
   - Done when: the page check shows that sample's picture and stills.
   - Not: decoding in .NET for the picture.
   - Status: Maybe (found 2026-10-31)
-
-- WebCodecs as a decoder
-  - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
-    identical results are the point. Decision "Not doing".
-  - Status: Maybe (issue #89 asks it again for the files the page refuses, marked not exact; #15, speed, closed into
-    it). Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
-    decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
-    reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
-    question to open
 
 - Real phone and broadcast files for the real-world check
   - Why: the real-world check's rotated and interlaced files are made from Blender films by FFmpeg, since no openly
