@@ -130,7 +130,14 @@ up to the second, a last chapter shorter than that joined to the one before; You
 least three, so with fewer the card says why instead (Timeline's words). The titles are typed on the page, under
 Titles, a field a chapter with Timeline's placeholder in it: the download carries them, a chapter left empty keeps
 "Chapter n" (the titles last while the run is shown, not kept with a stopped run: backlog, "Chapter titles kept with
-the kept run"). A file
+the kept run"). Under the run's card, a contact sheet (`panels/sheet.js`, issue #93, marked the page's): each shot's
+still, or three (its first, middle and last frame, as scenedetect's `--num-images 3`), with its number, start timecode
+and length, in the columns chosen, under a header with the file's name, duration, shot count and average shot length;
+made when asked, downloaded as `<file>.sheet.png` and as a PDF to print, `<file>.sheet.a4.pdf` or
+`<file>.sheet.letter.pdf`. The stills are the shots table's, the browser's decode (an AVI's own JPEGs), not
+ShotDetector's frames; the exact sheet from the decoded frames is ShotDetector CLI's (shotdetector#649). The PDF is
+written on the page, PDF 1.4 with the stills as JPEGs and the text in Helvetica, no library, rather than print CSS
+and `window.print()`, which gives no file and leaves the paper and margins to the browser's dialog. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last

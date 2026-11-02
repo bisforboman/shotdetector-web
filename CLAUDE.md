@@ -152,7 +152,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   Subtitle Edit's shot changes, and YouTube chapters of `YouTubeChapters` at the minimum typed beside them, their reason
   when there are none, a title a chapter typed under Titles, which the download carries), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
-  decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  decode from a hidden `<video>` of its own, as rows come into view; `stillAt` and `stillTimes` for the sheet, one
+  seek at a time with the table's), `sheet.js` (a card under the run's, marked page: the contact sheet, issue #93, 1
+  or 3 stills a shot from `shots.js`' grabber, its number, start and length, columns, a header; a PNG from a canvas
+  and a PDF written by hand, the JPEGs embedded, A4 or Letter), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
@@ -210,7 +213,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, `mjpeg-320x240-25.avi` picked (the player the file's JPEG at the playhead after
-  clicks on the timeline and a shot's row, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
+  clicks on the timeline and a shot's row, a still per shot), the contact sheet on the first sample and the AVI (a PNG
+  and A4 and Letter PDFs downloaded, each valid, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
   threads paused and resumed, then stopped while paused, then run again
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,

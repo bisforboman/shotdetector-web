@@ -77,6 +77,21 @@ correcting the cuts on the page.
 
 The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
 
+### Chosen by the owner, 2026-11-02
+
+- A contact sheet of the shots, as PNG and PDF ([#93](https://github.com/bisforboman/shotdetector-web/issues/93))
+  - Why: editors, directors and archivists review footage and plan edits on a printed sheet of the shots; browser
+    tools show thumbnails on screen, none a sheet to print or keep. The page already decodes a still per shot.
+  - Where: `wwwroot/panels/sheet.js` (a card under the run's, marked `page`: the stills are the browser's decode,
+    not exact), the stills through `shots.js`' own grabber (the hidden `<video>`, or an AVI's JPEG through
+    `frameAt(t)`), the PDF written by hand with the JPEGs embedded (no dependency, no build step); `index.html`,
+    `style.css`, `tools/page-check`, `tools/ci-scope.sh`.
+  - Done when: the run's card has a contact sheet to download as PNG and as a PDF on A4 or Letter, each shot's still
+    (1 or 3) with its number, start timecode and length, the columns chosen, a header with the file's name, duration,
+    shot count and average shot length; page-check downloads both, a still per shot in each, a valid PNG and PDF.
+  - Not: the exact sheet from the decoded frames, ShotDetector CLI's (shotdetector#649); a print stylesheet.
+  - Status: In progress (2026-11-02)
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
