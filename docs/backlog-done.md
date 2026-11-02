@@ -1468,3 +1468,11 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     natively stopped at 5736 gives the same shots and the whole run's stats rows. The last shot ends at the count,
     5736, as scenedetect ends a file's last shot at its frames read (the whole run's at 15294). `checkStopped` now takes
     the last stats row's Frame Number as the stop; at a constant rate that is the count, as before)
+
+- WebCodecs as a decoder
+  - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
+    identical results are the point. Decision "Not doing".
+  - Status: Dropped (2026-11-02): issue #89's decision
+    ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)) keeps H.264 on ManagedCodecs
+    and takes the browser's decoder only for VP9 and AV1, rows "A refusal that says what to do" and "VP9 and AV1 in
+    WebM through the browser's decoder" in backlog.md

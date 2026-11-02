@@ -66,6 +66,39 @@ correcting the cuts on the page.
 
 The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
 
+### The files the page refuses (issue #89)
+
+The owner's choice of 2026-11-02 ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)):
+a refusal that says what to do first, then VP9 and AV1 through the browser's decoder, held to the FFmpeg path's CSVs.
+
+- A refusal that says what to do
+  - Why: HEVC (most phone video), VP9, AV1 and WebM files get an error and nothing else; the decision's option 3.
+  - Where: the core's `UnsupportedVideoException` messages (`Mp4Input`, `VideoInput.Open` for a container it doesn't
+    read: name the codec as FFmpeg does, `hevc`, `vp9`, `av1`, and WebM/Matroska as such); the page's error state
+    (`app.js`, `index.html`, `style.css`): a line under the message pointing to the `shotdetect` CLI and its release
+    binaries (same results, FFmpeg reads everything) and, for HEVC, the iPhone's Camera > Formats > Most Compatible or
+    an export to H.264; README.
+  - Done when: `make-samples.sh` makes an HEVC MP4 and a VP9 WebM (refused samples, checked to be what they say with
+    ffprobe); NativeCheck, app-check.mjs and page-check open each and expect the message and, on the page, the link.
+  - Not: decoding anything new; a hidden `<video>` or WebCodecs.
+  - Status: Open
+
+- VP9 and AV1 in WebM through the browser's decoder
+  - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
+    I420/I420P10, which FastYuv and the frame source take; a visitor's YouTube download gets a result.
+  - Where: the core: a WebM/Matroska reader and VP9 frame header / AV1 sequence header readers (`YuvVideo` as ffprobe
+    says it: rate, frames, duration, time base, colour tags, never `VideoFrame.colorSpace`, which Chromium defaults
+    to bt709), a `VideoInput` whose frames come from the page; the App: an export taking frames from JavaScript; the
+    page: `VideoDecoder` (`prefer-software` first), `copyTo` I420/I420P10 (NV12 de-interleaved), a `browser` chip and
+    a status line saying the browser decoded it; a browser giving RGB (Firefox) or no decoder gets row 1's refusal.
+    A design question the row doesn't settle (ranges and resume over the browser's decoder, the frames crossing on
+    threads) goes to `docs/decisions/` first.
+  - Done when: VP9 and AV1 WebM samples in `make-samples.sh`; NativeCheck compares the description with ffprobe field
+    by field; page-check picks them in Chromium, their CSVs, shots and timeline files the FFmpeg path's byte for byte.
+  - Not: H.264 or MJPEG through the browser (always ManagedCodecs); HEVC (no decoder CI can run); RGB frames.
+  - Depends on: "A refusal that says what to do".
+  - Status: Open
+
 ## Waiting
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
@@ -123,15 +156,6 @@ file out of `samples/reject/`, and passes the native check.
   - Done when: the page check shows that sample's picture and stills.
   - Not: decoding in .NET for the picture.
   - Status: Maybe (found 2026-10-31)
-
-- WebCodecs as a decoder
-  - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
-    identical results are the point. Decision "Not doing".
-  - Status: Maybe (issue #89 asks it again for the files the page refuses, marked not exact; #15, speed, closed into
-    it). Measured 2026-10-26 ("WebCodecs: are its frames ManagedCodecs' frames?", backlog-done.md; the
-    decision's "Not doing" has the tables): Chromium 153's frames are ManagedCodecs' frames, every one, Firefox 136's
-    reach the page in RGB, so the decision stands. Chromium alone, with ManagedCodecs elsewhere, is the owner's
-    question to open
 
 - Real phone and broadcast files for the real-world check
   - Why: the real-world check's rotated and interlaced files are made from Blender films by FFmpeg, since no openly
