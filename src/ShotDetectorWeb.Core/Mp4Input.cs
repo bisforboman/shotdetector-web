@@ -27,7 +27,7 @@ public sealed class Mp4Input : VideoInput
         using var stream = open();
         var header = Mp4Header.Read(stream);
         if (header.SampleEntry is not ("avc1" or "avc3"))
-            throw new UnsupportedVideoException($"The video is '{header.SampleEntry}', not H.264 ('avc1'): only H.264 is supported so far.");
+            throw new UnsupportedVideoException($"The video is {Refusal.Mp4Codec(header.SampleEntry)}, not H.264: {Refusal.Scope}");
         int rotation = Rotation(header);
         // A fragmented file's samples are in its 'moof' boxes (its 'moov' may have some, or none): they are counted on
         // the walk below.

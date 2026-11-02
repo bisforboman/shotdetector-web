@@ -42,6 +42,8 @@
 //      sample opened with it (PWA.launchFilesInApp: the file through launchQueue, to the page already open, as the
 //      manifest's launch_handler says), on threads and on ?threads=0; and the sample shared to the page (the share
 //      target's multipart POST, which sw.js answers) on both: each to the same downloads as 1.
+//  12. each --refused file (HEVC in MP4, VP9 in WebM) picked: the core's refusal naming the codec, what reads the file
+//      instead under it, the iPhone's line for HEVC alone (backlog "A refusal that says what to do").
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -50,7 +52,8 @@
 // as the native check wrote them, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
-// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]
+// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
+//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -63,12 +66,15 @@ const args = process.argv.slice(2);
 const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
 if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
   console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
-    '[--deinterlace <interlaced.mp4>] [<more.mp4>...]');
+    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
 const interlaced = di >= 0 ? resolve(args[di + 1]) : null;
-const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => ![at, at + 1, di, di + 1].includes(i)).map(a => resolve(a));
+// --refused <file>, any number of times: a file the page refuses, with what reads it instead under the message.
+const refusedAt = args.flatMap((a, i) => a === '--refused' ? [i, i + 1] : []);
+const refusedFiles = refusedAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
+const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => ![at, at + 1, di, di + 1, ...refusedAt].includes(i)).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
 const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
   ...Object.fromEntries([...more, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
@@ -774,6 +780,36 @@ async function picked(query, what, file = sample, deinterlace = null) {
   await context.close();
 }
 
+// A file the page refuses (a codec or container the core doesn't read: tools/make-samples.sh's samples/reject/), picked
+// on threads: the page ends in error with the core's message naming the codec as FFmpeg does, and under it what reads
+// the file instead (the shotdetect command, linked), and for HEVC what an iPhone records (backlog "A refusal that says
+// what to do").
+async function pickedRefused(file) {
+  const what = `${basename(file)}, refused`;
+  const { context, page, errors } = await open();
+  await page.setInputFiles('#file', file);
+  await page.click('#detect');
+  const status = await finished(page, what, 'error');
+  if (status !== null) {
+    const shown = await page.evaluate(() => ({
+      message: document.getElementById('error').textContent,
+      refused: !document.getElementById('refused').hidden,
+      link: document.querySelector('#refused a')?.href ?? '',
+      hevc: !document.getElementById('refused-hevc').hidden,
+    }));
+    const hevc = /FFmpeg's hevc/.test(shown.message);
+    console.log(`${what}: ${shown.message}`);
+    if (!/this page reads H\.264 in MP4 and MJPEG in AVI so far/.test(shown.message))
+      fail(`${what}: the message isn't the core's refusal: ${shown.message}`);
+    if (!shown.refused || !shown.link.startsWith('https://github.com/bisforboman/shotdetector'))
+      fail(`${what}: no line under the message pointing to the shotdetect command (${JSON.stringify(shown)})`);
+    if (shown.hevc !== hevc)
+      fail(`${what}: the iPhone's line ${shown.hevc ? 'shown' : 'not shown'} for ${hevc ? 'HEVC' : 'another codec'}`);
+  }
+  report(what, errors);
+  await context.close();
+}
+
 // An AVI picked (MJPEG, which no browser plays): the player the file's own JPEG at the playhead, in the <video>'s place,
 // following the timeline and the shots' rows; a still per shot from the same JPEGs; the downloads the native run's.
 async function pickedAvi() {
@@ -955,6 +991,7 @@ async function sharedTo(query, what) {
 }
 
 try {
+  for (const file of refusedFiles) await pickedRefused(file);
   await pickedAvi();
   await launched('', `${basename(sample)}, opened with the installed app`);
   await launched('?threads=0', `${basename(sample)}, opened with the installed app, the page's worker`);

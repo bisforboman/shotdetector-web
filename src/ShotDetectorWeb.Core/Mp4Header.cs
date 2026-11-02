@@ -54,7 +54,7 @@ internal sealed class Mp4Header
     /// <summary>Reads the headers, or explains why the file isn't an MP4 with a video track.</summary>
     public static Mp4Header Read(Stream stream)
     {
-        var moov = FindMoov(stream) ?? throw new UnsupportedVideoException("This isn't an MP4 file (no 'moov' box found).");
+        var moov = FindMoov(stream) ?? throw new UnsupportedVideoException($"This isn't an MP4 file (no 'moov' box found): {Refusal.Scope}");
         bool fragmented = false;
         ReadOnlyMemory<byte>? video = null, audio = null;
         long[,]? movieMatrix = null;

@@ -81,7 +81,7 @@ a refusal that says what to do first, then VP9 and AV1 through the browser's dec
   - Done when: `make-samples.sh` makes an HEVC MP4 and a VP9 WebM (refused samples, checked to be what they say with
     ffprobe); NativeCheck, app-check.mjs and page-check open each and expect the message and, on the page, the link.
   - Not: decoding anything new; a hidden `<video>` or WebCodecs.
-  - Status: Open
+  - Status: In progress (2026-11-02)
 
 - VP9 and AV1 in WebM through the browser's decoder
   - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
