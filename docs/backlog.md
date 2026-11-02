@@ -154,12 +154,14 @@ in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 
     [2026-11-02-correcting-cuts.md](decisions/2026-11-02-correcting-cuts.md)), times cuts at frame / average rate on a
     variable-rate file and takes the video's length as nb_frames. `Detect` uses the frames' pts and the frames played.
     The first correction on such a file retimes every cut or moves the last shot's end (`fragmented-moov`: 38 of 114
-    frames). This is the same on the FFmpeg path, so it is ShotDetector's to decide: sent to the shotdetector
-    coordinator on 2026-11-02.
+    frames). This is the same on the FFmpeg path, and scenedetect 0.7.2's own load-scenes gives the same numbers, so
+    `LoadScenes` stays as it is. Upstream adds an overload that takes a `DetectionResult` and the edited cuts and keeps
+    that run's frame times and length ([shotdetector#707](https://github.com/bisforboman/shotdetector/issues/707), the
+    owner's choice, 2026-11-02).
   - Where: the ShotDetector pin, and `CorrectedCuts` if upstream adds an overload (the run's frame count, or a
     `DetectionResult` and a cut list); `CorrectionCheck.cs`'s note on the length then becomes a failure.
   - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
-  - Status: Waiting (on upstream's answer, 2026-11-02)
+  - Status: Waiting (on shotdetector#707, 2026-11-02)
 
 ## Maybe
 
