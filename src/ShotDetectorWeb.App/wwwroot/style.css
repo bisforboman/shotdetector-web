@@ -209,6 +209,12 @@ video, .frame {
 #run .chapter-titles li { display: flex; gap: 0.5rem; align-items: baseline; margin: 0.15rem 0; }
 #run .chapter-titles li span { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 4em; text-align: right; }
 #run .chapter-titles input { flex: 1; min-width: 0; }
+/* The contact sheet (panels/sheet.js): its options on a line, then Make and the two downloads. */
+#sheet .sheet-options { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; font-size: 0.9rem; }
+#sheet .sheet-options input[type=number] { width: 3.5em; }
+#sheet .downloads { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; }
+#sheet .downloads a { font-weight: 600; }
+#sheet #sheet-status { color: var(--muted); font-size: 0.9rem; }
 
 /* The timeline: lane labels on the left, the tracks on one time axis, the playhead across all of them. */
 #timeline { display: flex; font-size: 0.8rem; user-select: none; }

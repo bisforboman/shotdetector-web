@@ -1469,6 +1469,30 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     5736, as scenedetect ends a file's last shot at its frames read (the whole run's at 15294). `checkStopped` now takes
     the last stats row's Frame Number as the stop; at a constant rate that is the count, as before)
 
+- WebCodecs as a decoder
+  - Why not: the browser's own decoder is fast, but its output may differ between browsers and from FFmpeg's, and
+    identical results are the point. Decision "Not doing".
+  - Status: Dropped (2026-11-02): issue #89's decision
+    ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)) keeps H.264 on ManagedCodecs
+    and takes the browser's decoder only for VP9 and AV1, rows "A refusal that says what to do" and "VP9 and AV1 in
+    WebM through the browser's decoder" in backlog.md
+
+- A contact sheet of the shots, as PNG and PDF ([#93](https://github.com/bisforboman/shotdetector-web/issues/93))
+  - Why: editors, directors and archivists review footage and plan edits on a printed sheet of the shots; browser
+    tools show thumbnails on screen, none a sheet to print or keep. The page already decodes a still per shot.
+  - Where: `wwwroot/panels/sheet.js` (a card under the run's, marked `page`: the stills are the browser's decode,
+    not exact), the stills through `shots.js`' own grabber (the hidden `<video>`, or an AVI's JPEG through
+    `frameAt(t)`), the PDF written by hand with the JPEGs embedded (no dependency, no build step); `index.html`,
+    `style.css`, `tools/page-check` (`tools/ci-scope.sh`'s `panels/*` already puts `sheet.js` in the page tier).
+  - Done when: the run's card has a contact sheet to download as PNG and as a PDF on A4 or Letter, each shot's still
+    (1 or 3) with its number, start timecode and length, the columns chosen, a header with the file's name, duration,
+    shot count and average shot length; page-check downloads both, a still per shot in each, a valid PNG and PDF.
+  - Not: the exact sheet from the decoded frames, ShotDetector CLI's (shotdetector#649); a print stylesheet.
+  - Status: Done (2026-11-02, #130: a card under the run's, marked the page's; the PDF written by hand, PDF 1.4 with
+    DCTDecode JPEGs and Helvetica, rather than print CSS, which gives no file and leaves the paper to the browser's
+    dialog; page-check makes it on each sample picked on threads and the AVI: a PNG, an A4 and a Letter PDF, each valid,
+    a still per shot)
+
 - The npm package
   - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
     trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner

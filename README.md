@@ -130,7 +130,14 @@ up to the second, a last chapter shorter than that joined to the one before; You
 least three, so with fewer the card says why instead (Timeline's words). The titles are typed on the page, under
 Titles, a field a chapter with Timeline's placeholder in it: the download carries them, a chapter left empty keeps
 "Chapter n" (the titles last while the run is shown, not kept with a stopped run: backlog, "Chapter titles kept with
-the kept run"). A file
+the kept run"). Under the run's card, a contact sheet (`panels/sheet.js`, issue #93, marked the page's): each shot's
+still, or three (its first, middle and last frame, as scenedetect's `--num-images 3`), with its number, start timecode
+and length, in the columns chosen, under a header with the file's name, duration, shot count and average shot length;
+made when asked, downloaded as `<file>.sheet.png` and as a PDF to print, `<file>.sheet.a4.pdf` or
+`<file>.sheet.letter.pdf`. The stills are the shots table's, the browser's decode (an AVI's own JPEGs), not
+ShotDetector's frames; the exact sheet from the decoded frames is ShotDetector CLI's (shotdetector#649). The PDF is
+written on the page, PDF 1.4 with the stills as JPEGs and the text in Helvetica, no library, rather than print CSS
+and `window.print()`, which gives no file and leaves the paper and margins to the browser's dialog. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -1112,7 +1119,10 @@ rules for changing them (adding to the page among them).
   Subtitle Edit's shot changes, and YouTube chapters of `YouTubeChapters` at the minimum typed beside them, their reason
   when there are none, a title a chapter typed under Titles, which the download carries), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
-  decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  decode from a hidden `<video>` of its own, as rows come into view; `stillAt` and `stillTimes` for the sheet, one
+  seek at a time with the table's), `sheet.js` (a card under the run's, marked page: the contact sheet, issue #93, 1
+  or 3 stills a shot from `shots.js`' grabber, its number, start and length, columns, a header; a PNG from a canvas
+  and a PDF written by hand, the JPEGs embedded, A4 or Letter), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
@@ -1162,7 +1172,8 @@ rules for changing them (adding to the page among them).
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, `mjpeg-320x240-25.avi` picked (the player the file's JPEG at the playhead after
-  clicks on the timeline and a shot's row, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
+  clicks on the timeline and a shot's row, a still per shot), the contact sheet of each sample picked on threads and of the AVI (a PNG
+  and A4 and Letter PDFs downloaded, each valid, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
   threads paused and resumed, then stopped while paused, then run again
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
@@ -1206,6 +1217,8 @@ rules for changing them (adding to the page among them).
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
   `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
   `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
+  `2026-11-02-browser-decoder.md`: the files the page refuses, a refusal that says what to do, then VP9 and AV1
+  through the browser's decoder, checked in Chromium;
   `2026-11-02-npm-package.md`: the npm package, its API over `worker.js`, AOT and interpreted bundles, opt-in threads,
   its size, FastYuv rebuilt through it, npm by CI); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
