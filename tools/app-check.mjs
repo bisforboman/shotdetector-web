@@ -22,6 +22,9 @@
 // HTML and picture measures, the shots told after the stopped part's (up to the first told again) the whole run's;
 // stopped in its second range split, the rest split again from the kept bytes' first frame (Ranges from it), merged
 // with them: the whole run's too (checkResume). Kept bytes of other options fail with NOT_RESUMED (checkNotResumed).
+// Corrected cuts (Api's Correct, issue #90): the default run's cuts corrected as NativeCheck corrects them (its
+// <sample>.corrected.starts.json), every download but the stats CSV NativeCheck's for the same list, which it holds to
+// the FFmpeg path's LoadScenes; the stats CSV the run's; Correct(null) the run's own downloads again (checkCorrections).
 // A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
 // the default run, the run with every detector and that run deinterlaced (SPLIT_RUNS) split into ranges at keyframes
 // (at most RANGES; Ranges for the run's options, which say how far past a keyframe a range starts), each
@@ -127,7 +130,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, TimelineFile, YouTubeChapters, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, TimelineFile, YouTubeChapters, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Correct, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -232,6 +235,7 @@ for (const [i, sample] of samples.entries()) {
     if (run === Object.keys(RUNS)[0]) {
       wholePicture = checkPicture(sample, result);
       wholeTypes = checkFrameTypes(sample, result);
+      await checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles);
     }
     if (!light) await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive' && !light) await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
@@ -244,6 +248,26 @@ for (const [i, sample] of samples.entries()) {
   }
   checkAudio(sample, video);
   checkPackets(sample);
+}
+
+async function checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles) {
+  const base = basename(sample, extname(sample)), name = `${basename(sample)} corrected`;
+  const native = join(nativeDir ?? '', `${base}.corrected`);
+  if (!nativeDir || !existsSync(`${native}.starts.json`)) return fail(`${name}: no native ${native}.starts.json to compare with`);
+  const corrected = JSON.parse(Correct(readFileSync(`${native}.starts.json`, 'utf8')));
+  if (corrected.frameCount !== result.frameCount || corrected.stopped !== false)
+    fail(`${name}: ${corrected.frameCount} frames, stopped ${corrected.stopped}, not the run's ${result.frameCount}`);
+  if (JSON.stringify(JSON.parse(ShotsJson())) !== JSON.stringify(corrected.shots)) fail(`${name}: ShotsJson's shots aren't Correct's`);
+  const files = [['scenes.csv', ScenesCsv()], ['shots.json', ShotsJson()], ['shots.html', ShotsHtml()],
+    ...TIMELINES.map(([format, extension]) => [extension, TimelineFile(format, fileName)]),
+    ...CHAPTERS.map(minimum => [`chapters-${minimum}.json`, YouTubeChapters(minimum)])];
+  for (const [extension, text] of files) writeFileSync(join(outDir, `${base}.corrected.${extension}`), text);
+  const differ = files.filter(([extension, text]) => text !== readFileSync(`${native}.${extension}`, 'utf8')).map(([e]) => e);
+  if (differ.length > 0) fail(`${name}: not the native check's ${differ.join(', ')}`);
+  if (await statsText() !== statsCsv) fail(`${name}: the stats CSV isn't the run's`);
+  Correct('null');
+  if (ScenesCsv() !== scenesCsv || !sameShotFiles(shotFiles)) fail(`${name}: Correct(null) doesn't give the run's downloads back`);
+  console.error(`${name}: ${corrected.shots.length} shots, ${files.length} downloads the native check's${differ.length ? ' but for some' : ''}`);
 }
 
 // Detect's pauses against the runs' time: the pauses must cost under 1% of it (Api's PauseEvery).
