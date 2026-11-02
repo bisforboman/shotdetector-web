@@ -35,6 +35,14 @@
 //                                                                frames before it scored in an earlier run), else 0;
 //                                                                restored: a stopped run kept in this browser shown
 //                                                                again, which didn't run now (seconds 0)
+//                        'corrected' { video, result, detected, cuts, edits }   the run's cuts corrected on the page
+//                                                                (correct; issue #90): result as 'done's, its shots and
+//                                                                scenesCsv the corrected list's (Api's Correct: made by
+//                                                                ShotDetector's LoadScenes), statsCsv the run's; detected
+//                                                                and cuts the cut frames (counted from 0) as detected and
+//                                                                as corrected; edits { removed, added }, the frames of
+//                                                                each. After a 'done' whose run has corrections kept,
+//                                                                and after each correction (back to none too)
 //                        'cancelled' { video, done, expected }   the run was lost at frame done: the worker didn't
 //                                                                answer a stop and was terminated
 //                        'audio'    { video, audio }             the file's sound, measured in a worker of its own
@@ -44,6 +52,9 @@
 //                        'playing'  { shot, paused }             whenever the playhead moves or the shots change: the
 //                                                                shot it is in (null outside the shots known), and
 //                                                                whether the video is paused
+//   correct(cuts)      corrects the shown run's cuts to cuts (frames counted from 0, frame 0 left out): a promise of
+//                       whether it did (only a done or stopped run is corrected); 'corrected' tells the panels.
+//                       detectedCuts() the shown run's cuts as detected, correctedCuts() as corrected now
 //   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns (a call made before
 //                       the worker has started, as the footer's Versions, waits for it: startWorker)
 //   frameSeconds(video, frames) where frame number `frames` (counted from 0 as decoded: a range's, a span's) starts,
@@ -151,6 +162,9 @@ let ends = [];
 let kept = null;        // the stopped run kept for the chosen file, to resume (KEPT's record), or null
 let resumeFrom = 0;     // the frame the current run's rest starts at when it resumes a stopped run, else 0
 let resumeAt = 0;       // and the frame the stopped run had got to: the rest scores again from its keyframe (from)
+let detected = null;    // the shown run, as detected: { result, options, record (the kept record that holds it) }
+let edits = { removed: [], added: [] }; // its corrections, the frames of the cuts removed and added (correct)
+let correcting = Promise.resolve(); // the corrections asked for, one after another
 
 const listeners = {};
 export function on(event, f) {
@@ -347,7 +361,9 @@ function setState(next) {
   stopButton.hidden = !busy;
   stopButton.disabled = next === 'stopping';
   stopButton.textContent = next === 'opening' ? 'Cancel' : 'Stop';
-  resumeButton.hidden = forgetButton.hidden = busy || !keptFor(file);
+  forgetButton.hidden = busy || !keptFor(file);
+  // A finished run kept for its corrections has nothing to resume.
+  resumeButton.hidden = forgetButton.hidden || kept.from < 0;
   // With a stopped run to resume, Resume is the button to press; Detect starts over.
   detectButton.classList.toggle('quiet', !resumeButton.hidden);
   progress.hidden = !busy;
@@ -509,18 +525,27 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   r.scenesCsv = await callOn(by, 'ScenesCsv');
   r.statsCsv = await callOn(by, 'StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile
+  // The corrections kept for this file and these options (a resumed run's, or a run of them again) apply to the new
+  // result's cuts: the stopped part's stay as corrected, the rest's come in as detected.
+  const carried = keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run) ? kept.edits : null;
+  detected = { result: r, options: run, record: null };
   show(r, seconds, workers, by === threaded ? r.threads : 1);
-  // Stopped: kept to resume, in this visit or a later one; finished: the kept run of these options is done with.
-  if (r.stopped) await keep(by, run, r);
+  if (carried) await correct(applied(carried));
+  if (opened !== video) return;
+  // Stopped, or corrected: kept, to resume or to show again, in this visit or a later one; finished: the kept run of
+  // these options is done with.
+  if ((r.stopped || corrected()) && !(detected.record && kept === detected.record)) await keep(by, run, r);
   else if (keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run)) forget();
 }
 
 // A stopped run kept in this browser to resume (the owner's choices, 2026-10-30: only the last one, of any file; shown
 // at once when its file is picked again, its options in the form): IndexedDB's KEPT store, one record under KEPT_KEY,
-// { name, size, lastModified, options, blob, frames, from, shots, saved }: the file (by name, size and modified time),
+// { name, size, lastModified, options, blob, frames, from, shots, edits, saved }: the file (by name, size and modified time),
 // the options it ran with, its scores as Api's Kept gives them (a Blob, whose first four bytes are the frame its rest
 // starts at: from), the frames its result read and its shots (which a resume shows while the rest's are told), and
-// when. Nothing leaves the browser. Storage can be off or fail (a
+// when; edits, its cuts' corrections ({ removed, added }, correct). A finished run is kept too once it is corrected (the
+// owner's choice, 2026-11-02, decision 2026-11-02-correcting-cuts.md): its from is -1, nothing to resume, and it is
+// shown again with its corrections. Nothing leaves the browser. Storage can be off or fail (a
 // private window): the run then resumes only in this visit, from the record kept in memory.
 const KEPT = 'kept', KEPT_KEY = 'last';
 
@@ -555,11 +580,16 @@ async function keep(by, run, r) {
     return; // the runner went: nothing to keep
   }
   const from = new DataView(await blob.slice(0, 4).arrayBuffer()).getInt32(0, true);
-  if (opened !== video || from < 0) return;
+  if (opened !== video || (from < 0 && r.stopped)) return;
+  const shownRun = detected;
   kept = { name: chosen.name, size: chosen.size, lastModified: chosen.lastModified, options: run, blob,
-    frames: r.frameCount, from, shots: r.shots, saved: Date.now() };
+    frames: r.frameCount, from: r.stopped ? from : -1, shots: r.shots, edits, saved: Date.now() };
+  if (shownRun?.result === r) shownRun.record = kept;
   setState(state);
-  const record = kept;
+  await store(kept);
+}
+
+async function store(record) {
   try { await keptStore('readwrite', s => s.put(record, KEPT_KEY)); } catch { /* kept for this visit only */ }
 }
 
@@ -601,7 +631,9 @@ async function restore(record) {
   r.statsCsv = await call('StatsCsv');
   if (opened !== video) return;
   resumeFrom = resumeAt = 0;
+  detected = { result: r, options: record.options, record };
   show(r, 0, 1, 1, record);
+  if (record.edits) await correct(applied(record.edits));
 }
 
 // The form showing a run's options (as options() sends them: a default as none).
@@ -945,7 +977,12 @@ function show(r, seconds, workers, threads, restored = null) {
     `${threads > 1 ? ` on ${threads} threads` : ''}`;
   const read = frameSeconds(opened, r.frameCount), at = `${timecode(read)}, frame ${count(r.frameCount)} ` +
     `of ${count(opened.frames)}`;
-  shown = restored ? {
+  shown = restored && restored.from < 0 ? {
+    text: `Finished, its corrected cuts kept in this browser since ${new Date(restored.saved).toLocaleString()}: ` +
+      'Detect starts over, Forget drops them',
+    title: `${count(r.frameCount)} frames scored before; the scores and the corrections stay in this browser (IndexedDB) ` +
+      'until another run is kept, or Forget',
+  } : restored ? {
     text: `Stopped at ${at}, kept in this browser since ${new Date(restored.saved).toLocaleString()}: Resume goes on ` +
       'from there, Detect starts over',
     title: `${count(r.frameCount)} frames, ${read.toFixed(3)} s of video, scored before; the scores stay in this ` +
@@ -963,6 +1000,7 @@ function show(r, seconds, workers, threads, restored = null) {
   // A run of a few seconds is mostly start-up: too short to measure this browser's speed by; a split run's speed is
   // its workers', not this browser's on one.
   if (!restored && seconds >= 5 && workers === 1) storeRate(ran * opened.width * opened.height / seconds, threads);
+  edits = { removed: [], added: [] };
   emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, ''), from: resumeFrom,
     restored: !!restored });
   clearShots();
@@ -975,6 +1013,74 @@ function show(r, seconds, workers, threads, restored = null) {
 function resumedFrom() {
   return `from frame ${count(resumeAt || resumeFrom)}` +
     `${resumeAt > resumeFrom ? ` (rescored from its keyframe, frame ${count(resumeFrom)})` : ''}`;
+}
+
+// The cuts corrected on the page (issue #90, decision 2026-11-02-correcting-cuts.md). The page keeps the corrections as
+// the frames of the detected cuts removed and of the cuts added, so they apply again to a resumed run's longer list;
+// Api's Correct makes the result the downloads come from (ShotDetector's LoadScenes of the corrected list), and
+// 'corrected' tells the panels. Corrections are kept with the kept run (keep, KEPT): a corrected finished run is kept
+// too.
+export function detectedCuts() {
+  return detected ? detected.result.shots.slice(1).map(s => s.startFrame - 1) : [];
+}
+
+export function correctedCuts() {
+  return applied(edits);
+}
+
+const corrected = () => edits.removed.length + edits.added.length > 0;
+
+// The cuts after corrections e, on the shown run's detected cuts, within the frames it read.
+function applied(e) {
+  const removed = new Set(e.removed), frames = detected?.result.frameCount ?? 0;
+  const cuts = new Set([...detectedCuts().filter(c => !removed.has(c)), ...e.added.filter(c => c > 0 && c < frames)]);
+  return [...cuts].sort((a, b) => a - b);
+}
+
+export function correct(cuts) {
+  const asked = correcting.then(() => corrections(cuts));
+  correcting = asked.catch(() => {});
+  return asked;
+}
+
+async function corrections(cuts) {
+  if (!detected || (state !== 'done' && state !== 'stopped')) return false;
+  const run = detected, video = opened, frames = run.result.frameCount;
+  const wanted = new Set(cuts.filter(c => Number.isInteger(c) && c > 0 && c < frames)), found = detectedCuts();
+  const next = {
+    removed: found.filter(c => !wanted.has(c)),
+    added: [...wanted].filter(c => !found.includes(c)).sort((a, b) => a - b),
+  };
+  const any = next.removed.length + next.added.length > 0;
+  const json = await call('Correct', any ? JSON.stringify([0, ...applied(next)]) : 'null');
+  if (detected !== run) return false;
+  const r = JSON.parse(json);
+  r.scenesCsv = await call('ScenesCsv');
+  r.statsCsv = run.result.statsCsv;
+  if (detected !== run || opened !== video) return false;
+  edits = next;
+  clearShots();
+  for (const shot of r.shots) addShot(shot);
+  emit('corrected', { video, result: r, detected: found, cuts: applied(next), edits });
+  await keepEdits(run);
+  return true;
+}
+
+// The corrections kept with the run's kept record; a finished run is kept once it is corrected, and forgotten when its
+// corrections are all undone.
+async function keepEdits(run) {
+  const record = run.record && kept === run.record ? run.record : null;
+  if (!record) {
+    // A stopped run's record is keep's, made once it has answered.
+    if (corrected() && !run.result.stopped) await keep(resultOn ?? worker, run.options, run.result);
+    return;
+  }
+  if (!corrected() && record.from < 0) {
+    run.record = null;
+    return forget();
+  }
+  record.edits = edits;
+  await store(record);
 }
 
 // The shot playing, a caption under the video: the last shot starting at or before the playhead, if the playhead is

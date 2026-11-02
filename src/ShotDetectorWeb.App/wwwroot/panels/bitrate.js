@@ -145,6 +145,10 @@ on('run', () => cuts.replaceChildren());
 on('done', ({ video, result }) => {
   if (video === opened) showCuts(result.shots, result.frameCount, result.stopped);
 });
+// The cuts corrected on the page ('corrected'): the count follows them.
+on('corrected', ({ video, result }) => {
+  if (video === opened) showCuts(result.shots, result.frameCount, result.stopped);
+});
 
 function own(text, title) {
   const span = document.createElement('span');

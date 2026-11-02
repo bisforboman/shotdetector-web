@@ -7,7 +7,9 @@
 // into the table's view, live shots included, one seek at a time (the owner's choices, 2026-10-29: the player isn't
 // moved, and a shot's first frame is often still black from a fade in). An AVI, which no browser plays, has its stills
 // from its own JPEGs (app.js's frameAt: the packet at that time, cut from the file), decoded by the browser all the same
-// (backlog "The picture of an AVI on the page").
+// (backlog "The picture of an AVI on the page"). Once the cuts are corrected on the page ('corrected'), the rows are the
+// corrected list's shots (ShotDetector's LoadScenes of it), a shot that starts at a cut added on the page marked, its
+// tooltip saying so.
 import { card, frameAt, frameSeconds, on } from '../app.js';
 import { secondsOf, seek, timecode } from '../timeline.js';
 
@@ -191,6 +193,17 @@ on('shot', ({ shot }) => {
 on('done', ({ result }) => {
   clear();
   for (const shot of result.shots) addRow(shot);
+});
+on('corrected', ({ result, edits }) => {
+  clear();
+  const added = new Set(edits.added);
+  for (const shot of result.shots) {
+    addRow(shot);
+    if (!added.has(shot.startFrame - 1)) continue;
+    const r = body.rows[body.rows.length - 1];
+    r.classList.add('corrected');
+    r.title = `${r.title}. It starts at a cut you added on the page`;
+  }
 });
 on('cancelled', ({ video, done }) => {
   const from = last ? secondsOf(last.endTimecode) : 0, to = frameSeconds(video, done);
