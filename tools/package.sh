@@ -37,11 +37,15 @@ publish() {
 
 rm -rf "$out" "$work"
 mkdir -p "$out/licenses" "$work"
-publish interpreted -p:RunAOTCompilation=false
 if [[ -n $aotFrom ]]; then
+  # Copied first: the publishes below delete the App's bin/, where tools/check.sh's publish is.
   [[ -d $aotFrom/_framework && -d $aotFrom/threads/_framework ]] || { echo "--aot-from $aotFrom: no _framework/ and threads/_framework/ there." >&2; exit 1; }
-  aotRoot=$aotFrom threadsRoot=$aotFrom/threads
-else
+  mkdir -p "$work/aot-from"
+  cp -r "$aotFrom/." "$work/aot-from/"
+  aotRoot=$work/aot-from threadsRoot=$work/aot-from/threads
+fi
+publish interpreted -p:RunAOTCompilation=false
+if [[ -z $aotFrom ]]; then
   publish aot -p:RunAOTCompilation=true
   publish threads -p:RunAOTCompilation=true -p:WasmEnableThreads=true
   aotRoot=$work/aot/wwwroot threadsRoot=$work/threads/wwwroot
