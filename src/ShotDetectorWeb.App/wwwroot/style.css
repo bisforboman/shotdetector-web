@@ -413,3 +413,16 @@ footer .chip { font-size: 0.7rem; }
 .edit-buttons button { padding: 0.2rem 0.5rem; font-size: 0.85rem; }
 #corrections-summary { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
 #shots tr.corrected td:first-child { box-shadow: inset 3px 0 0 var(--corrected); }
+
+/* Shot lengths (panels/shotlengths.js): a bar a shot along the film, its height its length, the trend line over them;
+   under it the axis's ends and the scale. */
+#shot-lengths svg { display: block; width: 100%; height: 9rem; border-bottom: 1px solid var(--line); }
+#shot-lengths .bars rect {
+  fill: color-mix(in srgb, var(--accent) 55%, transparent); stroke: var(--panel); stroke-width: 1;
+  vector-effect: non-scaling-stroke; cursor: pointer;
+}
+#shot-lengths .bars rect:hover { fill: var(--accent); }
+#shot-lengths .trend { stroke: var(--fg); stroke-width: 2; }
+#shot-lengths .ends { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.25rem 0 0; color: var(--muted);
+  font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+#shot-lengths .note { color: var(--muted); font-size: 0.85rem; }

@@ -1,5 +1,6 @@
 // The shots' statistics, a card beside the shots table (backlog "Shot statistics and a timeline"): from the shots as
-// Detect returns them, how many, their average and median length, the shortest and the longest (a click plays it), cuts
+// Detect returns them, how many, their average and median length, their standard deviation (issue #91: the sample's,
+// n − 1, as film scholars' shot-length statistics take it), the shortest and the longest (a click plays it), cuts
 // per minute and how long the run took against the length it read. They are the page's own figures, worked out here
 // from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run, and follow the cuts
 // as they are corrected on the page ('corrected'). The shot playing is
@@ -74,6 +75,9 @@ function fill(seconds, read, stopped) {
     ...n === 0 ? [['Lengths', 'none finished', 'The run stopped inside its first shot: no shot has its whole length yet']] : [
       ['Average length', length(lengths.reduce((a, b) => a + b, 0) / n), `Over ${finished}`],
       ['Median length', length(median), `${median.toFixed(6)} s: half of ${finished} are shorter, half longer`],
+      ['Standard deviation', n > 1 ? length(deviation(lengths)) : '–', n > 1
+        ? `${deviation(lengths).toFixed(6)} s: the sample standard deviation (n − 1) of the lengths of ${finished}`
+        : 'One finished shot has no spread'],
       ...n === 1 ? [['Length', which(0), `${finished}: shot ${whole[0].shot}, ${lengths[0].toFixed(3)} s. Play it`]] : [
         ['Shortest', which(shortest), `Shot ${whole[shortest].shot}, ${lengths[shortest].toFixed(3)} s. Play it`],
         ['Longest', which(longest), `Shot ${whole[longest].shot}, ${lengths[longest].toFixed(3)} s. Play it`]]],
@@ -93,6 +97,12 @@ function fill(seconds, read, stopped) {
 }
 
 const length = s => `${s.toFixed(2)} s`;
+
+// The sample standard deviation (n − 1) of lengths, n > 1.
+function deviation(lengths) {
+  const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+  return Math.sqrt(lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / (lengths.length - 1));
+}
 
 // A shot's length and number, a button that plays it.
 function which(i) {
