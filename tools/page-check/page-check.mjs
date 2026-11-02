@@ -8,7 +8,8 @@
 //      stats CSVs, its shots as JSON and HTML and the editors' timeline files (EDL, FCPXML, FCP7 XML, OTIO, QP, keyframes)
 //      downloaded from the run's card and compared with the native check's run of that detector byte for byte (the
 //      timeline files but for the file's name: the page gives the picked file's), its YouTube chapters at 30 s and 10 s
-//      the native run's, the shots table one row per shot of the CSV;
+//      the native run's, the shots table one row per shot of the CSV; the contact sheet (contactSheet) made and
+//      downloaded as a PNG, an A4 PDF of a still a shot and a Letter PDF of three, each valid with a still per shot;
 //   2. the same sample on the page's worker (?threads=0, as where the page isn't isolated), and split across two
 //      workers (?workers=2): the ranges lane; the same downloads each time;
 //   3. "Try the demo": the clip fetched and run as picked, on threads, paused a quarter of the way in (the bar and the
@@ -25,8 +26,8 @@
 //      again, merged with the kept scores to the whole run's downloads;
 //   8. an AVI (MJPEG, which no browser plays) picked on threads: the player the file's own JPEG at the playhead (an
 //      <img> in the video's place), the frame the playhead is in after a click on the timeline and on a shot's row,
-//      decoded; a still per shot from the same JPEGs; the downloads the native run's (backlog "The picture of an AVI on
-//      the page");
+//      decoded; a still per shot from the same JPEGs, and the contact sheet's from them as in 1; the downloads the native
+//      run's (backlog "The picture of an AVI on the page");
 //   9. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
@@ -645,6 +646,108 @@ function report(what, errors) {
   if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
 }
 
+// The contact sheet (panels/sheet.js, issue #93): made with one still a shot and downloaded as a PNG and an A4 PDF,
+// then with three stills a shot, two columns and no header as a Letter PDF. Each a valid file (the PNG's chunks to
+// IEND, the size its link says; the PDF's cross-reference table pointing at its objects, every image a whole JPEG, its
+// pages of the paper chosen) with a still per shot drawn: the links' data-stills, the PDF's images placed.
+async function contactSheet(page, what, file) {
+  const shots = await page.locator('#shots tbody tr').count(), name = stem(file);
+  const made = (stills, paper) => page.waitForFunction(([want, pdf]) => {
+    const a = document.getElementById('sheet-pdf'), b = document.getElementById('sheet-png');
+    return !a.hidden && !b.hidden && a.download === pdf && Number(a.dataset.stills) === want &&
+      !document.getElementById('sheet-make').disabled;
+  }, [shots * stills, `${name}.sheet.${paper}.pdf`], { timeout: 120000 }).then(() => true, () => false);
+  const get = async (id, expectedName) => {
+    const link = page.locator(`#${id}`);
+    const download = await clicked(page, link);
+    if (download.suggestedFilename() !== expectedName)
+      fail(`${what}: the contact sheet downloads as ${download.suggestedFilename()}, not ${expectedName}`);
+    const saved = join(outDir, `page.${expectedName}`);
+    await download.saveAs(saved);
+    return { bytes: readFileSync(saved), saved, title: await link.getAttribute('title') };
+  };
+  await page.locator('#sheet-make').click();
+  if (!await made(1, 'a4')) {
+    const status = await page.textContent('#sheet-status').catch(() => '');
+    const stills = await page.getAttribute('#sheet-pdf', 'data-stills').catch(() => null);
+    fail(`${what}: no contact sheet with a still for each of the ${shots} shots (stills: ${stills}; ${status})`);
+    return;
+  }
+  const png = await get('sheet-png', `${name}.sheet.png`);
+  const size = pngSize(png.bytes), said = /(\d+)×(\d+)/.exec(png.title);
+  if (typeof size === 'string') fail(`${what}: the contact sheet's PNG (${png.saved}) isn't valid: ${size}`);
+  else if (!said || Number(said[1]) !== size.width || Number(said[2]) !== size.height)
+    fail(`${what}: the contact sheet's PNG is ${size.width}×${size.height}, its link says ${png.title}`);
+  else console.log(`${what}: the contact sheet as a PNG, ${size.width}×${size.height}, a still for each of the ${shots} shots`);
+  const pdfOf = async (paper, stills, box) => {
+    const pdf = await get('sheet-pdf', `${name}.sheet.${paper}.pdf`);
+    const r = pdfRead(pdf.bytes);
+    if (typeof r === 'string') fail(`${what}: the contact sheet's ${paper} PDF (${pdf.saved}) isn't valid: ${r}`);
+    else if (r.placed !== shots * stills || r.boxes.some(b => b !== box))
+      fail(`${what}: the contact sheet's ${paper} PDF (${pdf.saved}) places ${r.placed} stills, not ${shots * stills}, ` +
+        `on pages of ${[...new Set(r.boxes)].join(', ')}, not ${box}`);
+    else console.log(`${what}: the contact sheet as ${paper === 'a4' ? 'an A4' : 'a Letter'} PDF, ${r.pages} pages, ${r.placed} stills of ${r.images} ` +
+      `JPEGs for the ${shots} shots`);
+  };
+  await pdfOf('a4', 1, '0 0 595.28 841.89');
+  await page.selectOption('#sheet-stills', '3');
+  await page.fill('#sheet-columns', '2');
+  await page.locator('#sheet-columns').dispatchEvent('change');
+  await page.uncheck('#sheet-header');
+  await page.selectOption('#sheet-paper', 'letter');
+  if (!await made(3, 'letter')) fail(`${what}: no contact sheet of three stills a shot on Letter`);
+  else await pdfOf('letter', 3, '0 0 612 792');
+}
+
+// A PNG's size, read from its IHDR, once its chunks are whole up to IEND; else what's wrong.
+function pngSize(b) {
+  if (b.length < 33 || b.readUInt32BE(0) !== 0x89504e47 || b.readUInt32BE(4) !== 0x0d0a1a0a) return 'no PNG signature';
+  if (b.toString('latin1', 12, 16) !== 'IHDR') return 'no IHDR first';
+  let at = 8;
+  for (;;) {
+    if (at + 12 > b.length) return 'no IEND';
+    const length = b.readUInt32BE(at), type = b.toString('latin1', at + 4, at + 8);
+    at += 12 + length;
+    if (type === 'IEND') break;
+  }
+  if (at !== b.length) return `${b.length - at} bytes after IEND`;
+  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+}
+
+// A PDF as sheet.js writes it (uncompressed, one cross-reference table): its pages, their MediaBoxes, its images (each
+// stream its /Length long, a JPEG from SOI to EOI) and the images placed (Do); else what's wrong.
+function pdfRead(b) {
+  const s = b.toString('latin1');
+  if (!s.startsWith('%PDF-1.')) return 'no %PDF header';
+  if (!/%%EOF\s*$/.test(s)) return 'no %%EOF at the end';
+  const start = /startxref\s+(\d+)\s+%%EOF\s*$/.exec(s);
+  if (!start) return 'no startxref';
+  const xref = Number(start[1]);
+  if (s.slice(xref, xref + 4) !== 'xref') return `startxref ${xref} isn't the xref table`;
+  const head = /^xref\s+0 (\d+)\s+/.exec(s.slice(xref));
+  if (!head) return 'no xref subsection from 0';
+  const count = Number(head[1]), table = xref + head[0].length;
+  for (let id = 1; id < count; id++) {
+    const entry = s.slice(table + 20 * id, table + 20 * id + 20);
+    const offset = Number(entry.slice(0, 10));
+    if (!/^\d{10} 00000 n/.test(entry)) return `xref entry ${id} is ${JSON.stringify(entry)}`;
+    if (!s.startsWith(`${id} 0 obj`, offset)) return `object ${id} isn't at ${offset}`;
+  }
+  const trailer = /trailer\s*<<[^]*?\/Size (\d+)[^]*?\/Root (\d+) 0 R/.exec(s.slice(xref));
+  if (!trailer || Number(trailer[1]) !== count) return 'the trailer\'s /Size isn\'t the xref\'s';
+  let images = 0;
+  for (const m of s.matchAll(/\/Subtype \/Image [^]*?\/Length (\d+) >>\nstream\n/g)) {
+    const from = m.index + m[0].length, length = Number(m[1]);
+    if (b[from] !== 0xff || b[from + 1] !== 0xd8 || b[from + length - 2] !== 0xff || b[from + length - 1] !== 0xd9 ||
+      s.slice(from + length, from + length + 10) !== '\nendstream') return `image ${images + 1} isn't a whole JPEG`;
+    images++;
+  }
+  const boxes = [...s.matchAll(/\/Type \/Page \/Parent \d+ 0 R \/MediaBox \[([^\]]*)\]/g)].map(m => m[1]);
+  const pages = Number(/\/Type \/Pages \/Count (\d+)/.exec(s)?.[1]);
+  if (boxes.length !== pages || pages < 1) return `${boxes.length} pages, the page tree counts ${pages}`;
+  return { pages, boxes, images, placed: [...s.matchAll(/\/Im\d+ Do/g)].length };
+}
+
 // deinterlace: the Deinterlace option picked ('auto', 'on'), compared with the native check's deinterlace-<it> run.
 async function picked(query, what, file = sample, deinterlace = null) {
   const { context, page, errors } = await open(query);
@@ -665,6 +768,7 @@ async function picked(query, what, file = sample, deinterlace = null) {
     await compare(page, what, basename(file), run);
     await picture(page, what, file);
     await frameTypes(page, what, file);
+    if (query === '' && !deinterlace) await contactSheet(page, what, file);
   }
   report(what, errors);
   await context.close();
@@ -738,6 +842,7 @@ async function pickedAvi() {
     const missing = stills.flatMap((s, i) => s === 'drawn' ? [] : [`shot ${i + 1}: ${s}`]);
     if (stills.length !== rows || missing.length > 0) fail(`${what}: ${rows} shots, stills: ${missing.join('; ')}`);
     else console.log(`${what}: a still for each of the ${rows} shots, from the file's JPEGs`);
+    await contactSheet(page, what, avi);
     await looks(page, what, 'the-avi.done');
   }
   report(what, errors);
