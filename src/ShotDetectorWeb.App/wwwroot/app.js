@@ -545,9 +545,12 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
 // starts at: from), the frames its result read and its shots (which a resume shows while the rest's are told), and
 // when; edits, its cuts' corrections ({ removed, added }, correct). A finished run is kept too once it is corrected (the
 // owner's choice, 2026-11-02, decision 2026-11-02-correcting-cuts.md): its from is -1, nothing to resume, and it is
-// shown again with its corrections. Nothing leaves the browser. Storage can be off or fail (a
-// private window): the run then resumes only in this visit, from the record kept in memory.
-const KEPT = 'kept', KEPT_KEY = 'last';
+// shown again with its corrections. A correction made later goes under EDITS_KEY, { saved, edits } (saved: the record's),
+// not into the record: the record, its Blob among it, is written once, as Firefox's Blob read back from IndexedDB stops
+// answering once its record is written again (a resume after a reload never got its bytes, seen 2026-11-02 in CI).
+// Nothing leaves the browser. Storage can be off or fail (a private window): the run then resumes only in this visit,
+// from the record kept in memory.
+const KEPT = 'kept', KEPT_KEY = 'last', EDITS_KEY = 'edits';
 
 function keptStore(mode, f) {
   return new Promise((resolve, reject) => {
@@ -563,7 +566,17 @@ function keptStore(mode, f) {
 }
 
 async function readKept() {
-  try { return await keptStore('readonly', s => s.get(KEPT_KEY)) ?? null; } catch { return null; }
+  try {
+    let later = null;
+    const record = await keptStore('readonly', s => {
+      s.get(EDITS_KEY).onsuccess = e => { later = e.target.result ?? null; };
+      return s.get(KEPT_KEY);
+    }) ?? null;
+    if (record && later?.saved === record.saved) record.edits = later.edits;
+    return record;
+  } catch {
+    return null;
+  }
 }
 
 // Whether record (the kept run, unless said) is of file f.
@@ -590,13 +603,28 @@ async function keep(by, run, r) {
 }
 
 async function store(record) {
-  try { await keptStore('readwrite', s => s.put(record, KEPT_KEY)); } catch { /* kept for this visit only */ }
+  try {
+    await keptStore('readwrite', s => {
+      s.delete(EDITS_KEY);
+      return s.put(record, KEPT_KEY);
+    });
+  } catch { /* kept for this visit only */ }
+}
+
+// A kept record's corrections changed: written apart from it (EDITS_KEY), the record left as it is.
+async function storeEdits(record) {
+  try {
+    await keptStore('readwrite', s => s.put({ saved: record.saved, edits: record.edits }, EDITS_KEY));
+  } catch { /* kept for this visit only */ }
 }
 
 function forget() {
   kept = null;
   setState(state);
-  keptStore('readwrite', s => s.delete(KEPT_KEY)).catch(() => {});
+  keptStore('readwrite', s => {
+    s.delete(EDITS_KEY);
+    return s.delete(KEPT_KEY);
+  }).catch(() => {});
 }
 
 // The kept run shown again (a later visit, its file picked): Api's Merge of its scores alone, the stopped run's result,
@@ -633,7 +661,7 @@ async function restore(record) {
   resumeFrom = resumeAt = 0;
   detected = { result: r, options: record.options, record };
   show(r, 0, 1, 1, record);
-  if (record.edits) await correct(applied(record.edits));
+  if (record.edits?.removed.length || record.edits?.added.length) await correct(applied(record.edits));
 }
 
 // The form showing a run's options (as options() sends them: a default as none).
@@ -1079,8 +1107,9 @@ async function keepEdits(run) {
     run.record = null;
     return forget();
   }
+  if (JSON.stringify(record.edits) === JSON.stringify(edits)) return;
   record.edits = edits;
-  await store(record);
+  await storeEdits(record);
 }
 
 // The shot playing, a caption under the video: the last shot starting at or before the playhead, if the playhead is

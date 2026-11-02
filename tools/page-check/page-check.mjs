@@ -725,6 +725,8 @@ async function corrections(page, what, file, run, reload) {
   if (!await settled(0, 'undo didn\'t go back to the detected cuts')) return;
   if (!await page.isDisabled('#cut-undo')) fail(`${what}: undone to the detected cuts, Undo is still offered`);
   await compare(page, `${what}, undone`, basename(file), run);
+  // The chapters' comparison leaves the focus in its field, where the page takes the keys as typing.
+  await page.evaluate(() => document.activeElement?.blur());
   for (let i = 0; i < edits; i++) await page.keyboard.press('Control+Shift+z');
   if (!await settled(removed.length + added.length, 'redo didn\'t come back to the corrected list')) return;
   await downloadsCorrected(page, `${what}, redone`, file, run);
