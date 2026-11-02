@@ -10,7 +10,7 @@ namespace ShotDetectorWeb.App;
 /// takes no synchronous export (it would block the page), so these are <see cref="Open"/>, <see cref="Stop"/>,
 /// <see cref="Cancel"/> and the exports of the last run's result (<see cref="ScenesCsv"/>, <see cref="StatsCsv"/>,
 /// <see cref="ShotsJson"/>, <see cref="ShotsHtml"/>, <see cref="Picture"/>, <see cref="FrameTypes"/>, <see cref="TimelineFile"/>,
-/// <see cref="YouTubeChapters"/>, <see cref="Kept"/>) as tasks; <see cref="Detect"/> and <see cref="Resume"/> are ones already. The file is opened and run on the thread pool (<see cref="Host"/>). A new export of the last run's result
+/// <see cref="YouTubeChapters"/>, <see cref="Correct"/>, <see cref="Kept"/>) as tasks; <see cref="Detect"/> and <see cref="Resume"/> are ones already. The file is opened and run on the thread pool (<see cref="Host"/>). A new export of the last run's result
 /// needs one here too, and its name in threads.js's THREADED.
 /// </summary>
 [SupportedOSPlatform("browser")]
@@ -63,6 +63,9 @@ public static partial class Api
 
     [JSExport]
     public static Task<string> YouTubeChaptersThreaded(int minimum) => Task.FromResult(YouTubeChapters(minimum));
+
+    [JSExport]
+    public static Task<string> CorrectThreaded(string startsJson) => Task.FromResult(Correct(startsJson));
 
     [JSExport]
     public static async Task<JSObject> KeptThreaded()

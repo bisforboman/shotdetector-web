@@ -138,6 +138,7 @@ public static partial class Api
         PictureMeasures? picture)
     {
         _result = result;
+        _corrected = null;
         _picture = picture?.Take(result.FrameCount);
         _kept = new KeptRun(ranges, _picture);
         _keptOptions = options;

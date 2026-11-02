@@ -9,11 +9,12 @@ namespace ShotDetectorWeb.App;
 public static partial class Api
 {
     /// <summary>
-    /// The last <see cref="Detect"/>'s scene list CSV (scenedetect list-scenes'), a string as it is: not inside the JSON,
+    /// The last <see cref="Detect"/>'s scene list CSV (scenedetect list-scenes'), of its corrected cuts once
+    /// <see cref="Correct"/> has them, a string as it is: not inside the JSON,
     /// where escaping a film's stats CSV took buffers of six times its length that the heap kept (README "Large files").
     /// </summary>
     [JSExport]
-    public static string ScenesCsv() => Shots.Csv(Result.Shots, cuts: Result.Cuts);
+    public static string ScenesCsv() => Shots.Csv(Shown.Shots, cuts: Shown.Cuts);
 
     /// <summary>
     /// The last <see cref="Detect"/>'s stats CSV (scenedetect -s's) as a <c>Blob</c> (text/csv, UTF-8): written a row at
