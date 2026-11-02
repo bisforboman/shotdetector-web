@@ -665,7 +665,10 @@ async function picked(query, what, file = sample, deinterlace = null) {
     await compare(page, what, basename(file), run);
     await picture(page, what, file);
     await frameTypes(page, what, file);
-    if (file === sample && !split) await corrections(page, what, file, run, query === '');
+    if (file === sample && !split) {
+      await shotLengths(page, what, file, run);
+      await corrections(page, what, file, run, query === '');
+    }
   }
   report(what, errors);
   await context.close();
@@ -713,6 +716,7 @@ async function corrections(page, what, file, run, reload) {
   });
   if (!await settled(removed.length + added.length, 'the run card didn\'t show the corrected list')) return;
   await downloadsCorrected(page, what, file, run);
+  await shotLengths(page, what, file, 'corrected');
   const lane = await page.evaluate(() => [document.querySelectorAll('.tick.added').length,
     document.querySelectorAll('.tick.removed').length]);
   if (lane[0] !== added.length || lane[1] !== removed.length)
@@ -743,6 +747,36 @@ async function corrections(page, what, file, run, reload) {
   if (!await settled(removed.length + added.length, 'after the reload, the corrections aren\'t shown')) return;
   await downloadsCorrected(page, `${what}, shown again`, file, run);
   await page.click('#forget');
+}
+
+// Film studies (issue #91, panels/shotlengths.js and stats.js): the shot lengths card's bars, a bar a shot of the native
+// run's (<sample>.<run>.shots.json), its CSV those shots' numbers, first frames, starts and lengths, and the shot
+// statistics' standard deviation the sample's (n - 1) of their lengths, to the hundredth shown.
+async function shotLengths(page, what, file, run) {
+  what = `${what}, shot lengths`;
+  const native = join(nativeDir, `${stem(file)}.${run}.shots.json`);
+  if (!existsSync(native)) return fail(`${what}: no ${native}`);
+  const shots = JSON.parse(readFileSync(native, 'utf8'));
+  await page.locator('#shot-lengths-csv').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  const bars = await page.locator('#shot-lengths .bars rect').count();
+  if (bars !== shots.length) fail(`${what}: ${bars} bars for ${shots.length} shots`);
+  const download = await clicked(page, page.locator('#shot-lengths-csv'));
+  const saved = join(outDir, `${what.replace(/\W+/g, '-')}.csv`);
+  await download.saveAs(saved);
+  const expected = ['Shot,Start Frame,Start Time (seconds),Length (frames),Length (seconds)', ...shots.map(s =>
+    `${s.shot},${s.startFrame},${secondsOf(s.startTimecode).toFixed(3)},${s.durationFrames},${s.durationSeconds.toFixed(3)}`)];
+  if (readFileSync(saved, 'utf8') !== `${expected.join('\n')}\n`) fail(`${what}: the CSV (${saved}) isn't the native shots'`);
+  const lengths = shots.map(s => s.durationSeconds), mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+  const sd = lengths.length > 1 ? `${Math.sqrt(lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / (lengths.length - 1)).toFixed(2)} s` : '–';
+  const stats = await page.textContent('#stats dl') ?? '';
+  if (!stats.includes(`Standard deviation${sd}`)) fail(`${what}: the statistics don't say a standard deviation of ${sd}: ${stats}`);
+  else console.log(`${what}: ${bars} bars, the CSV the native shots', standard deviation ${sd}`);
+}
+
+// A timecode's seconds (HH:MM:SS.mmm), as the page's timeline.js reads them.
+function secondsOf(tc) {
+  const [h, m, sec] = tc.split(':').map(Number);
+  return h * 3600 + m * 60 + sec;
 }
 
 // The run card's downloads of a corrected list against the native check's <sample>.corrected.* (its stats CSV against
