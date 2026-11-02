@@ -66,16 +66,30 @@ public abstract partial class VideoInput
     /// and others: <see cref="Refusal.OtherContainer"/>) refused with <see cref="UnsupportedVideoException"/> saying which;
     /// anything else as <see cref="Mp4Input"/>, which says what it isn't.
     /// </summary>
-    public static VideoInput Open(Func<Stream> open)
+    public static VideoInput Open(Func<Stream> open) => Open(open, null);
+
+    /// <summary>
+    /// <see cref="Open(Func{Stream})"/>, and a WebM or Matroska file's VP9 or AV1 as <see cref="WebmInput"/>, its frames
+    /// decoded by <paramref name="decoder"/> (the browser's; decision 2026-11-02-webm-browser-decoder.md); without one, a
+    /// WebM file is refused as any other container.
+    /// </summary>
+    public static VideoInput Open(Func<Stream> open, IHostDecoder? decoder)
     {
-        bool avi;
+        bool avi, matroska = false;
         using (var stream = open())
         {
             avi = AviHeader.IsAvi(stream);
             if (!avi && Refusal.OtherContainer(stream) is { } other)
-                throw new UnsupportedVideoException($"This is {other}, not MP4 or AVI: {Refusal.Scope}");
+            {
+                matroska = Refusal.IsMatroska(stream);
+                if (!matroska)
+                    throw new UnsupportedVideoException($"This is {other}, not MP4 or AVI: {Refusal.Scope}");
+                if (decoder is null)
+                    throw new UnsupportedVideoException($"This is {other}: its frames need the browser's decoder, which isn't given here.");
+            }
         }
-        return avi ? AviInput.Open(open) : Mp4Input.Open(open);
+
+        return matroska ? WebmInput.Open(open, decoder!) : avi ? AviInput.Open(open) : Mp4Input.Open(open);
     }
 
     /// <summary>
@@ -114,7 +128,7 @@ public abstract partial class VideoInput
     /// </summary>
     public IAsyncEnumerable<YuvFrame> FramesAsync(int every, Func<int, ValueTask<bool>> between,
         CancellationToken cancellationToken = default, PictureMeter? picture = null) =>
-        Paused(Measured(Frames(0), picture), int.MaxValue, every, between, cancellationToken);
+        Paused(Measured(FramesAsync(0, cancellationToken), picture), int.MaxValue, every, between, cancellationToken);
 
     /// <summary>
     /// <paramref name="frames"/>' frames, each measured by <paramref name="meter"/> with its picture type as it is given
@@ -129,22 +143,33 @@ public abstract partial class VideoInput
         }
     }
 
+    /// <summary><see cref="Measured(IEnumerable{ValueTuple{YuvFrame, PictureType}}, PictureMeter?)"/> of an asynchronous source.</summary>
+    private protected static async IAsyncEnumerable<YuvFrame> Measured(IAsyncEnumerable<(YuvFrame Frame, PictureType Type)> frames,
+        PictureMeter? meter)
+    {
+        await foreach (var (frame, type) in frames)
+        {
+            meter?.Add(frame, type);
+            yield return frame;
+        }
+    }
+
     /// <summary>
     /// <paramref name="source"/>'s first <paramref name="limit"/> frames as an asynchronous source, awaiting
     /// <paramref name="between"/> every <paramref name="every"/> frames (<see cref="FramesAsync"/>).
     /// </summary>
-    static async IAsyncEnumerable<YuvFrame> Paused(IEnumerable<YuvFrame> source, int limit, int every,
+    static async IAsyncEnumerable<YuvFrame> Paused(IAsyncEnumerable<YuvFrame> source, int limit, int every,
         Func<int, ValueTask<bool>> between, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(every, 1);
         ArgumentNullException.ThrowIfNull(between);
-        using var frames = source.GetEnumerator();
+        await using var frames = source.GetAsyncEnumerator(cancellationToken);
         for (int given = 0; given < limit; given++)
         {
             if (given > 0 && given % every == 0 && !await between(given))
                 yield break;
             cancellationToken.ThrowIfCancellationRequested();
-            if (!frames.MoveNext())
+            if (!await frames.MoveNextAsync())
                 yield break;
             yield return frames.Current;
         }
@@ -160,41 +185,67 @@ public abstract partial class VideoInput
     /// <see cref="Frames()"/> decoded from video packet <paramref name="fromPacket"/> (decode order), a keyframe, each with
     /// its picture type as the decoder says it (FFmpeg's <c>pict_type</c>).
     /// </summary>
-    IEnumerable<(YuvFrame Frame, PictureType Type)> Frames(int fromPacket)
+    IEnumerable<(YuvFrame Frame, PictureType Type)> Frames(int fromPacket) =>
+        FramesAsync(fromPacket, CancellationToken.None).ToBlockingEnumerable();
+
+    /// <summary>
+    /// <see cref="Frames(int)"/> as an asynchronous source, from <see cref="DecodedFramesAsync"/>: the frames of a decoder
+    /// that answers asynchronously (the browser's, <see cref="WebmInput"/>), or the synchronous ones as they come.
+    /// </summary>
+    async IAsyncEnumerable<(YuvFrame Frame, PictureType Type)> FramesAsync(int fromPacket,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var format = DecodedFormat(Video.PixelFormat);
-        foreach (var frame in DecodedFrames(fromPacket))
+        await foreach (var (frame, type) in DecodedFramesAsync(fromPacket, cancellationToken))
         {
             using (frame)
-            {
-                // A stream whose format changes midway (an SPS of another profile, a JPEG of other sampling).
-                if (frame.Format != format)
-                    throw new UnsupportedVideoException($"A frame came out as {frame.Format}, not {format} as the first: a format that changes midway is not supported.");
-                if ((frame.Width, frame.Height) != (Video.Width, Video.Height))
-                    throw new UnsupportedVideoException($"The frame size changes ({Video.Width}x{Video.Height} to {frame.Width}x{frame.Height}): not supported.");
-                if (frame.IsCodedAsFields)
-                    throw new UnsupportedVideoException(FieldPictures);
-                var p = frame.Planes;
-                var o = frame.Offsets;
-                var s = frame.Strides;
-                // FFmpeg's interlaced_frame and top_field_first, which set yadif's parity when the run deinterlaces. A
-                // 10-bit frame's planes are 16-bit little-endian words, its strides in bytes: YuvFrame's layout as is.
-                // Each frame's own colour tags, from the SPS it was decoded with (FFmpeg's h264 decoder tags each frame
-                // so, and ShotDetector converts each with its own, shotdetector#626): given only where they differ from
-                // the video's, so a stream whose tags never change converts as before. A tag the frame's SPS doesn't
-                // carry is the video's (the decoder's context keeps the container's, as FFmpeg's).
-                var yuv = new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2])
-                {
-                    Pts = frame.Pts,
-                    Interlaced = frame.IsInterlaced,
-                    TopFieldFirst = frame.IsTopFieldFirst,
-                    ColorSpace = OwnMatrix(frame.ColorMatrix),
-                    FullRange = OwnRange(frame.ColorRange),
-                    ChromaLocation = OwnChromaLocation(frame.ChromaLocation),
-                };
-                yield return (yuv, frame.PictureType);
-            }
+                yield return (ToYuv(frame, format), type);
         }
+    }
+
+    /// <summary>
+    /// The decoded frames as <see cref="DecodedFrames"/> gives them, each with its picture type, as an asynchronous source:
+    /// an input whose decoder answers asynchronously gives them so.
+    /// </summary>
+    private protected virtual async IAsyncEnumerable<(VideoFrame Frame, PictureType Type)> DecodedFramesAsync(int fromPacket,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        foreach (var frame in DecodedFrames(fromPacket))
+        {
+            yield return (frame, frame.PictureType);
+            await Task.CompletedTask;
+        }
+    }
+
+    /// <summary>A decoded frame as ShotDetector's <see cref="YuvFrame"/>, valid as long as the frame is.</summary>
+    YuvFrame ToYuv(VideoFrame frame, PixelFormat format)
+    {
+        // A stream whose format changes midway (an SPS of another profile, a JPEG of other sampling).
+        if (frame.Format != format)
+            throw new UnsupportedVideoException($"A frame came out as {frame.Format}, not {format} as the first: a format that changes midway is not supported.");
+        if ((frame.Width, frame.Height) != (Video.Width, Video.Height))
+            throw new UnsupportedVideoException($"The frame size changes ({Video.Width}x{Video.Height} to {frame.Width}x{frame.Height}): not supported.");
+        if (frame.IsCodedAsFields)
+            throw new UnsupportedVideoException(FieldPictures);
+        var p = frame.Planes;
+        var o = frame.Offsets;
+        var s = frame.Strides;
+        // FFmpeg's interlaced_frame and top_field_first, which set yadif's parity when the run deinterlaces. A
+        // 10-bit frame's planes are 16-bit little-endian words, its strides in bytes: YuvFrame's layout as is.
+        // Each frame's own colour tags, from the SPS it was decoded with (FFmpeg's h264 decoder tags each frame
+        // so, and ShotDetector converts each with its own, shotdetector#626): given only where they differ from
+        // the video's, so a stream whose tags never change converts as before. A tag the frame's SPS doesn't
+        // carry is the video's (the decoder's context keeps the container's, as FFmpeg's).
+        var yuv = new YuvFrame(p[0].AsMemory(o[0]), s[0], p[1].AsMemory(o[1]), s[1], p[2].AsMemory(o[2]), s[2])
+        {
+            Pts = frame.Pts,
+            Interlaced = frame.IsInterlaced,
+            TopFieldFirst = frame.IsTopFieldFirst,
+            ColorSpace = OwnMatrix(frame.ColorMatrix),
+            FullRange = OwnRange(frame.ColorRange),
+            ChromaLocation = OwnChromaLocation(frame.ChromaLocation),
+        };
+        return yuv;
     }
 
     /// <summary>The frame's matrix as ffprobe names it where the frame says one and it isn't the video's; else null.</summary>
@@ -247,6 +298,34 @@ public abstract partial class VideoInput
     /// starts clean there), in display order. The packets before it are neither decoded nor read.
     /// </summary>
     private protected abstract IEnumerable<VideoFrame> DecodedFrames(int fromPacket);
+
+    /// <summary>
+    /// Every shown frame's pts in presentation order (the packets' that aren't discarded, sorted: what FFmpeg labels the
+    /// frames with) when the frames don't come at the average rate, for ShotDetector's
+    /// <see cref="YuvVideo.FrameTimestamps"/> (a variable frame rate, which it then takes as the file path does); null
+    /// when every frame is within half a frame of where the average rate puts it from the first, the constant-rate check
+    /// ShotDetector makes without them (VideoReader.CheckConstantRate), so a constant-rate video is described as before.
+    /// </summary>
+    private protected static long[]? VariableRate(VideoPackets packets, long firstPts, FrameReader.Rational timeBase, Fps rate)
+    {
+        var pts = new List<long>(packets.Count);
+        for (int i = 0; i < packets.Count; i++)
+        {
+            if ((packets.Flags[i] & PacketFlags.Discard) == 0)
+                pts.Add(packets.Pts[i]);
+        }
+
+        pts.Sort();
+        double seconds = timeBase.Num / (double)timeBase.Den, perSecond = rate.Value;
+        for (int k = 0; k < pts.Count; k++)
+        {
+            double from = (pts[k] - firstPts) * seconds, expected = k / perSecond;
+            if (!(Math.Abs(from - expected) <= 0.5 / perSecond))
+                return [.. pts];
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// ffprobe's printed seconds as ShotDetector's file path reads them (3.15.0's VideoReader.Seconds): to the nearest
