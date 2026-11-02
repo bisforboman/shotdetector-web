@@ -662,6 +662,21 @@ resume and is detected again), the summary says `bitDepth`, and the page's card 
 in its tooltip, the lane's axis 0 to 1023 (backlog-done, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
 (CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
 
+## The npm package
+
+`shotdetector-web` on npm (decision
+[2026-11-02-npm-package.md](docs/decisions/2026-11-02-npm-package.md), issue #92): the page's engine for another site,
+to detect shots in its visitor's browser before an upload. `package/` holds its own files: `index.js` (the API,
+`detectShots(file, options)` and `ShotDetector`, over the App's `worker.js` called by name and, for threads,
+`threads.js`' runner), `index.d.ts`, `package.json` and its README (its use, serving the files, the size, FastYuv's
+recipe). `tools/package.sh` puts it together in `out/package/` from the App's publishes: `aot/` and `interpreted/`
+(each `worker.js`, its imports and `_framework/`), `threads.js` and `threads/_framework/` (the threaded AOT bundle),
+`licenses/` (FastYuv's COPYING.LGPL); `-p:FastYuvAssembly=<dll>` packs a FastYuv built from its source, as for the
+page (Licensing). `tools/check.sh package` packs it with `npm pack` and checks the tarball (Checks); CI runs it with the
+AOT check, then `npm publish --dry-run`. `.github/workflows/npm.yml` publishes on a tag `package-v<version>` (the
+version in `package/package.json`): the checks, then `npm publish --provenance` through npm's trusted publishing.
+The owner creates the package on npmjs.com with that workflow as its trusted publisher before the first one.
+
 ## Checks
 
 ```
@@ -670,6 +685,7 @@ export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # also put on
 tools/check.sh               # native, then wasm (interpreted); tools/check.sh wasm aot for the AOT build
 tools/check.sh page          # the page in Chromium (Playwright: npm ci and npx playwright install chromium in tools/page-check)
 tools/check.sh replace       # FastYuv replaced from its source (needs github.com); add aot for the AOT build
+tools/check.sh package       # the npm package packed and installed in a test site in Chromium (after native)
 tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named (the files to refuse and without AAC all)
 ```
 
@@ -819,7 +835,18 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   minute compiled ahead of time (2026-10-29).
 - **replace** (`tools/replace-check.mjs`, under Node): LGPL-2.1, FastYuv replaceable (Licensing). It clones shotdetector
   at the tag of the packaged FastYuv, makes its converter's constructor throw, builds it, publishes the App against it
-  (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement.
+  (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement. With
+  `package`, the npm package is packed again against it and every bundle (AOT, interpreted, threads) must throw it.
+- **package** (`tools/page-check/package-check.mjs`, Playwright in Chromium): the npm package (The npm package) put
+  together by `tools/package.sh`, packed with `npm pack`, unpacked into `node_modules/shotdetector-web/` of a test site
+  served on two origins, one cross-origin isolated, and imported by a page as a site would. `detectShots` on
+  `with-audio-320x240-25.mp4` (adaptive), `mjpeg-320x240-25.avi` (adaptive) and `rotated-90-320x240-25.mp4` (all
+  five detectors) with each bundle: the scenes and stats CSVs and the shots as JSON and HTML the native run's byte for
+  byte, a JPEG still per shot, nothing left in the page; the first sample on two threads where isolated (the result's
+  `threads` 2) and asked for where not (1), the same files; a `ShotDetector` stopped half-way (the stats CSV the
+  native run's rows up to there), paused (no progress while paused) and resumed (the native run's CSVs), cancelled
+  through an `AbortSignal` (an `AbortError`) and used again. Any page or worker error fails it. It reuses the AOT
+  bundles `wasm` or `page` published in the same call when `aot`, and publishes the interpreted one.
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
 browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution), and for
@@ -1127,7 +1154,11 @@ rules for changing them (adding to the page among them).
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs (the latter deinterlaced too) split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects, and `Picture()` and `FrameTypes()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
-  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
+  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`; with `package`, every bundle of the npm package
+  rebuilt with it too); `tools/package.sh`: the npm package from `package/` and the App's publishes (The npm package,
+  above); `tools/page-check/package-check.mjs`: its tarball installed into a test site in Chromium (`tools/check.sh
+  package`), `detectShots` on three samples with each bundle, on threads where isolated and asked for where not, a
+  stop, a pause and a cancel, the files the native run's; `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, `mjpeg-320x240-25.avi` picked (the player the file's JPEG at the playhead after

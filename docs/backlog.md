@@ -85,7 +85,7 @@ The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then
     with this workflow as its trusted publisher.
   - Not: a `<shot-detector>` element or split runs across workers (the owner, 2026-11-02: later rows if asked); a
     change to `worker.js`' messages or the page.
-  - Status: Open (2026-11-02)
+  - Status: In progress (2026-11-02)
 
 ## Waiting
 
