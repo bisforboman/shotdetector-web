@@ -662,6 +662,16 @@ resume and is detected again), the summary says `bitDepth`, and the page's card 
 in its tooltip, the lane's axis 0 to 1023 (backlog-done, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
 (CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
 
+A run that reads every frame in order from the first (one worker, from frame 0, not resumed) also finds the still
+pictures as FFmpeg's `freezedetect` does with its defaults (n=0.001, d=2 s), with FrameReader's `FreezeDetector` (2.20.0)
+fed the frames as decoded: each frame compared with a still picture's first, however far back, by the mean difference
+of its samples. That comparison spans the whole video, so ShotDetector refuses `FreezeDetect` in ranges, and a split or
+resumed run doesn't look: the picture card says why (decision
+[2026-11-01-freeze-spans.md](docs/decisions/2026-11-01-freeze-spans.md), the owner's choice). It costs about 0.15 ms a
+frame natively at 854x480 (3% of a run). A stopped run's are those found by its stop, one still going there without an
+end. ShotDetector's own `BlackSpans` (3.26.0's `BlackDetect`) equal the page's black spans on every sample, but ranges
+refuse `BlackDetect` too, so the page keeps its own.
+
 ## Checks
 
 ```
@@ -728,7 +738,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   are FFmpeg's and the filters count integers over them. Per frame, `signalstats=stat=brng`'s YMIN and YMAX equal and
   its YAVG and BRNG to the digits it prints, `cropdetect=reset=1:skip=0`'s x1, x2, y1, y2, w, h, x and y equal;
   `cropdetect`'s crop with its defaults after the last frame; `blackdetect`'s spans at `d=0` and at its default 2 s,
-  their times to the digits it prints (`-copyts`, the stream's own pts as ours). The colour bars by their definition:
+  their times to the digits it prints (`-copyts`, the stream's own pts as ours); `freezedetect`'s still pictures with
+  its defaults, their `freeze_start` and `freeze_end` to the digits it prints (one still at the end has no end), and
+  the same frames as ShotDetector's own `FreezeSpans` on the run. The colour bars by their definition:
   on the samples that end in `smptehdbars` (make-samples.sh's three shots), one span, the last shot's frames exactly;
   on the fades sample, one span from within its `smptebars` fade-in to the end; none on the others. The run split
   into ranges, each measured while it is scored, must join into the whole run's measures byte for byte. Each sample's
@@ -974,10 +986,14 @@ rules for changing them (adding to the page among them).
   parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: FrameReader's `PictureMeter` given a `YuvVideo`'s frames
   (its `PictureFormat`, a range's frames before its first skipped, ManagedCodecs' `VideoFrame.PictureType` as
   FrameReader's), what FFmpeg's `signalstats`, `blackdetect` and `cropdetect` count, a 10-bit frame in 10-bit values,
-  and colour bars by their definition; shotdetector's decision 2026-10-31: the page's own copy moved upstream), and
+  and colour bars by their definition; shotdetector's decision 2026-10-31: the page's own copy moved upstream; with
+  `freeze`, for a run from frame 0 that reads every frame in order, FrameReader's `FreezeDetector`, `freezedetect`'s
+  still pictures, `FreezeSpans(frames)`: decision `2026-11-01-freeze-spans.md`, ranges refuse ShotDetector's
+  `FreezeDetect`), and
   FrameReader's `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures
   from them, `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
-  (`PictureJson`), which NativeCheck also writes; `TimelineFiles` (a result's shots in scenedetect's timeline formats,
+  (`PictureJson`), which NativeCheck also writes, its `Freeze` (`PictureFreeze`: the still pictures, or why a split or
+  resumed run didn't look for them); `TimelineFiles` (a result's shots in scenedetect's timeline formats,
   ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes`, `shotchanges` (Subtitle
   Edit's, `Timeline.ShotChanges`) and each one's extension, the
   result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files;
@@ -1021,7 +1037,9 @@ rules for changing them (adding to the page among them).
   indexes; an AVI's packets' offsets in the file, null for an MP4);
   `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `bitDepth` (8 or 10: the levels' code values), `points` { `framesPerPoint`,
   `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
-  `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
+  `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null, `freeze` { `spans`
+  [{ `firstFrame`, `endFrame`, `start`, `end` }] (end null for one still where the frames end) or null, `notMeasured` }),
+  and `RangeBytes`' packing
   (the scores' length, the scores, the range's picture measures); `Api.FrameTypes.cs` `FrameTypes()`: the last run's frames' types from its
   `PictureMeasures`, one character a frame in display order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's
   `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(optionsJson, count, from)` (`{ frames, ranges:
@@ -1093,7 +1111,7 @@ rules for changing them (adding to the page among them).
   the page's own reading), `frametypes.js` (after a run: a lane under the bitrate's of each frame's type from
   `FrameTypes()`, a bar a frame on a `<canvas>`, I tall, P shorter, B shortest, and a card of the counts, marked core),
   `picture.js` (after a run: a lane of each frame's luma band and mean, the black spans, the
-  colour bars and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
+  colour bars, the still pictures and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
   folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
 
@@ -1115,7 +1133,7 @@ rules for changing them (adding to the page among them).
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats` (one graph, `-reinit_filter 0`, where a frame's tags change), `cropdetect` (per frame and whole) and
-  `blackdetect` (d=0 and 2 s) exactly, the 10-bit samples in 10-bit values, the colour bars by their definition on the samples that have them, the ranges'
+  `blackdetect` (d=0 and 2 s) and `freezedetect` (and ShotDetector's own `FreezeSpans`) exactly, the 10-bit samples in 10-bit values, the colour bars by their definition on the samples that have them, the ranges'
   measures joined vs the whole run's (`out/native/<sample>.picture.json`, which app-check.mjs compares `Picture()` with);
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
@@ -1175,6 +1193,7 @@ rules for changing them (adding to the page among them).
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
   `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
   `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
+  `2026-11-01-freeze-spans.md`: still pictures only in a run that reads every frame in order, the owner's A;
   `2026-11-02-npm-package.md`: the npm package, its API over `worker.js`, AOT and interpreted bundles, opt-in threads,
   its size, FastYuv rebuilt through it, npm by CI); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.

@@ -569,10 +569,11 @@ async function paused(page, what, from) {
   return frame;
 }
 
-// The picture's card after a whole run: its cropdetect line and its colour bars the native check's
+// The picture's card after a whole run: its cropdetect line, its colour bars and its still pictures the native check's
 // (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown; a 10-bit video's levels said to
-// be 10-bit code values.
-async function picture(page, what, file) {
+// be 10-bit code values. A split run (split) doesn't look for still pictures and says so (decision
+// 2026-11-01-freeze-spans.md).
+async function picture(page, what, file, split = false) {
   const native = join(nativeDir, `${stem(file)}.picture.json`);
   if (!existsSync(native)) {
     fail(`${what}: no native ${native} (tools/check.sh native first)`);
@@ -591,10 +592,15 @@ async function picture(page, what, file) {
   // A 10-bit video's card says its levels are 10-bit code values (backlog-done "Picture measures at 10 bits").
   if (p.bitDepth === 10 && !text.includes('In 10-bit code values (0 to 1023)'))
     fail(`${what}: a 10-bit video's picture card doesn't say its levels are 10-bit: "${text.slice(0, 300)}"`);
-  if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
-    fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);
+  const stills = (text.match(/Still picture: \d/g) ?? []).length, freezeMarks = await page.locator('.track.picture .mark.freeze').count();
+  const freezeOk = split
+    ? text.includes('Not looked for in a split run') && stills === 0 && freezeMarks === 0
+    : stills === p.freeze.spans.length && freezeMarks === stills && (stills > 0 || text.includes('Still pictures: none'));
+  if (!text.includes(crop) || bars !== p.bars.length || lane !== 1 || !freezeOk)
+    fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${stills} still pictures, ${lane} lane), ` +
+      `not ${crop}, ${p.bars.length} colour bars and ${split ? 'still pictures not looked for' : `${p.freeze.spans.length} still pictures`}`);
   else
-    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, as the native check's`);
+    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${split ? 'still pictures not looked for (split)' : `${stills} still pictures`}, as the native check's`);
 }
 
 // The frame types' card after a whole run: the counts of ffprobe's types (<sample>.frametypes.txt, which the native
@@ -663,7 +669,7 @@ async function picked(query, what, file = sample, deinterlace = null) {
       else await rangesAtTheirTimes(page, what, file);
     }
     await compare(page, what, basename(file), run);
-    await picture(page, what, file);
+    await picture(page, what, file, split);
     await frameTypes(page, what, file);
   }
   report(what, errors);

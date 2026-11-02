@@ -8,7 +8,8 @@
 // the page works out (the mean over the run, the bars' widths, a lane point over several frames) says so in its tooltip.
 // A 10-bit video's figures are 10-bit code values (0 to 1023), as FFmpeg's filters count them at 10 bits, against their
 // thresholds at 10 bits: the card says so and gives a level's 8-bit equivalent in its tooltip; the lane's axis is 0 to
-// 1023.
+// 1023. The still pictures (freezedetect, decision 2026-11-01-freeze-spans.md), checked against it exactly: only a run
+// that read every frame in order from the first looks for them (one worker), a split or resumed run says why not.
 import { call, card, frameSeconds, on } from '../app.js';
 import { lane, seek, timecode, x } from '../timeline.js';
 
@@ -22,7 +23,7 @@ let asked = 0;      // how many runs began: a Picture() answered after a new run
 const section = card('Picture', {
   mark: 'measured',
   markTitle: 'The core\'s measures of every frame the run read: each checked frame by frame against FFmpeg\'s ' +
-    'signalstats, blackdetect and cropdetect, exactly; the colour bars by their definition. Times rounded to the ' +
+    'signalstats, blackdetect, cropdetect and freezedetect, exactly; the colour bars by their definition. Times rounded to the ' +
     'second here, exact in each line\'s tooltip and on the timeline',
 });
 section.id = 'picture';
@@ -35,12 +36,16 @@ const pictureLane = lane('Picture', track => {
     ...summary.black.map(s => mark('black', s, seconds, `Black: ${timecode(seconds(s.firstFrame))} to ` +
       `${timecode(seconds(s.endFrame))}, as blackdetect reports it from ${s.start} s to ${s.end} s`)),
     ...summary.bars.map(s => mark('bars', s, seconds, `Colour bars: ${timecode(seconds(s.firstFrame))} to ` +
-      `${timecode(seconds(s.endFrame))}`)));
+      `${timecode(seconds(s.endFrame))}`)),
+    ...(summary.freeze.spans ?? []).map(s => mark('freeze', { ...s, endFrame: s.endFrame ?? summary.frames }, seconds,
+      `Still picture: ${timecode(seconds(s.firstFrame))} to ${s.endFrame === null ? 'the end of the frames read'
+        : timecode(seconds(s.endFrame))}, as freezedetect reports it from ${s.start} s${s.end === null ? '' : ` to ${s.end} s`}`)));
 });
 pictureLane.track.classList.add('picture');
 pictureLane.label.classList.add('picture');
 const laneTitle = largest => 'Each frame\'s luma (signalstats\' YMIN to YMAX as a band, YAVG as a line, 0 to ' +
-  `${largest}), the black spans (blackdetect) hatched, the colour bars marked, a tick at the bottom where pixels are ` +
+  `${largest}), the black spans (blackdetect) hatched, the colour bars marked, the still pictures (freezedetect) as a ` +
+  'band under them, a tick at the bottom where pixels are ' +
   'out of broadcast range (BRNG), as tall as the share of the frame out of range on a log scale (0.01% to all of it)';
 pictureLane.label.title = laneTitle(255);
 pictureLane.show(false);
@@ -202,6 +207,18 @@ function fill({ summary: p, video }) {
   for (const s of p.bars) {
     section.append(paragraph(`Colour bars: ${at(s.firstFrame)} to ${at(s.endFrame)}`,
       `Frames ${s.firstFrame + 1} to ${s.endFrame}, ${timecode(seconds(s.firstFrame))} to ${timecode(seconds(s.endFrame))}`));
+  }
+
+  // freezedetect compares each frame with a still picture's first, however far back: only a run that read every frame
+  // in order from the first looks (decision 2026-11-01-freeze-spans.md); a split or resumed run says why not.
+  section.append(heading('Still pictures', 'freezedetect with its defaults: a frame within 0.001 of the still ' +
+    'picture\'s first (the mean difference of its samples, of their range), for 2 s or more; checked against it exactly'));
+  const { spans, notMeasured } = p.freeze;
+  if (spans === null) section.append(paragraph(notMeasured));
+  else if (spans.length === 0) section.append(paragraph('Still pictures: none of 2 s or more.'));
+  for (const s of spans ?? []) {
+    section.append(paragraph(`Still picture: ${at(s.firstFrame)} to ${s.endFrame === null ? 'the end' : at(s.endFrame)}`,
+      `freezedetect: from ${s.start} s${s.end === null ? ', still where the frames end (no freeze_end)' : ` to ${s.end} s`}`));
   }
 }
 

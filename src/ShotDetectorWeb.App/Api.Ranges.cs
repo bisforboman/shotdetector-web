@@ -57,6 +57,7 @@ public static partial class Api
     {
         _result = null;
         _picture = null;
+        _freeze = null;
         _kept = null;
         _rangeBytes = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
@@ -123,6 +124,7 @@ public static partial class Api
     {
         _result = null;
         _picture = null;
+        _freeze = null;
         _kept = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
@@ -169,7 +171,9 @@ public static partial class Api
             throw new InvalidOperationException(NotMerged + e.Message, e);
         }
 
-        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures));
+        // Still pictures aren't looked for across ranges (decision 2026-11-01-freeze-spans.md).
+        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures),
+            kept.Length == 0 ? PictureFreeze.Split : PictureFreeze.Resumed);
     }
 
     /// <summary>
