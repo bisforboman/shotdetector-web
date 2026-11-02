@@ -70,22 +70,8 @@ The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then
 
 The owner's choice of 2026-11-02 ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)):
 a refusal that says what to do first, then VP9 and AV1 through the browser's decoder, held to the FFmpeg path's CSVs.
-
-- VP9 and AV1 in WebM through the browser's decoder
-  - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
-    I420/I420P10, which FastYuv and the frame source take; a visitor's YouTube download gets a result.
-  - Where: the core: a WebM/Matroska reader and VP9 frame header / AV1 sequence header readers (`YuvVideo` as ffprobe
-    says it: rate, frames, duration, time base, colour tags, never `VideoFrame.colorSpace`, which Chromium defaults
-    to bt709), a `VideoInput` whose frames come from the page; the App: an export taking frames from JavaScript; the
-    page: `VideoDecoder` (`prefer-software` first), `copyTo` I420/I420P10 (NV12 de-interleaved), a `browser` chip and
-    a status line saying the browser decoded it; a browser giving RGB (Firefox) or no decoder gets row 1's refusal.
-    A design question the row doesn't settle (ranges and resume over the browser's decoder, the frames crossing on
-    threads) goes to `docs/decisions/` first.
-  - Done when: VP9 and AV1 WebM samples in `make-samples.sh`; NativeCheck compares the description with ffprobe field
-    by field; page-check picks them in Chromium, their CSVs, shots and timeline files the FFmpeg path's byte for byte.
-  - Not: H.264 or MJPEG through the browser (always ManagedCodecs); HEVC (no decoder CI can run); RGB frames.
-  - Depends on: "A refusal that says what to do" (done, #133).
-  - Status: In progress (2026-11-02)
+Both rows are done (backlog-done, #133 and #135); what they left is in Maybe ("WebM runs split, resumed and on
+threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "A Matroska demuxer in ManagedCodecs").
 
 ### The npm package (issue #92)
 
