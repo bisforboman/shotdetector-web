@@ -1452,3 +1452,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     silencedetect times it from (a start from where its count reaches the duration). `silence-fragmented-320x240-25.mp4`,
     the tone sample fragmented: 59 ms off before, 0/0 ms after; the native check on every sample and the wasm check on
     it and the tone sample pass)
+
+- Correcting the cuts on the page (issue #90)
+  - Why: ShotDetector 3.25.0's `LoadScenes(YuvVideo, TextReader, column, options)` (shotdetector#647) reads a scenes
+    CSV back over a `YuvVideo`, which a page that lets a viewer add and drop cuts before exporting needs: the edited
+    cuts become a result the downloads (CSVs, timeline files, chapters) are made from by ShotDetector, not the page.
+  - Status: Done (2026-11-02, decision 2026-11-02-correcting-cuts.md: the Corrections card and keys, remove, add at the
+    playhead, move a frame, undo and redo; the corrections kept as the detected cuts removed and the cuts added, with
+    the kept run in IndexedDB, a corrected finished run kept too (the owner's choice); `Api.Correct` through the core's
+    `CorrectedCuts` (`LoadScenes` of a one-column scene list), every download but the stats CSV the corrected list's;
+    NativeCheck's `CorrectionCheck.cs` holds it to `LoadScenes(path)` on every sample, whole and stopped, the wasm check
+    and the page check to NativeCheck's files. `LoadScenes` times and lengths that differ from `Detect`'s are upstream's:
+    row "A corrected list timed as its run (upstream)", under Waiting)

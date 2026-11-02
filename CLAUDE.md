@@ -50,7 +50,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files;
   and `Chapters(result, minimum)`, the YouTube chapters, `Timeline.YouTubeChapters` and `ChapterStarts`, Timeline's
   rule (shotdetector#648: a format built from a cut list lives on `Timeline`), 30 s by default, 10 at least, as JSON
-  `{ minimum, starts, text, notMade }`, `notMade` Timeline's reason when fewer than three).
+  `{ minimum, starts, text, notMade }`, `notMade` Timeline's reason when fewer than three); `CorrectedCuts` (issue #90,
+  decision `2026-11-02-correcting-cuts.md`: the cuts a viewer corrected, the shots' first frames as a one-column scene
+  list, `Start Frame`, made into a result by ShotDetector's `LoadScenes(YuvVideo, TextReader, ...)` with the run's
+  options, `EndTime` where a stopped run stopped).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
@@ -72,7 +75,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `Api.Timeline.cs` has `TimelineFile(format, fileName)` (the last run's `TimelineFiles.Write` for the picked file's
   name, the run card's "For editors" downloads, which `run.js` asks for after those); `Api.Chapters.cs`
   `YouTubeChapters(minimum)` (the last run's `TimelineFiles.Chapters` JSON, the run card's chapters row),
-  `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
+  `Api.Corrections.cs` `Correct(startsJson)` (the last run's cuts corrected: the shots' first frames, or `null` for the
+  run's own; `CorrectedCuts.Load`, `Detect`'s JSON of it; the scenes CSV, shots JSON and HTML, timeline files and
+  chapters then the corrected list's, the stats CSV the run's), `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
   panels as the `audio` event, its JSON camelCase with times in seconds: `notMeasured` (why not, the core's words: no audio, which the page
@@ -155,7 +160,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
-  derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
+  derives saying so in its tooltip), `corrections.js` (a card beside the video, marked page: the cut that starts
+  the shot playing removed, one added at the playhead, moved a frame (`,` `.`), undo and redo, by buttons or keys,
+  through `app.js`'s `correct(cuts)`, which keeps the corrections as the detected cuts removed and the cuts added, calls
+  `Correct`, tells the `corrected` event (cuts, shots, stats, run and bitrate follow it) and keeps them with the kept
+  run in IndexedDB, a corrected finished run kept too, `from` -1), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
   the page's own reading), `frametypes.js` (after a run: a lane under the bitrate's of each frame's type from
   `FrameTypes()`, a bar a frame on a `<canvas>`, I tall, P shorter, B shortest, and a card of the counts, marked core),
@@ -180,7 +189,10 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
     only for a new event of the page's.
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs, the shots as JSON and HTML and the
   timeline files, `TimelineFiles` given the sample's name on both; the YouTube chapters at 10 and 30 s, and
-  `ChaptersCheck.cs`: YouTube's rules on them, each start a cut's second), and `PacketCheck.cs`: `VideoInput.Packets` vs
+  `ChaptersCheck.cs`: YouTube's rules on them, each start a cut's second), `CorrectionCheck.cs` (the default run's cuts
+  corrected, the core's `CorrectedCuts.Load` vs `LoadScenes(path)` on the same list, whole and stopped: every download
+  but the stats CSV; `out/native/<sample>.corrected.*`, which app-check.mjs's `Correct` and the page check compare
+  with), and `PacketCheck.cs`: `VideoInput.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
   types a run keeps vs ffprobe's `frame=pict_type` (its first field only: its csv adds x264's SEI to the first
   frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
@@ -253,7 +265,8 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   `2026-10-30-picture-measures.md`: the picture's measures, their cost measured and their check against FFmpeg;
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
   `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
-  `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line); `docs/mockups/`: static HTML
+  `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
+  `2026-11-02-correcting-cuts.md`: correcting the cuts on the page, a corrected finished run kept, `LoadScenes` as it is); `docs/mockups/`: static HTML
   mockups a decision refers to, nothing of the real page.
 
 ## Working on this repository
@@ -347,6 +360,11 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames (its window
   after them) is `None`, a cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold
   detector ends a fade-out the stop falls in with a cut (`PostProcess`), as at a file's end.
+- ShotDetector 3.26.0's `LoadScenes` (both overloads) times a cut at frame / average rate on a variable-rate file and
+  takes the video's length as nb_frames (an edit list that ends early, a fragmented file: `fragmented-moov` ends at 38
+  of 114 frames), where `Detect` uses the frames' pts and the frames played: a corrected list is timed its way (sent to
+  the shotdetector coordinator 2026-11-02; the owner chose to ship as it is). An uncorrected run's downloads stay
+  `Detect`'s.
 - FFmpeg 8.1's x86 SIMD yadif gives a different result on every run over 9 to 16 bits (ShotDetector's
   `DetectionOptions.Yadif` docs; its C code doesn't, and FastYuv's `Yadif`, the core's, follows the C code): NativeCheck
   runs the FFmpeg path of a deinterlaced 10-bit run with `av_force_cpu_flags(0)` (seen 2026-10-31: every stats row
