@@ -1423,6 +1423,36 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     frame 100: native 0.46875, wasm 0.5; frame 215: native 0.53125, wasm 0.5625; 5 more. Sent to the shotdetector
     coordinator, who decides; the fix is a later row)
 
+- ShotDetector/FastYuv 3.26.0 and FrameReader 2.20.0, the ranges' end from `RangeScores.EndFrame`
+  - Why: 3.26.0's `RangeScores.EndFrame` says where a range's final scores end (`FirstFrame + FrameCount`, one less
+    when deinterlaced): where the next range, or a stopped run resumed, must start at the latest (`EndFrame - 1`).
+    The core works that out itself since #115 (`Lookahead`, `RangeFrames(...).To - 2`), ShotDetector's arithmetic
+    copied.
+  - Where: `Directory.Packages.props`; `VideoInput.Ranges.cs`' `FromStart` and `Continue` on `EndFrame`, `Lookahead`
+    gone; README and CLAUDE.md's package versions.
+  - Done when: `tools/check.sh native wasm aot page` passes (RangeCheck, ThreadsCheck, ResumeCheck, app-check's split,
+    stopped and resumed runs the whole run's; app-check's versions the pins).
+  - Not: freeze or black spans (the next row).
+  - Status: Done (2026-11-01, #124: `tools/check.sh native` all agree on 34 samples, `wasm` and `wasm aot` 3978 of
+    3978 files identical, the page in Chromium on the AOT bundle passed, Firefox skipped in the session)
+
+- The audio's start in a fragmented file (found by the real-world check)
+  - Why: on caminandes-fragmented.mp4 (Caminandes remuxed `frag_keyframe+empty_moov+default_base_moof`, the streams
+    copied) the core's silences are 42 ms (2048 samples at 48 kHz) earlier than `silencedetect`'s, start and end, while
+    on the unfragmented file they agree. Seen on `main`'s nightly of 2026-11-01 (run 41262305295) and on the 0.5.0
+    branches.
+  - Where: first find whose it is: ManagedCodecs' `Mp4Demuxer` (`SkipSamples` in a fragmented track) or `Mp4Audio`'s
+    start (CLAUDE.md, Gotchas: pts + skip); a sample in make-samples.sh (with-audio fragmented) that isolates it.
+  - Done when: AudioCheck agrees on the sample and `tools/realworld.sh check caminandes-fragmented.mp4` passes.
+  - Not: a shift in the core working around the demuxer, if it is the demuxer's.
+  - Status: Done (2026-11-01: the core's. Without an edit list the priming isn't skipped, by FFmpeg or ManagedCodecs:
+    the first packet decodes to its 1024 samples but has a longer duration (3072 on Caminandes, 3840 on the sample),
+    and silencedetect times each silence by its frames' pts, so after a gap. `Mp4Audio` counted the samples from the
+    start; it now keeps where a frame's own time leaves that count and moves each silence by the gaps before the frame
+    silencedetect times it from (a start from where its count reaches the duration). `silence-fragmented-320x240-25.mp4`,
+    the tone sample fragmented: 59 ms off before, 0/0 ms after; the native check on every sample and the wasm check on
+    it and the tone sample pass)
+
 - Elephants Dream stopped in a range: app-check's allowance for cuts decided after the stop
   - Why: `app-check.mjs --light` stops the split run in its second range at frame 5736 and finds cuts 5683 and 5721
     of the whole run missing; its allowance (the adaptive window plus 0.6 s plus 1 frame, 18 frames at its rate) admits

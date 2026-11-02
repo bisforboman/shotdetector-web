@@ -282,7 +282,7 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   for the page's own files or the smoke test, `tools/check.sh wasm` when the
   App's .NET side, a package or a wasm check changes, `tools/check.sh wasm aot` for anything that could differ under
   AOT. A new file the classifier doesn't name runs everything; give it a rule there if it shouldn't.
-- Packages: ShotDetector/FastYuv 3.25.0, FrameReader 2.19.0 and ManagedCodecs 0.5.0 (Containers, H264, Mjpeg, Aac, each
+- Packages: ShotDetector/FastYuv 3.26.0, FrameReader 2.20.0 and ManagedCodecs 0.5.0 (Containers, H264, Mjpeg, Aac, each
   pinning Core, and Core, whose `PictureType` `PictureMeter` maps to FrameReader's) from nuget.org, versions central in `Directory.Packages.props`. README, "Packages".
 - FastYuv is LGPL-2.1: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every output
   (the core csproj), and it is replaced by rebuilding with `-p:FastYuvAssembly=<dll>`, not by swapping the published
@@ -300,7 +300,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   nearest tick since 3.15.0 (3.14.0 went through `TimeSpan.FromSeconds(double)`, which truncates: 4.56 s came out
   4.5599999): `Mp4Input` and NativeCheck's oracle do the same.
 - ManagedCodecs' audio packets start at negative pts (priming) with `SkipSamples`: a stream's start for FFmpeg's
-  format duration is pts + skip (in the stream's time base).
+  format duration is pts + skip (in the stream's time base). A fragmented file has no edit list: the priming isn't
+  skipped, the first packet decodes to 1024 samples but lasts longer (3072, 3840), and `silencedetect` times its
+  silences by the frames' pts, after that gap: `Mp4Audio` moves its silences by the gaps (`silence-fragmented-*`).
 - On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; Emscripten's file system doesn't see the host's,
   so files come in as a `Blob` through `Open(JSObject)`, read in slices by `[JSImport] read`, and results go out as
   JSON strings (app-check.mjs writes them).
