@@ -159,6 +159,20 @@ function compare(label, r, file, run) {
   if (ok) pass(`${label}: ${r.shots.length} shots, the native run's files, a still per shot (threads ${r.threads})`);
 }
 
+// A stopped run's stats CSV: the whole run's rows, but for the adaptive ratio, None in the last frames of its window (the
+// window after them isn't there: a stopped run is a file that ends there, as app-check.mjs's checkStopped holds it).
+function stoppedStats(ours, theirs) {
+  const header = ours[0].split(',');
+  const ratios = header.flatMap((h, i) => /^adaptive_ratio.*\(w=(\d+)\)$/.test(h) ? [i] : []);
+  const window = ratios.length > 0 ? Number(/\(w=(\d+)\)$/.exec(header[ratios[0]])[1]) : 0;
+  return ours.every((row, i) => {
+    if (row === theirs[i]) return true;
+    const a = row.split(','), b = theirs[i]?.split(',');
+    return i > ours.length - 1 - window && b && a.length === b.length &&
+      a.every((cell, c) => cell === b[c] || (ratios.includes(c) && cell === 'None'));
+  });
+}
+
 function noErrors(label, errors) {
   if (errors.length) fail(`${label}: ${errors.join('; ')}`);
 }
@@ -241,7 +255,7 @@ if (replaced) {
       const nativeStats = native(file, run, 'stats.csv').split('\n');
       const stoppedRows = r.stopped.stats.trimEnd().split('\n');
       if (!r.stopped.stopped || r.stopped.frames >= nativeStats.length - 2) fail(`stop: not stopped (${JSON.stringify(r.stopped.frames)} frames)`);
-      else if (stoppedRows.some((row, i) => row !== nativeStats[i])) fail('stop: the stats CSV isn\'t the native run\'s rows up to the stop');
+      else if (!stoppedStats(stoppedRows, nativeStats)) fail('stop: the stats CSV isn\'t the native run\'s rows up to the stop');
       else pass(`stopped at frame ${r.stopped.frames}: the native run's ${stoppedRows.length - 1} stats rows`);
       if (r.paused.pausedAt < 0 || r.paused.during > 0) fail(`pause: progress went on while paused (${JSON.stringify(r.paused)})`);
       else if (r.paused.stopped) fail('pause: the resumed run ended stopped');
