@@ -265,6 +265,19 @@ if ! awk -v l="$level" -v g="$gap" 'BEGIN { split(g, x, " "); exit !(l > -23.06 
   echo "$s: the tone's RMS level is ${level:-?} dB, the gap (end, length) is ${gap:-not found}." >&2; exit 1
 fi
 
+# The same, fragmented (the streams copied, frag_keyframe+empty_moov+default_base_moof, as realworld.sh's
+# caminandes-fragmented.mp4): no edit list takes the AAC priming out, so the first audio packet is decoded whole and
+# keeps it as a longer duration (3840, its 1024 samples then a gap of 2816): FFmpeg's silencedetect times the silence by
+# its frames' pts, 59 ms later than their samples counted. Not named tone-*: its tones' levels and spans now include
+# the priming (NativeCheck's tone check is for the unfragmented one).
+f="$out/silence-fragmented-320x240-25.mp4"
+enc -i "$s" -c copy -movflags frag_keyframe+empty_moov+default_base_moof "$f"
+got=$("$fp" -v error -select_streams a -show_entries packet=pts,duration -read_intervals '%+#2' -of csv=p=0 "$f" | tr '\n' ' ')
+gap=$("$ff" -hide_banner -nostats -i "$f" -map 0:a -af silencedetect -f null - 2>&1 | awk '/silence_end/ {print $5}')
+if [[ $got != '0,3840 3840,1024 ' ]] || ! awk -v g="$gap" 'BEGIN { exit !(g > 9.07 && g < 9.09) }'; then
+  echo "$f: the first audio packets (pts,duration) are $got, the silence ends at ${gap:-not found}." >&2; exit 1
+fi
+
 # Sintel's trailer (Blender Foundation, CC-BY 3.0; 1920x1080, 24 fps, 52 s, untagged), re-encoded to what the library
 # takes: 8-bit 4:2:0 progressive H.264 (libx264's High) at a constant 24 fps in a non-fragmented MP4, 854x480, two-pass
 # at 1400 kb/s with AAC at 128 kb/s, about 10 MB. Tagged BT.709, as the HD original is (untagged at 480p it would read

@@ -300,7 +300,9 @@ description (fix it here) or a bug in ShotDetector or ManagedCodecs (report it t
   nearest tick since 3.15.0 (3.14.0 went through `TimeSpan.FromSeconds(double)`, which truncates: 4.56 s came out
   4.5599999): `Mp4Input` and NativeCheck's oracle do the same.
 - ManagedCodecs' audio packets start at negative pts (priming) with `SkipSamples`: a stream's start for FFmpeg's
-  format duration is pts + skip (in the stream's time base).
+  format duration is pts + skip (in the stream's time base). A fragmented file has no edit list: the priming isn't
+  skipped, the first packet decodes to 1024 samples but lasts longer (3072, 3840), and `silencedetect` times its
+  silences by the frames' pts, after that gap: `Mp4Audio` moves its silences by the gaps (`silence-fragmented-*`).
 - On wasm the runtime prints `MONO_WASM:` notes on stdout under Node; Emscripten's file system doesn't see the host's,
   so files come in as a `Blob` through `Open(JSObject)`, read in slices by `[JSImport] read`, and results go out as
   JSON strings (app-check.mjs writes them).
