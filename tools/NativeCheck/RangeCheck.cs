@@ -34,10 +34,10 @@ internal static class RangeCheck
                     .Select(r => RangeScores.FromBytes(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options)
                         .GetAwaiter().GetResult().ToBytes()))
                     .ToList();
-                var merged = input.Merge(input.FromStart(scores, options), options);
+                var merged = input.Merge(input.FromStart(scores), options);
                 var (scenes, stats) = Runs.Csvs(merged);
                 var problems = new List<string>();
-                if (input.FromStart(scores, options).Count != ranges.Count)
+                if (input.FromStart(scores).Count != ranges.Count)
                     problems.Add("not every range follows the one before");
                 if (scenes != File.ReadAllText(baseName + ".scenes.csv"))
                     problems.Add("the scenes CSV DIFFERS");

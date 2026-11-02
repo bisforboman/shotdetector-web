@@ -144,15 +144,15 @@ public abstract partial class VideoInput
     /// </summary>
     public Continuation Continue(IEnumerable<RangeScores> scored, DetectionOptions? options)
     {
-        var earlier = FromStart(scored, options).ToList();
+        var earlier = FromStart(scored).ToList();
         var (starts, frames) = RangeStarts(options);
         if (earlier.Count == 0)
             return new Continuation([], Range(options, 0, frames, 0));
-        // A range's last scores read frames past them (Lookahead), but for the video's last frames, which have none.
-        long reached = earlier[^1].FirstFrame + earlier[^1].FrameCount;
-        if (reached >= frames)
+        // Every frame read: the video's last frames have final scores (a deinterlaced range's last too, as the video's last).
+        if (earlier[^1].FirstFrame + earlier[^1].FrameCount >= frames)
             return new Continuation(earlier, null);
-        reached -= Lookahead(options);
+        // Otherwise the rest starts before the frames' end of final scores (ShotDetector's EndFrame - 1 at the latest).
+        long reached = earlier[^1].EndFrame;
         var start = starts.LastOrDefault(s => s.FirstFrame <= reached - 1);
         if (start.FirstFrame == 0)
             return new Continuation([], Range(options, 0, frames, 0));
@@ -210,17 +210,16 @@ public abstract partial class VideoInput
         ShotDetection.Merge(Video, ranges, WithConverter(options));
 
     /// <summary>
-    /// The ranges from the first on that <see cref="Merge"/> takes for a run with <paramref name="options"/>: each next
-    /// one while the one before reaches into it (scored its first frame, the overlap); the rest (after a gap: a range
-    /// stopped early, or one missing) left out.
+    /// The ranges from the first on that <see cref="Merge"/> takes: each next one while the one before reaches into it
+    /// (its final scores, up to ShotDetector's <see cref="RangeScores.EndFrame"/>, take in the next one's first frame,
+    /// the overlap); the rest (after a gap: a range stopped early, or one missing) left out.
     /// </summary>
-    public IReadOnlyList<RangeScores> FromStart(IEnumerable<RangeScores> ranges, DetectionOptions? options)
+    public IReadOnlyList<RangeScores> FromStart(IEnumerable<RangeScores> ranges)
     {
-        int lookahead = Lookahead(options);
         var taken = new List<RangeScores>();
         foreach (var range in ranges.OrderBy(r => r.FirstFrame))
         {
-            long reached = taken.Count == 0 ? 0 : taken[^1].FirstFrame + taken[^1].FrameCount - 1 - lookahead;
+            long reached = taken.Count == 0 ? 0 : taken[^1].EndFrame - 1;
             if (range.FrameCount == 0 || range.FirstFrame > reached)
                 break;
             taken.Add(range);
@@ -228,14 +227,6 @@ public abstract partial class VideoInput
 
         return taken;
     }
-
-    /// <summary>
-    /// The frames a range's scores read past their last (<see cref="ShotDetection.RangeFrames"/>' <c>To</c> past the
-    /// next range's first frame, its overlap: none, or yadif's next frame when the run deinterlaces): a range's last
-    /// scores that many frames before the last it was given, as the merge counts them.
-    /// </summary>
-    int Lookahead(DetectionOptions? options) =>
-        (int)(ShotDetection.RangeFrames(Video, options ?? new DetectionOptions(), 0, 1).To - 2);
 
     /// <summary>
     /// The options with ShotDetector.FastYuv's converter unless they name another, and its <see cref="Yadif"/> unless they
