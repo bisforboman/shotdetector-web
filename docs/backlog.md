@@ -158,10 +158,15 @@ in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 
     `LoadScenes` stays as it is. Upstream adds an overload that takes a `DetectionResult` and the edited cuts and keeps
     that run's frame times and length ([shotdetector#707](https://github.com/bisforboman/shotdetector/issues/707), the
     owner's choice, 2026-11-02).
-  - Where: the ShotDetector pin, and `CorrectedCuts` if upstream adds an overload (the run's frame count, or a
-    `DetectionResult` and a cut list); `CorrectionCheck.cs`'s note on the length then becomes a failure.
+  - Where: the ShotDetector pin to the release with shotdetector#711 (merged 2026-11-02, not yet released):
+    `LoadScenes(DetectionResult run, IEnumerable<int> cutFrames, DetectionOptions? options)` in `CorrectedCuts`. Its
+    cut frames are frames counted as decoded (`run.CutFrames`, `run.FrameOf(position)`), not the scene list's Start
+    Frame − 1, which is time × average rate and differs at a variable rate: the page's `detectedCuts()`, `correct()`
+    and the kept corrections move to decoded frames. It takes the run's MinSceneLength, DropShortScenes and
+    MergeLastScene; StartTime, EndTime and RangeDuration throw (a stopped run's range is the run's). The checks then
+    compare against `Detect`'s own exports for the uncorrected list, and `CorrectionCheck.cs`'s note becomes a failure.
   - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
-  - Status: Waiting (on shotdetector#707, 2026-11-02)
+  - Status: Waiting (on the ShotDetector release with shotdetector#711, 2026-11-02)
 
 ## Maybe
 
