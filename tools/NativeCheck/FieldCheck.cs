@@ -28,7 +28,7 @@ internal static class FieldCheck
             string name = Path.GetFileName(sample);
             try
             {
-                var input = VideoInput.Open(sample);
+                var input = FfmpegDecoder.Open(sample);
                 var ours = input.Frames().Select(f => (f.Interlaced, f.TopFieldFirst)).ToList();
                 var theirs = Probe(ffprobe, sample);
                 int first = Enumerable.Range(0, Math.Min(ours.Count, theirs.Count)).FirstOrDefault(i => ours[i] != theirs[i], -1);

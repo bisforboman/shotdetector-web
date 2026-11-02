@@ -62,7 +62,7 @@ static class PictureCheck
 
     static void Check(string sample, string libs, string outDir, List<string> problems, List<string> cells)
     {
-        var input = VideoInput.Open(sample);
+        var input = FfmpegDecoder.Open(sample);
         var meter = new PictureMeter(input.Video);
         var watch = Stopwatch.StartNew();
         var result = input.Detect(new DetectionOptions(), picture: meter);
@@ -148,7 +148,8 @@ static class PictureCheck
             name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal) ||
             name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal) ||
             name.StartsWith("yuv422p-", StringComparison.Ordinal) || name.StartsWith("yuvj422p-", StringComparison.Ordinal) ||
-            name.StartsWith("yuv420p10-", StringComparison.Ordinal) || name.StartsWith("odd-height-", StringComparison.Ordinal);
+            name.StartsWith("yuv420p10-", StringComparison.Ordinal) || name.StartsWith("odd-height-", StringComparison.Ordinal) ||
+            name.StartsWith("vp9-", StringComparison.Ordinal) || name.StartsWith("av1-", StringComparison.Ordinal);
         if (three)
         {
             // The variable-rate samples' last shot is decoded frame 100 on (two shots of 50 before it): the cut's FrameNum
