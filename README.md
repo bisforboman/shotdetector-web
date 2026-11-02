@@ -40,7 +40,11 @@ in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not 
 `docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, greyscale, 10-bit 4:2:2 or more than
 10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
-`docs/decisions/2026-10-30-scope-widening.md`). A frame size that changes midway is refused by
+`docs/decisions/2026-10-30-scope-widening.md`). Another codec or container is named as a viewer and FFmpeg name it
+(`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4 and MJPEG in AVI
+so far.", "This is a WebM file (FFmpeg's matroska,webm), ..."), and the page says under a refusal what reads the file
+instead: ShotDetector's `shotdetect` command, and for HEVC an iPhone's Most Compatible format (decision
+`docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `vp9.webm`, `av1.mp4`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
 matrix, range or chroma location that changes midway in band (a splice: a later SPS with other VUI tags) is followed
@@ -130,7 +134,14 @@ up to the second, a last chapter shorter than that joined to the one before; You
 least three, so with fewer the card says why instead (Timeline's words). The titles are typed on the page, under
 Titles, a field a chapter with Timeline's placeholder in it: the download carries them, a chapter left empty keeps
 "Chapter n" (the titles last while the run is shown, not kept with a stopped run: backlog, "Chapter titles kept with
-the kept run"). A file
+the kept run"). Under the run's card, a contact sheet (`panels/sheet.js`, issue #93, marked the page's): each shot's
+still, or three (its first, middle and last frame, as scenedetect's `--num-images 3`), with its number, start timecode
+and length, in the columns chosen, under a header with the file's name, duration, shot count and average shot length;
+made when asked, downloaded as `<file>.sheet.png` and as a PDF to print, `<file>.sheet.a4.pdf` or
+`<file>.sheet.letter.pdf`. The stills are the shots table's, the browser's decode (an AVI's own JPEGs), not
+ShotDetector's frames; the exact sheet from the decoded frames is ShotDetector CLI's (shotdetector#649). The PDF is
+written on the page, PDF 1.4 with the stills as JPEGs and the text in Helvetica, no library, rather than print CSS
+and `window.print()`, which gives no file and leaves the paper and margins to the browser's dialog. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -706,7 +717,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   (`<sample>.<run>.chapters-<minimum>.json`, ShotDetector's `Timeline.YouTubeChapters` and `ChapterStarts`) too, within
   YouTube's rules (`ChaptersCheck.cs`). It also
   checks that `samples/reject/` is refused, each file with its own message (when opened, or by its run: a size that
-  changes midway), and compares each sample's
+  changes midway), another codec's or container's naming it as FFmpeg does (`hevc`, `av1`, WebM), and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
@@ -1123,7 +1134,10 @@ rules for changing them (adding to the page among them).
   Subtitle Edit's shot changes, and YouTube chapters of `YouTubeChapters` at the minimum typed beside them, their reason
   when there are none, a title a chapter typed under Titles, which the download carries), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
-  decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  decode from a hidden `<video>` of its own, as rows come into view; `stillAt` and `stillTimes` for the sheet, one
+  seek at a time with the table's), `sheet.js` (a card under the run's, marked page: the contact sheet, issue #93, 1
+  or 3 stills a shot from `shots.js`' grabber, its number, start and length, columns, a header; a PNG from a canvas
+  and a PDF written by hand, the JPEGs embedded, A4 or Letter), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `corrections.js` (a card beside the video, marked page: the cut that starts
@@ -1176,7 +1190,8 @@ rules for changing them (adding to the page among them).
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, `mjpeg-320x240-25.avi` picked (the player the file's JPEG at the playhead after
-  clicks on the timeline and a shot's row, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
+  clicks on the timeline and a shot's row, a still per shot), the contact sheet of each sample picked on threads and of the AVI (a PNG
+  and A4 and Letter PDFs downloaded, each valid, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
   threads paused and resumed, then stopped while paused, then run again
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,

@@ -351,6 +351,14 @@ enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/
 got=$(for f in mjpeg-444; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
 got+=$("$fp" -v error -select_streams v -count_packets -show_entries stream=nb_frames,nb_read_packets -of csv=p=0 "$out/reject/mjpeg-dropped-frame.avi")
 [[ $got == 'yuvj444p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
+# The codecs and containers the core doesn't read, refused with their names (decision 2026-11-02-browser-decoder.md,
+# backlog "A refusal that says what to do"): HEVC in MP4 as a phone writes it ('hvc1'), VP9 in WebM, AV1 in MP4.
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx265 -x265-params log-level=error -pix_fmt yuv420p -tag:v hvc1 "$out/reject/hevc.mp4"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libvpx-vp9 -b:v 200k -pix_fmt yuv420p "$out/reject/vp9.webm"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libaom-av1 -cpu-used 8 -b:v 200k -pix_fmt yuv420p "$out/reject/av1.mp4"
+got=$(for f in hevc.mp4 vp9.webm av1.mp4; do "$fp" -v error -show_entries stream=codec_name,codec_tag_string:format=format_name -of default=nw=1:nk=1 "$out/reject/$f"; done | tr '\n' ' ')
+[[ $got == 'hevc hvc1 mov,mp4,m4a,3gp,3g2,mj2 vp9 [0][0][0][0] matroska,webm av1 av01 mov,mp4,m4a,3gp,3g2,mj2 ' ]] ||
+  { echo "Codec rejects: codecs, tags and containers are $got" >&2; exit 1; }
 # Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
 # and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
 # FFmpeg's encoder writes LC only).

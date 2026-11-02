@@ -62,14 +62,19 @@ public abstract partial class VideoInput
     /// <summary>
     /// Opens a video file read through <paramref name="open"/>, which must give a new readable, seekable stream over the
     /// file on every call (in the browser: one reading slices of the picked file, so it never has to fit in memory): an
-    /// AVI (a RIFF file of form 'AVI ') as <see cref="AviInput"/>, anything else as <see cref="Mp4Input"/>, which says
-    /// what it isn't.
+    /// AVI (a RIFF file of form 'AVI ') as <see cref="AviInput"/>; a container the first bytes name (WebM, Matroska, MPEG-TS
+    /// and others: <see cref="Refusal.OtherContainer"/>) refused with <see cref="UnsupportedVideoException"/> saying which;
+    /// anything else as <see cref="Mp4Input"/>, which says what it isn't.
     /// </summary>
     public static VideoInput Open(Func<Stream> open)
     {
         bool avi;
         using (var stream = open())
+        {
             avi = AviHeader.IsAvi(stream);
+            if (!avi && Refusal.OtherContainer(stream) is { } other)
+                throw new UnsupportedVideoException($"This is {other}, not MP4 or AVI: {Refusal.Scope}");
+        }
         return avi ? AviInput.Open(open) : Mp4Input.Open(open);
     }
 

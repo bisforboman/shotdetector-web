@@ -28,6 +28,7 @@
   <script type="module" src="panels/corrections.js"></script>
   <script type="module" src="panels/warnings.js"></script>
   <script type="module" src="panels/shots.js"></script>
+  <script type="module" src="panels/sheet.js"></script>
   <script type="module" src="panels/stats.js"></script>
   <script type="module" src="panels/sound.js"></script>
   <script type="module" src="panels/about.js"></script>
@@ -116,6 +117,15 @@
       <p id="status-text"></p>
     </section>
     <section id="error" role="alert" hidden></section>
+    <!-- Under a refusal (a codec or container the page doesn't read, decision 2026-11-02-browser-decoder.md): what reads
+         it instead. Shown by app.js's fail() when the message is the core's refusal. -->
+    <section id="refused" hidden>
+      <p><a href="https://github.com/bisforboman/shotdetector#the-release-binaries">ShotDetector's <code>shotdetect</code>
+        command</a> reads every file FFmpeg reads, HEVC, VP9, AV1 and WebM among them, with the same detectors and
+        results: <code>shotdetect -i video.mp4</code>.</p>
+      <p id="refused-hevc" hidden>From an iPhone: Settings &gt; Camera &gt; Formats &gt; Most Compatible records H.264,
+        which this page reads.</p>
+    </section>
   </div>
 
   <!-- The result, four rows (decision 2026-10-26-new-ui.md, B): the video with the shot playing under it, beside the

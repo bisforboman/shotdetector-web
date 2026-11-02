@@ -288,7 +288,12 @@ for (const file of noAac) {
 }
 
 // Refused when opened, or, for what only the frames tell (a size that changes midway, shotdetector#625), by the run,
-// the promise rejected with the core's message, which the page shows.
+// the promise rejected with the core's message, which the page shows. A codec or container the core doesn't read is
+// named as FFmpeg names it (NativeCheck's RefusalNames, kept the same; backlog "A refusal that says what to do").
+const REFUSAL_NAMES = {
+  'hevc.mp4': "FFmpeg's hevc", 'vp9.webm': 'a WebM file', 'av1.mp4': "FFmpeg's av1", 'mpeg4.mp4': "FFmpeg's mpeg4",
+  'h264.avi': "FFmpeg's h264",
+};
 for (const file of rejects) {
   let opened = false;
   try {
@@ -298,6 +303,8 @@ for (const file of rejects) {
     fail(`${basename(file)}: detected, but it should have been refused.`);
   } catch (e) {
     console.error(`${basename(file)}: refused ${opened ? 'by its run' : 'when opened'}: ${e.message}`);
+    const named = REFUSAL_NAMES[basename(file)];
+    if (named && !e.message.includes(named)) fail(`${basename(file)}: its refusal doesn't name ${named}: ${e.message}`);
     if (opened && !/not supported/.test(e.message))
       fail(`${basename(file)}: its run failed, not with the core's refusal: ${e.message}`);
   }

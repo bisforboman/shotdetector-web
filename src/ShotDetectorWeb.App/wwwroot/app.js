@@ -127,7 +127,7 @@ const detectButton = $('detect'), pauseButton = $('pause'), stopButton = $('stop
 const resumeButton = $('resume'), forgetButton = $('forget');
 const demoButton = $('demo'), changeButton = $('change');
 const fileName = $('file-name'), fileFacts = $('file-facts');
-const progress = $('progress'), statusText = $('status-text'), error = $('error');
+const progress = $('progress'), statusText = $('status-text'), error = $('error'), refused = $('refused');
 const result = $('result'), video = $('video'), now = $('now'), picture = $('frame');
 const places = { run: $('run-cards'), below: $('below'), details: $('details') };
 
@@ -368,6 +368,7 @@ function setState(next) {
   detectButton.classList.toggle('quiet', !resumeButton.hidden);
   progress.hidden = !busy;
   error.hidden = next !== 'error';
+  if (next !== 'error') refused.hidden = true;
   if (next === 'opening') result.hidden = true;
 }
 
@@ -989,10 +990,16 @@ function lost(video, onThreads = false) {
   follow();
 }
 
+// A refusal (the core's UnsupportedVideoException: a codec, container or format it doesn't read, "... so far", "not
+// supported") gets what reads the file instead under it, and an HEVC one what an iPhone can record (decision
+// 2026-11-02-browser-decoder.md). A damaged file's or a worker's failure doesn't.
+const REFUSAL = /this page reads|so far|not supported|supported yet/i;
 function fail(message) {
   setState('error');
   say('');
   error.textContent = message;
+  refused.hidden = !REFUSAL.test(message) || message.startsWith('The file is damaged');
+  $('refused-hevc').hidden = !/FFmpeg's hevc/.test(message);
 }
 
 // restored: the kept record of a stopped run shown again (restore), not a run of this visit.

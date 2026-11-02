@@ -7,9 +7,10 @@
 // into the table's view, live shots included, one seek at a time (the owner's choices, 2026-10-29: the player isn't
 // moved, and a shot's first frame is often still black from a fade in). An AVI, which no browser plays, has its stills
 // from its own JPEGs (app.js's frameAt: the packet at that time, cut from the file), decoded by the browser all the same
-// (backlog "The picture of an AVI on the page"). Once the cuts are corrected on the page ('corrected'), the rows are the
-// corrected list's shots (ShotDetector's LoadScenes of it), a shot that starts at a cut added on the page marked, its
-// tooltip saying so.
+// (backlog "The picture of an AVI on the page"). The contact sheet (sheet.js) takes its stills through the same grabber,
+// stillAt and stillTimes, one seek at a time with the table's. Once the cuts are corrected on the page ('corrected'), the
+// rows are the corrected list's shots (ShotDetector's LoadScenes of it), a shot that starts at a cut added on the page
+// marked, its tooltip saying so.
 import { card, frameAt, frameSeconds, on } from '../app.js';
 import { secondsOf, seek, timecode } from '../timeline.js';
 
@@ -87,8 +88,7 @@ function stillCell(cell, shot) {
   cell.className = 'still';
   const box = cell.appendChild(document.createElement('div'));
   box.className = 'thumb';
-  const middle = (secondsOf(shot.startTimecode) + secondsOf(shot.endTimecode)) / 2;
-  const at = oneFrame ? (Math.floor(middle / oneFrame) + 0.5) * oneFrame : middle;
+  const [at] = stillTimes(shot, 1);
   cell.dataset.at = at;
   const kept = stills.get(at);
   if (kept) box.append(kept);
@@ -105,7 +105,7 @@ async function take() {
       seen.unobserve(cell);
       if (!cell.isConnected) continue;
       const at = Number(cell.dataset.at), of = file;
-      const canvas = stills.get(at) ?? await grab(at);
+      const canvas = stills.get(at) ?? await grab(at, Math.round(STILL_WIDTH * (devicePixelRatio || 1)));
       if (of !== file) continue;
       if (canvas) {
         stills.set(at, canvas);
@@ -118,37 +118,62 @@ async function take() {
   if (wanted.size) take(); // cells that came into view as the last seek ended
 }
 
-// The frame at a time, on a canvas: the file's own JPEG there (an AVI's), else the hidden video's; null when the
-// browser can't show it.
-async function grab(at) {
+// The frame at a time, on a canvas width pixels wide: the file's own JPEG there (an AVI's), else the hidden video's;
+// null when the browser can't show it. One grab at a time, the table's and the sheet's taking turns on the one video.
+let turn = Promise.resolve();
+function grab(at, width) {
+  const mine = turn.then(() => grabNow(at, width));
+  turn = mine.catch(() => null);
+  return mine;
+}
+
+async function grabNow(at, width) {
   const jpeg = await frameAt(at);
-  if (jpeg) return fromJpeg(jpeg);
+  if (jpeg) return fromJpeg(jpeg, width);
   if (source.readyState < HTMLMediaElement.HAVE_METADATA && !await settled(source, 'loadedmetadata')) return null;
   source.currentTime = at;
   if (!await settled(source, 'seeked') || !source.videoWidth) return null;
-  const canvas = stillCanvas(source.videoWidth, source.videoHeight);
+  const canvas = stillCanvas(width, source.videoWidth, source.videoHeight);
   canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
   return canvas;
 }
 
-async function fromJpeg(jpeg) {
+async function fromJpeg(jpeg, width) {
   let image;
   try {
     image = await createImageBitmap(jpeg);
   } catch {
     return null;
   }
-  const canvas = stillCanvas(image.width, image.height);
+  const canvas = stillCanvas(width, image.width, image.height);
   canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
   image.close();
   return canvas;
 }
 
-function stillCanvas(width, height) {
-  const scale = devicePixelRatio || 1, canvas = document.createElement('canvas');
-  canvas.width = Math.round(STILL_WIDTH * scale);
-  canvas.height = Math.round(STILL_WIDTH * scale * height / width);
+function stillCanvas(pixels, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = pixels;
+  canvas.height = Math.round(pixels * height / width);
   return canvas;
+}
+
+// The frame at a time (one of stillTimes') on a canvas width pixels wide, for the contact sheet; null when the browser
+// can't show it.
+export function stillAt(at, width) {
+  return grab(at, width);
+}
+
+// Where a shot's n stills are taken: its middle frame for one (the table's), for three its first, middle and last but
+// one frame in from each end (scenedetect's --num-images 3 with its frame margin of 1), each half a frame after the
+// frame's start; at a variable rate a tenth of the shot in from each end.
+export function stillTimes(shot, n) {
+  const start = secondsOf(shot.startTimecode), end = secondsOf(shot.endTimecode), middle = (start + end) / 2;
+  const at = t => oneFrame ? (Math.floor(t / oneFrame + 1e-6) + 0.5) * oneFrame : t;
+  if (n === 1) return [at(middle)];
+  if (!oneFrame) return [start + (end - start) / 10, middle, end - (end - start) / 10];
+  const frames = Math.max(1, Math.round((end - start) / oneFrame)), margin = frames > 2 ? 1 : 0;
+  return [at(start + margin * oneFrame), at(middle), at(start + (frames - 1 - margin) * oneFrame)];
 }
 
 // Whether the video fired the event before an error, a new file or SEEK_MS.
