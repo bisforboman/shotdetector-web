@@ -686,7 +686,7 @@ async function contactSheet(page, what, file) {
     else if (r.placed !== shots * stills || r.boxes.some(b => b !== box))
       fail(`${what}: the contact sheet's ${paper} PDF (${pdf.saved}) places ${r.placed} stills, not ${shots * stills}, ` +
         `on pages of ${[...new Set(r.boxes)].join(', ')}, not ${box}`);
-    else console.log(`${what}: the contact sheet as a ${paper} PDF, ${r.pages} pages, ${r.placed} stills of ${r.images} ` +
+    else console.log(`${what}: the contact sheet as ${paper === 'a4' ? 'an A4' : 'a Letter'} PDF, ${r.pages} pages, ${r.placed} stills of ${r.images} ` +
       `JPEGs for the ${shots} shots`);
   };
   await pdfOf('a4', 1, '0 0 595.28 841.89');
