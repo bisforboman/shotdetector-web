@@ -208,3 +208,12 @@ file out of `samples/reject/`, and passes the native check.
     set from it in `Api`, an option on the page; NativeCheck's run with `TrimReferenceTone` on the tone sample.
   - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
   - Status: Maybe (found adopting ShotDetector 3.25.0, 2026-11-01)
+
+- A Cinemetrics file
+  - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's
+    `.cmsx` has no published format, and the classic `.cms` is described only by third-party code (README, "Shot
+    lengths for film studies"). The page offers a plain shot-lengths CSV instead.
+  - Where: a file saved by Cinemetrics' tool, from the owner or a scholar, to check against; then a writer, in
+    ShotDetector's `Shots` if the CLI should share it (issue #91's comment), or the shot-lengths card.
+  - Done when: a file the page writes opens in Cinemetrics' tool with the run's shots.
+  - Status: Maybe (2026-11-02; cinemetrics.uchicago.edu wasn't reachable from the cloud session)
