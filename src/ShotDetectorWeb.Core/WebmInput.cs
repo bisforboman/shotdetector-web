@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using ManagedCodecs;
 using ShotDetector;
@@ -150,7 +151,12 @@ public sealed class WebmInput : VideoInput
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var stream = OpenStream();
-        var types = new Queue<PictureType>();
+
+        // A concurrent queue: a host's decoder may read the packets on a thread of its own (FfmpegDecoder writes them to
+        // ffmpeg from a task) while the frames come out here. A plain Queue lost an Enqueue's count to a Dequeue on the
+        // other thread now and then: the last frame then found the queue empty (type None), or a lost item shifted the
+        // types after it by one.
+        var types = new ConcurrentQueue<PictureType>();
         var pts = Packets.Pts.ToArray();
         int shown = fromPacket;
         await foreach (var frame in _decoder.DecodeAsync(_config, Read(stream, fromPacket, types), cancellationToken))
@@ -162,12 +168,12 @@ public sealed class WebmInput : VideoInput
             }
 
             frame.Pts = pts[shown++];
-            yield return (frame, types.Count > 0 ? types.Dequeue() : PictureType.None);
+            yield return (frame, types.TryDequeue(out var type) ? type : PictureType.None);
         }
     }
 
     // The blocks from fromPacket on, each read as the decoder asks for it, its picture type queued.
-    IEnumerable<EncodedPacket> Read(Stream stream, int fromPacket, Queue<PictureType> types)
+    IEnumerable<EncodedPacket> Read(Stream stream, int fromPacket, ConcurrentQueue<PictureType> types)
     {
         int index = 0;
         foreach (var block in _matroska.Blocks(stream))
