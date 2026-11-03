@@ -92,7 +92,7 @@ public static partial class Api
             _run = null;
         }
 
-        _rangeBytes = RangePacked(scores?.ToBytes() ?? [], picture.Measures);
+        _rangeBytes = RangePacked(scores?.ToBytes() ?? [], picture.Measures, input.DamagedFrames(int.MaxValue));
         return JsonSerializer.Serialize(new ScoredResponse(scores?.FrameCount ?? 0, _stopped), RangesJson.Default.ScoredResponse);
     }
 
@@ -132,9 +132,11 @@ public static partial class Api
         DetectionResult result;
         IReadOnlyList<RangeScores> merged;
         var pictures = new List<PictureMeasures>();
+        var damaged = new List<int>();
         try
         {
             var earlier = KeptRun.FromBytes(kept);
+            damaged.AddRange(earlier.Damaged);
             var scores = new List<RangeScores>(earlier.Scores);
             if (earlier.Picture is { } p)
                 pictures.Add(p);
@@ -152,9 +154,10 @@ public static partial class Api
             {
                 if (length > 0)
                 {
-                    var (bytes, picture) = RangeUnpacked(ranges.AsMemory(at, length));
+                    var (bytes, picture, frames) = RangeUnpacked(ranges.AsMemory(at, length));
                     scores.Add(RangeScores.FromBytes(bytes.Span));
                     pictures.Add(picture);
+                    damaged.AddRange(frames);
                 }
 
                 at += length;
@@ -173,7 +176,7 @@ public static partial class Api
 
         // Still pictures aren't looked for across ranges (decision 2026-11-01-freeze-spans.md).
         return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures),
-            kept.Length == 0 ? PictureFreeze.Split : PictureFreeze.Resumed);
+            kept.Length == 0 ? PictureFreeze.Split : PictureFreeze.Resumed, damaged);
     }
 
     /// <summary>

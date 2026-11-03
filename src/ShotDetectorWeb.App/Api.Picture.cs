@@ -30,26 +30,39 @@ public static partial class Api
         JsonSerializer.Serialize(PictureSummary.Of(_picture ?? throw new InvalidOperationException("Detect first."),
             _freeze ?? PictureFreeze.Resumed), PictureJson.Default.PictureSummary);
 
-    /// <summary>A range's bytes: the scores' length, the scores, then the picture's measures; empty when nothing was scored.</summary>
-    static byte[] RangePacked(byte[] scores, PictureMeasures picture)
+    /// <summary>
+    /// A range's bytes, little-endian: the scores' length, the scores, the picture measures' length, the measures, then the
+    /// damaged frames the range's worker decoded (<see cref="VideoInput.DamagedFrames"/>: their count, then each, 0-based);
+    /// empty when nothing was scored.
+    /// </summary>
+    static byte[] RangePacked(byte[] scores, PictureMeasures picture, IReadOnlyList<int> damaged)
     {
         if (scores.Length == 0)
             return [];
         var picked = picture.ToBytes();
-        var bytes = new byte[4 + scores.Length + picked.Length];
-        BinaryPrimitives.WriteInt32LittleEndian(bytes, scores.Length);
-        scores.CopyTo(bytes, 4);
-        picked.CopyTo(bytes, 4 + scores.Length);
+        var bytes = new byte[4 + scores.Length + 4 + picked.Length + 4 * (1 + damaged.Count)];
+        var span = bytes.AsSpan();
+        BinaryPrimitives.WriteInt32LittleEndian(span, scores.Length);
+        scores.CopyTo(span[4..]);
+        int at = 4 + scores.Length;
+        BinaryPrimitives.WriteInt32LittleEndian(span[at..], picked.Length);
+        picked.CopyTo(span[(at + 4)..]);
+        KeptRun.WriteFrames(span[(at + 4 + picked.Length)..], damaged);
         return bytes;
     }
 
     /// <summary><see cref="RangePacked"/>'s parts back.</summary>
     /// <exception cref="InvalidDataException">Not such bytes, or the picture's damaged.</exception>
-    static (ReadOnlyMemory<byte> Scores, PictureMeasures Picture) RangeUnpacked(ReadOnlyMemory<byte> bytes)
+    static (ReadOnlyMemory<byte> Scores, PictureMeasures Picture, int[] Damaged) RangeUnpacked(ReadOnlyMemory<byte> bytes)
     {
-        int length = bytes.Length >= 4 ? BinaryPrimitives.ReadInt32LittleEndian(bytes.Span) : -1;
-        if (length < 0 || length > bytes.Length - 4)
+        var span = bytes.Span;
+        int length = span.Length >= 4 ? BinaryPrimitives.ReadInt32LittleEndian(span) : -1;
+        if (length < 0 || length > span.Length - 8)
             throw new InvalidDataException("A range's bytes are damaged (the scores' length).");
-        return (bytes.Slice(4, length), PictureMeasures.FromBytes(bytes.Span[(4 + length)..]));
+        int at = 4 + length, picked = BinaryPrimitives.ReadInt32LittleEndian(span[at..]);
+        if (picked < 0 || picked > span.Length - at - 4)
+            throw new InvalidDataException("A range's bytes are damaged (the picture's length).");
+        return (bytes.Slice(4, length), PictureMeasures.FromBytes(span.Slice(at + 4, picked)),
+            KeptRun.ReadFrames(span[(at + 4 + picked)..], "A range's bytes"));
     }
 }

@@ -72,6 +72,8 @@ foreach (string sample in samples)
     }
 
     var differences = Differences(input.Video, Oracle(sample));
+    // The damaged frames (DamagedCheck.cs): FFmpeg's, from its MJPEG decoder's log, for an AVI.
+    IReadOnlyList<int>? ffmpegDamaged = null;
     string described = differences.Count == 0 ? "same" : "DIFFERS: " + string.Join("; ", differences);
     if (differences.Count > 0)
         failures++;
@@ -104,6 +106,12 @@ foreach (string sample in samples)
 
         var (scenes, stats) = Runs.Csvs(ours);
         var (fileScenes, fileStats) = Runs.Csvs(file);
+        // A damaged frame's rows can't equal FFmpeg's (decision 2026-11-02-damaged-jpeg.md): the core's damaged frames
+        // must be FFmpeg's, and the stats the FFmpeg path's around them.
+        var damaged = input.DamagedFrames(ours.FrameCount);
+        int window = baseOptions.FrameWindow;
+        bool deinterlaced = ours.Video.Deinterlaced;
+        bool statsSame = DamagedCheck.Outside(stats, damaged, window, deinterlaced) == DamagedCheck.Outside(fileStats, damaged, window, deinterlaced);
         string name = Path.Combine(outDir, Runs.BaseName(sample, run));
         File.WriteAllText(name + ".scenes.csv", scenes);
         File.WriteAllText(name + ".stats.csv", stats);
@@ -156,13 +164,20 @@ foreach (string sample in samples)
             problems.Add($"size and rotation {ours.Video.Width}x{ours.Video.Height} {ours.Video.Rotation} vs {file.Video.Width}x{file.Video.Height} {file.Video.Rotation}");
         if (!ours.Cuts.SequenceEqual(file.Cuts))
             problems.Add("cuts");
+        if (damaged.Count > 0 || sample.EndsWith(".avi", StringComparison.OrdinalIgnoreCase))
+        {
+            ffmpegDamaged ??= DamagedCheck.Ffmpeg(libs, sample);
+            if (!damaged.SequenceEqual(ffmpegDamaged))
+                problems.Add($"damaged frames [{string.Join(", ", damaged)}], FFmpeg's [{string.Join(", ", ffmpegDamaged)}]");
+        }
         string scenesResult = scenes == fileScenes ? "same" : "DIFFERS";
-        string statsResult = stats == fileStats ? $"same ({stats.Length:N0} bytes)" : "DIFFERS";
+        string statsResult = stats == fileStats ? $"same ({stats.Length:N0} bytes)"
+            : statsSame ? $"same but the {DamagedCheck.Named(damaged, window, deinterlaced)} (damaged)" : "DIFFERS";
         string shotsResult = (json == fileJson ? "same" : "JSON DIFFERS") + ", " + (html == fileHtml ? "same" : "HTML DIFFERS");
         string timelinesResult = timelinesDiffer.Count == 0 ? "same" : $"DIFFERS: {string.Join(", ", timelinesDiffer)}";
         if (timelinesDiffer.Count > 0)
             failures++;
-        if (scenes != fileScenes || stats != fileStats || json != fileJson || html != fileHtml || problems.Count > 0)
+        if (scenes != fileScenes || !statsSame || json != fileJson || html != fileHtml || problems.Count > 0)
         {
             failures++;
             File.WriteAllText(name + ".ffmpeg.scenes.csv", fileScenes);

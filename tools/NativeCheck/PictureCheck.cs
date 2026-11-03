@@ -79,10 +79,14 @@ static class PictureCheck
         if (theirs.Frames.Count != ours.Count)
             problems.Add($"FFmpeg's filters saw {theirs.Frames.Count} frames");
 
-        // signalstats and cropdetect, frame by frame.
+        // signalstats and cropdetect, frame by frame; a damaged frame's left out (decision 2026-11-02-damaged-jpeg.md:
+        // FFmpeg's picture there is a frame from its buffer pool, DamagedCheck.cs).
+        var damaged = input.DamagedFrames(result.FrameCount);
         int stats = 0, crops = 0;
         for (int i = 0; i < Math.Min(ours.Count, theirs.Frames.Count); i++)
         {
+            if (damaged.Contains(i))
+                continue;
             var f = theirs.Frames[i];
             if (ours.YMin(i) != int.Parse(f["lavfi.signalstats.YMIN"]) || ours.YMax(i) != int.Parse(f["lavfi.signalstats.YMAX"]) ||
                 !Printed(f["lavfi.signalstats.YAVG"], ours.YAvg(i)) || !Printed(f["lavfi.signalstats.BRNG"], ours.Brng(i)))
@@ -105,7 +109,8 @@ static class PictureCheck
             problems.Add($"signalstats differs on {stats} frames");
         if (crops > 2)
             problems.Add($"cropdetect differs on {crops} frames");
-        cells.Add(stats == 0 ? "same" : $"{stats} frames differ");
+        string left = damaged.Count == 0 ? "" : $" (damaged frame{(damaged.Count == 1 ? "" : "s")} {string.Join(", ", damaged)} left out)";
+        cells.Add((stats == 0 ? "same" : $"{stats} frames differ") + left);
 
         var whole = ours.Crop();
         if (whole?.ToString() != theirs.Crop)
