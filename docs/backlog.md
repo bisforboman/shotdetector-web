@@ -121,6 +121,18 @@ that waited on them are open. ShotDetector 3.25.0 and FrameReader 2.19.0 (2026-1
 FrameReader's `PictureMeter` and `SilenceFinder` (the page's measures moved upstream, the owner's decision 2026-10-31
 in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 3.25.0 and FrameReader 2.19.0".
 
+- A corrected list timed as its run (upstream)
+  - Why: ShotDetector 3.26.0's `LoadScenes`, which makes a corrected list's downloads (decision
+    [2026-11-02-correcting-cuts.md](decisions/2026-11-02-correcting-cuts.md)), times cuts at frame / average rate on a
+    variable-rate file and takes the video's length as nb_frames. `Detect` uses the frames' pts and the frames played.
+    The first correction on such a file retimes every cut or moves the last shot's end (`fragmented-moov`: 38 of 114
+    frames). This is the same on the FFmpeg path, so it is ShotDetector's to decide: sent to the shotdetector
+    coordinator on 2026-11-02.
+  - Where: the ShotDetector pin, and `CorrectedCuts` if upstream adds an overload (the run's frame count, or a
+    `DetectionResult` and a cut list); `CorrectionCheck.cs`'s note on the length then becomes a failure.
+  - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
+  - Status: Waiting (on upstream's answer, 2026-11-02)
+
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 (of an even height until
@@ -191,11 +203,3 @@ file out of `samples/reject/`, and passes the native check.
     set from it in `Api`, an option on the page; NativeCheck's run with `TrimReferenceTone` on the tone sample.
   - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
   - Status: Maybe (found adopting ShotDetector 3.25.0, 2026-11-01)
-
-- Correcting the cuts on the page (issue #90)
-  - Why: ShotDetector 3.25.0's `LoadScenes(YuvVideo, TextReader, column, options)` (shotdetector#647) reads a scenes
-    CSV back over a `YuvVideo`, which a page that lets a viewer add and drop cuts before exporting needs: the edited
-    cuts become a result the downloads (CSVs, timeline files, chapters) are made from by ShotDetector, not the page.
-  - Where: an export taking the edited scenes CSV; the timeline's cuts lane editable; a decision first
-    (docs/decisions/), since what is exact after an edit is the owner's question.
-  - Status: Maybe (issue #90; unblocked upstream 2026-11-01)

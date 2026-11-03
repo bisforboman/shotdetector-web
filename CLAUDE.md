@@ -164,6 +164,11 @@ differ.
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames is `None`, a
   cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold detector ends a fade-out
   the stop falls in with a cut (`PostProcess`), as at a file's end.
+- ShotDetector 3.26.0's `LoadScenes` (both overloads) times a cut at frame / average rate on a variable-rate file and
+  takes the video's length as nb_frames (an edit list that ends early, a fragmented file: `fragmented-moov` ends at 38
+  of 114 frames), where `Detect` uses the frames' pts and the frames played: a corrected list is timed its way (sent to
+  the shotdetector coordinator 2026-11-02; the owner chose to ship as it is). An uncorrected run's downloads stay
+  `Detect`'s.
 - FFmpeg 8.1's x86 SIMD yadif gives a different result on every run over 9 to 16 bits (its C code doesn't, and
   FastYuv's `Yadif` follows the C code): NativeCheck runs the FFmpeg path of a deinterlaced 10-bit run with
   `av_force_cpu_flags(0)`.

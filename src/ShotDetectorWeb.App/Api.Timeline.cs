@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 namespace ShotDetectorWeb.App;
 
 /// <summary>
-/// The run card's downloads for editors: the last run's shots in scenedetect's timeline formats (ShotDetector's
+/// The run card's downloads for editors: the last run's shots (its corrected ones once <see cref="Correct"/> has them) in scenedetect's timeline formats (ShotDetector's
 /// <c>Timeline</c> through <see cref="TimelineFiles"/>).
 /// </summary>
 [SupportedOSPlatform("browser")]
@@ -16,5 +16,5 @@ public static partial class Api
     /// OTIO name the file at the root (<see cref="TimelineFiles"/>), as the browser doesn't know its folder.
     /// </summary>
     [JSExport]
-    public static string TimelineFile(string format, string fileName) => TimelineFiles.Write(Result, format, fileName);
+    public static string TimelineFile(string format, string fileName) => TimelineFiles.Write(Shown, format, fileName);
 }
