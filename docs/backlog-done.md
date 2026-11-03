@@ -1624,3 +1624,18 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `Queue`; a lost `_size++` left the last frame without a type (`?`), a lost item shifted later types (seen once on
     one thread too). Now a `ConcurrentQueue`. Under load, 3 of 800 AV1 runs differed before, none of 2000 after (and
     none of 400 VP9). The page's `JsDecoder` reads the packets on its own async flow, so it never raced)
+
+- Tears of Steel's hash_dist under AOT: ShotDetector's fix
+  - Why: realworld.yml's tears job fails on 8 rows of `tears_of_steel_720p.all.stats.csv` whose `hash_dist` is 2/64
+    off under AOT (backlog-done, "Tears of Steel's every-detector stats under AOT"). The shotdetector coordinator found
+    it ShotDetector's (the hash's float path: the cosine table, the median on near-flat frames); the owner chose to fix
+    it there (2026-11-01). The clips job fails on it too, once the stop check no longer ended it first (run 41525295922,
+    2026-11-03): 10 rows of `elephantsdream-480-h264-st-aac.all.stats.csv`, each 2/64 off, either way (frame 12:
+    native 0.46875, wasm 0.5; frame 3723: 0.59375, 0.5625), and there it moves a hash cut (13786 natively, 13797 under
+    AOT), so the scenes CSV and the shots JSON and HTML differ too.
+  - Where: `Directory.Packages.props`, once ShotDetector releases the fix.
+  - Done when: realworld.yml's tears and clips jobs pass on the release.
+  - Not: a workaround here.
+  - Status: Done (2026-11-03: fixed upstream, shotdetector#701, released in ShotDetector 3.27.0 and taken with 3.28.0,
+    backlog-done "ManagedCodecs 0.7.0 and FrameReader 2.22.0"; realworld.yml on main passes tears, run 41637443083,
+    and clips, run 41637447907)

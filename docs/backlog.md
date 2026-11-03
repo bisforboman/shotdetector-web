@@ -43,22 +43,6 @@ The owner chose on 2026-11-01 to adopt ManagedCodecs 0.5.0 in one session, a pul
 bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a track whose edit list starts at 0"
 (Waiting, ManagedCodecs#252, fixed in 0.5.0). All three are done (backlog-done).
 
-### Found by the real-world check (2026-11-01)
-
-- Tears of Steel's hash_dist under AOT: ShotDetector's fix
-  - Why: realworld.yml's tears job fails on 8 rows of `tears_of_steel_720p.all.stats.csv` whose `hash_dist` is 2/64
-    off under AOT (backlog-done, "Tears of Steel's every-detector stats under AOT"). The shotdetector coordinator found
-    it ShotDetector's (the hash's float path: the cosine table, the median on near-flat frames); the owner chose to fix
-    it there (2026-11-01). The clips job fails on it too, once the stop check no longer ended it first (run 41525295922,
-    2026-11-03): 10 rows of `elephantsdream-480-h264-st-aac.all.stats.csv`, each 2/64 off, either way (frame 12:
-    native 0.46875, wasm 0.5; frame 3723: 0.59375, 0.5625), and there it moves a hash cut (13786 natively, 13797 under
-    AOT), so the scenes CSV and the shots JSON and HTML differ too.
-  - Where: `Directory.Packages.props`, once ShotDetector releases the fix.
-  - Done when: realworld.yml's tears and clips jobs pass on the release.
-  - Not: a workaround here.
-  - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
-    (on nuget.org since 2026-11-02); bumped with ShotDetector 3.28.0 (backlog-done.md, ManagedCodecs 0.7.0 row); done when the realworld runs pass on main
-
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
