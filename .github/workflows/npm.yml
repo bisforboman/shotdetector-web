@@ -1,0 +1,154 @@
+# The npm package (decision docs/decisions/2026-11-02-npm-package.md; README "The npm package"): on a tag
+# package-v<version>, the checks pages.yml runs before a deploy plus the package's own (tools/check.sh package, and
+# FastYuv replaced in it), then npm publish with provenance through npm's trusted publishing (OIDC: no token in the
+# repository). The owner creates shotdetector-web on npmjs.com and adds this repository and workflow (npm.yml) as its
+# trusted publisher first; until then the publish job fails and nothing is published. By hand (workflow_dispatch) it
+# runs the checks and a dry run only.
+name: npm
+
+on:
+  push:
+    tags: ['package-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      SINTEL_SHA256: '34bbd52a4b89fdf63c8ace50b268da26653a59508288100cd3c23de276db7931'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      # As ci.yml: Playwright for the page's smoke test, pinned by tools/page-check's lockfile, and its Chromium and Firefox.
+      - name: Install Playwright, Chromium and Firefox
+        working-directory: tools/page-check
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox
+
+      # As ci.yml: FFmpeg 8.1's shared build makes the samples (and the demo clip, the Sintel sample) and is the native
+      # check's reference. These three steps are ci.yml's.
+      - name: Install FFmpeg 8.1
+        id: ffmpeg
+        uses: ./.github/actions/btbn-ffmpeg
+        with:
+          build: gpl-shared
+
+      - name: Cache Sintel's trailer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/sintel
+          key: sintel-${{ env.SINTEL_SHA256 }}
+
+      - name: Download Sintel's trailer
+        id: sintel
+        env:
+          URL: https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4
+        run: |
+          f=$RUNNER_TEMP/sintel/sintel_trailer-1080p.mp4
+          if [ ! -f "$f" ]; then
+            mkdir -p "$(dirname "$f")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 30 -o "$f" "$URL" \
+              || { echo "::error::$URL didn't download"; exit 1; }
+          fi
+          got=$(sha256sum < "$f" | cut -d' ' -f1)
+          [ "$got" = "$SINTEL_SHA256" ] || { rm -f "$f"; echo "::error::$URL has SHA-256 $got, not the pinned $SINTEL_SHA256"; exit 1; }
+          echo "$(stat -c %s "$f") bytes, SHA-256 $got"
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+
+      # The samples the checks run; the trailer's re-encode, ffprobe-verified, is the demo.
+      - name: Make the samples and the demo clip
+        env:
+          FFMPEG: ${{ steps.ffmpeg.outputs.bin }}/ffmpeg
+          LD_LIBRARY_PATH: ${{ steps.ffmpeg.outputs.bin }}
+          SINTEL: ${{ steps.sintel.outputs.file }}
+        run: |
+          tools/make-samples.sh
+          sha256sum samples/sintel_trailer-480p.mp4 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Native check (ManagedCodecs + FastYuv against FFmpeg)
+        env:
+          SHOTDETECTOR_FFMPEG_LIBS: ${{ steps.ffmpeg.outputs.bin }}
+        run: tools/check.sh native
+
+      # The App published ahead of time and checked on every sample against the native results, then the page itself in
+      # Chromium on it with the demo clip (tools/page-check): this publish is the bundle deployed below, not a second one.
+      # A tag names the version it publishes: package/package.json's must be the same.
+      - name: The tag and the package's version
+        if: startsWith(github.ref, 'refs/tags/package-v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./package/package.json').version")
+          [ "$TAG" = "package-v$version" ] || { echo "::error::The tag $TAG isn't package-v$version (package/package.json)"; exit 1; }
+
+      - name: WebAssembly check, the page and the npm package, AOT
+        run: tools/check.sh wasm page package aot
+
+      - name: FastYuv replaced from its source, AOT, the page's and the npm package's
+        run: tools/check.sh replace package aot
+
+      - name: The npm package, a dry run of npm publish
+        working-directory: out/package
+        run: npm publish --dry-run --provenance=false 2>&1 | tail -n 25 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: results
+          path: out/
+          if-no-files-found: ignore
+
+      # The tarball the checks ran: what the publish job sends, nothing rebuilt.
+      - name: The package's tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: package
+          path: out/package.tgz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/package-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/shotdetector-web
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 has npm 10.
+      - name: Publish to npm
+        run: npx --yes npm@11.6.2 publish package.tgz --provenance --access public
