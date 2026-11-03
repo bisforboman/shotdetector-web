@@ -5,7 +5,8 @@
 // for byte: the scenes CSV, the shots as JSON and HTML, the editors' timeline files and the YouTube chapters; the shots
 // must start at the frames given and the last end where the run's did; and the run's own cuts given back
 // (DetectionResult.CutFrames) must give the run's own downloads. The same again for a run stopped half-way (the core's
-// frames ended there, as the page's Stop does; the FFmpeg path's End at that frame's time, at a constant rate only), and whole under the run with every detector,
+// frames ended there, as the page's Stop does; held to its own run only until ShotDetector ends a run that ends early
+// as the FFmpeg path does: backlog, "A stopped run's end"), and whole under the run with every detector,
 // deinterlaced (the options LoadScenes is given are the run's). The core's files, the run's cuts and the corrected
 // starts of the whole run go to --out: app-check.mjs gives the starts to the App's Correct and writes its downloads
 // beside them, which tools/check.sh compares; page-check.mjs corrects the run's cuts to them on the page.
@@ -43,9 +44,9 @@ internal static class CorrectionCheck
                 var ours = end is { } stop
                     ? input.DetectAsync(1, given => ValueTask.FromResult(given < stop), run).GetAwaiter().GetResult()
                     : ReferenceEquals(run, Options) ? detected : input.Detect(run);
-                // The FFmpeg path's run ends at the time the core's stopped frame starts (a frame number there is a time × the
-                // average rate, another frame at a variable rate), to the tick at or before it: the end is exclusive.
-                var file = FilePath(sample, input, end is { } at ? run with { End = TimeSpan.FromTicks((long)Math.Floor(ours.Video.Position(at).Seconds * TimeSpan.TicksPerSecond)) } : run, libs);
+                // The FFmpeg path's run ends at the core's stopped frame (EndTime as a frame number: a time × the average
+                // rate, that frame at a constant rate).
+                var file = FilePath(sample, input, run with { EndTime = end?.ToString(System.Globalization.CultureInfo.InvariantCulture) }, libs);
                 var edited = Edit([0, .. ours.CutFrames], ours.FrameCount);
                 string name = Path.Combine(outDir, Runs.BaseName(sample, written ? "corrected" : end is null ? "corrected-deinterlaced" : "corrected-stopped"));
                 if (written)
@@ -57,10 +58,12 @@ internal static class CorrectionCheck
                 var corrected = CorrectedCuts.Load(ours, edited, run);
                 var fileCorrected = CorrectedCuts.Load(file, edited, run);
                 var differ = new List<string>();
-                // At a variable rate the FFmpeg path has no run stopped at a frame: its End is a time, and its last shot
-                // ends a frame at the average rate after the last frame's pts, where frames that end early end it at
-                // their count over the average rate, as a whole run's ends at nb_frames over it. Not compared there.
-                bool compared = end is null || input.Video.FrameTimestamps is null;
+                // A run that ends early ends its last shot otherwise on the two paths (ShotDetector 3.28.0): the FFmpeg path
+                // at its last frame's pts + 1 / the average rate, in the stream's time (vp9-bt709-*'s 2.235 s), the frame
+                // source at the frames read over the average rate (67 / 29.97 = 2.2356 s; at a variable rate, another
+                // time altogether). The owner chose to fix it in ShotDetector (backlog, "A stopped run's end"): until
+                // that release a stopped run isn't compared with the FFmpeg path, only held to its own run.
+                bool compared = end is null;
                 foreach (var (what, extension, a, b) in compared ? Downloads(corrected, fileCorrected, sample) : [])
                 {
                     // The default run's whole, which app-check.mjs writes too (tools/check.sh compares the folders); the
@@ -97,7 +100,7 @@ internal static class CorrectionCheck
                 string given = back.Count == 0 ? "the run's" : $"DIFFERS: {string.Join(", ", back)}";
                 if (differ.Count > 0 || back.Count > 0)
                     failures++;
-                string how = compared ? "" : " (a variable rate: not compared with the FFmpeg path, which has no stop at a frame)";
+                string how = compared ? "" : " (not compared with the FFmpeg path, which ends a stopped run otherwise: ShotDetector's)";
                 Console.WriteLine($"| {Path.GetFileName(sample)} | {label}{how} | {corrected.Shots.Count} | {first} | {rest} | {given} |");
             }
         }

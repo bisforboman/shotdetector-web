@@ -836,8 +836,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   the default run's cuts corrected as a viewer would (the first removed, the last moved a frame later, two added a
   frame apart, frames as decoded), made into a result by the core (`CorrectedCuts.Load`: `LoadScenes` of the run) and
   by the same `LoadScenes` of the FFmpeg path's run (`Detect(path)`), whole, stopped half-way (the core's frames ended
-  there as Stop ends them, the FFmpeg path's `End` at that frame's time: at a constant rate only, since at a variable
-  one the FFmpeg path has no stop at a frame), and whole under the run with every detector, deinterlaced: the scenes
+  there as Stop ends them; compared with the FFmpeg path once ShotDetector ends a run that ends early where that path
+  does, backlog "A stopped run's end at a variable rate"), and whole under the run with every detector, deinterlaced: the scenes
   CSV, the shots as JSON and HTML, the timeline files and the chapters byte for byte, the shots starting at the frames
   given and the last one ending where the run's did, and the run's own `CutFrames` given back giving the run's own
   downloads; the run's cuts, the corrected
