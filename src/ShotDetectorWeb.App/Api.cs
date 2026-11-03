@@ -136,7 +136,7 @@ public static partial class Api
 
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
         return Answered(input, options, result, ranges,
-            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result),
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result, input.Video),
             earlier.Damaged.Concat(input.DamagedFrames(result.FrameCount)));
     }
 

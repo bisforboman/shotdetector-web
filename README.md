@@ -764,7 +764,9 @@ back, by the mean difference of its samples, on the frames as the run reads them
 deinterlaced frames (the card says so). A split run's ranges each keep their comparisons and the merge gives the whole
 video's spans; a range that starts inside a still is scored again first, given the ranges before it, from the still's
 first frame (`VideoInput.ScoreAgain`, ShotDetector's `FirstRangeToScoreAgain`, in the merging worker), and a resumed
-run's rest that starts inside one is given its frames from there (`VideoInput.Continue`). Decision
+run's rest that starts inside one is given its frames from there (`VideoInput.Continue`). ShotDetector times them
+from the stream's start, as `ffmpeg -vf freezedetect` prints them; the page adds the stream's start, timing them by the
+stream's own pts as its black spans are (`-copyts`: `PictureFreeze.Of`). Decision
 [2026-11-03-spans-on-ranges.md](docs/decisions/2026-11-03-spans-on-ranges.md), the owner's choice (before it, only a
 run that read every frame in order looked, FrameReader's `FreezeDetector`: 2026-11-01-freeze-spans.md). A stopped run's
 are those found by its stop, one still going there without an end. A stopped run kept before this, its ranges scored

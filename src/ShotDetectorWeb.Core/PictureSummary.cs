@@ -135,12 +135,19 @@ public sealed record PictureFreeze(IReadOnlyList<PictureStill>? Spans, string? N
     public static PictureFreeze KeptWithout { get; } = new(null,
         "Not looked for: the stopped part was kept before the page looked for still pictures in every run. A run from the start looks for them.");
 
-    /// <summary><paramref name="result"/>'s still pictures, or <see cref="KeptWithout"/> when it didn't look for them.</summary>
-    public static PictureFreeze Of(ShotDetector.DetectionResult result)
+    /// <summary>
+    /// <paramref name="result"/>'s still pictures, or <see cref="KeptWithout"/> when it didn't look for them. ShotDetector
+    /// times them from the stream's start, as <c>ffmpeg -vf freezedetect</c> prints them; the page times its spans by the
+    /// stream's own pts (as <c>-copyts</c> prints them, the black spans too): <paramref name="video"/>'s start is added.
+    /// </summary>
+    public static PictureFreeze Of(ShotDetector.DetectionResult result, ShotDetector.YuvVideo video)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(video);
+        double start = video.TimeBase is { } tb ? video.StartPts * tb.Num / (double)tb.Den : 0;
         return result.FreezeSpans is { } spans
-            ? new([.. spans.Select(s => new PictureStill(s.StartFrame, s.EndFrame, s.Start, s.End))], null, result.Video.Deinterlaced)
+            ? new([.. spans.Select(s => new PictureStill(s.StartFrame, s.EndFrame, s.Start + start, s.End + start))], null,
+                result.Video.Deinterlaced)
             : KeptWithout;
     }
 }

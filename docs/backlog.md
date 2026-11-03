@@ -69,16 +69,6 @@ publish").
 
 ## Waiting
 
-- Still pictures' times on a stream that doesn't start at 0 (upstream)
-  - Why: ShotDetector 3.28.0's `FreezeSpans` time a still picture from the stream's first pts, where `ffmpeg -vf
-    freezedetect` prints the frame's own pts: `vfr-fragmented-320x240.mp4` (start 0.08 s) shows a still from 5.6 s
-    where freezedetect says 5.68 s; its frames are right. The same on ShotDetector's FFmpeg path. Sent to the
-    shotdetector coordinator 2026-11-03.
-  - Where: the ShotDetector pin, once fixed; `PictureCheck.cs` then drops its note (a still picture's times
-    freezedetect's but for the stream's start) and fails on any difference again.
-  - Done when: every sample's still pictures are freezedetect's to the digits it prints.
-  - Status: Waiting (2026-11-03): on ShotDetector
-
 - A stopped run's end at a variable rate (upstream)
   - Why: with ShotDetector 3.28.0, frames that end early (the page's Stop) end the last shot at the frames read over
     the average rate, where the FFmpeg path ends a run that ends early at the last frame's pts + 1 / average rate, in

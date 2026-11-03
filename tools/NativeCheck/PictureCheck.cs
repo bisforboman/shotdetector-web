@@ -140,8 +140,8 @@ static class PictureCheck
 
         cells.Add(string.Join("; ", blackCells));
         cells.Add(Bars(sample, ours, result, problems));
-        var freeze = PictureFreeze.Of(result);
-        cells.Add(Freeze(freeze, theirs.Freeze, input.Video, problems) + "; " + Deinterlaced(sample, input, libs, problems));
+        var freeze = PictureFreeze.Of(result, input.Video);
+        cells.Add(Freeze(freeze, theirs.Freeze, problems) + "; " + Deinterlaced(sample, input, libs, problems));
         cells.Add(Ranges(input, ours, result, problems));
         cells.Add($"{time.TotalSeconds:F2} s");
 
@@ -153,29 +153,19 @@ static class PictureCheck
     static DetectionOptions Stills => new() { FreezeDetect = new FreezeDetectOptions() };
 
     /// <summary>
-    /// The still pictures against freezedetect's. ShotDetector 3.28.0 times them from the stream's first pts, where
-    /// freezedetect prints the frame's own (vfr-fragmented-*, which starts at 0.08 s): noted, not a failure, when they
-    /// are freezedetect's but for that start (reported upstream 2026-11-03; backlog "Still pictures' times on a stream
-    /// that doesn't start at 0").
+    /// The still pictures against freezedetect's (-copyts: the stream's own pts, as the page times them;
+    /// <see cref="PictureFreeze.Of"/> adds the stream's start to ShotDetector's).
     /// </summary>
-    static string Freeze(PictureFreeze ours, List<FreezeLine> theirs, YuvVideo video, List<string> problems)
+    static string Freeze(PictureFreeze ours, List<FreezeLine> theirs, List<string> problems)
     {
         var spans = ours.Spans!;
-        bool Same(double shift) => spans.Count == theirs.Count && spans.Zip(theirs).All(p => Printed(p.Second.Start, p.First.Start + shift) &&
-            (p.First.End is { } end ? p.Second.End is { } e && Printed(e, end + shift) : p.Second.End is null));
-        double start = video.TimeBase is { } tb ? video.StartPts * tb.Num / (double)tb.Den : 0;
+        bool same = spans.Count == theirs.Count && spans.Zip(theirs).All(p => Printed(p.Second.Start, p.First.Start) &&
+            (p.First.End is { } end ? p.Second.End is { } e && Printed(e, end) : p.Second.End is null));
         string Shown(PictureStill s) => $"{s.Start:0.######}-{(s.End is { } e ? e.ToString("0.######", CultureInfo.InvariantCulture) : "end")}";
-        string note = "";
-        if (!Same(0))
-        {
-            if (start != 0 && Same(start))
-                note = $" (ShotDetector's, from the stream's start: freezedetect's {start:0.###} s later; upstream)";
-            else
-                problems.Add($"freezedetect: {string.Join(", ", spans.Select(Shown))}, FFmpeg's {string.Join(", ", theirs.Select(t => $"{t.Start}-{t.End ?? "end"}"))}");
-        }
-
-        return (spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s =>
-            $"{s.Start:0.###}-{(s.End is { } e ? e.ToString("0.###", CultureInfo.InvariantCulture) : "end")} s"))) + note;
+        if (!same)
+            problems.Add($"freezedetect: {string.Join(", ", spans.Select(Shown))}, FFmpeg's {string.Join(", ", theirs.Select(t => $"{t.Start}-{t.End ?? "end"}"))}");
+        return spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s =>
+            $"{s.Start:0.###}-{(s.End is { } e ? e.ToString("0.###", CultureInfo.InvariantCulture) : "end")} s"));
     }
 
     /// <summary>

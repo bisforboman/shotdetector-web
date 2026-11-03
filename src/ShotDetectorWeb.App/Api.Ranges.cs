@@ -176,7 +176,7 @@ public static partial class Api
             throw new InvalidOperationException(NotMerged + e.Message, e);
         }
 
-        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures), PictureFreeze.Of(result),
+        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures), PictureFreeze.Of(result, input.Video),
             damaged);
     }
 
