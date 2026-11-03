@@ -25,7 +25,7 @@ internal static class CorrectionCheck
         Console.WriteLine("| --- | --- | --- | --- | --- |");
         foreach (string sample in samples)
         {
-            var input = VideoInput.Open(sample);
+            var input = FfmpegDecoder.Open(sample);
             var detected = input.Detect(Options);
             var starts = detected.Shots.Select(s => (int)s.Start.FrameNum).ToList();
             var whole = Edit(starts, detected.FrameCount);
