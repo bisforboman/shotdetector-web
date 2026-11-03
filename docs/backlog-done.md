@@ -1684,3 +1684,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `still-320x240-25.mp4`, has keyframes inside a still: its split run scores a range again. PictureCheck holds a
     split, a resumed and a deinterlaced run's still pictures; app-check every run's split, resumed and stopped ones to
     its own whole run's)
+
+- Deinterlacing above 8 bits: ShotDetector 3.28.0's yadif
+  - Why: the owner's third row after 3.28.0 (the coordinator, 2026-11-03): its FFmpeg path runs yadif over 9 to 16
+    bits on one thread, as its C code, so a deinterlaced 10-bit run is the same every time. Check whether NativeCheck's
+    `av_force_cpu_flags(0)` and any one-worker limit can go, and what ranges need.
+  - Status: Done (2026-11-03: NativeCheck without `av_force_cpu_flags(0)` agreed on all four 10-bit samples, every
+    run deinterlaced ones included, three times in a row, so it goes from Program.cs, CorrectionCheck.cs and
+    PictureCheck.cs and the CLAUDE.md gotcha with it. The page has no one-worker limit for such a run: its ranges
+    already deinterlace (`RangeFrames`' margins, ShotDetector 3.25.0), and the checks hold split and resumed
+    deinterlaced runs to the whole run's)

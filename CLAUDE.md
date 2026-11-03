@@ -171,6 +171,3 @@ differ.
   a variable rate). A corrected list is ShotDetector 3.28.0's `LoadScenes(DetectionResult, cutFrames, options)`,
   which keeps the run's frame times and length; `LoadScenes` of a scene list (scenedetect's) times a cut at frame /
   average rate and ends at nb_frames.
-- FFmpeg 8.1's x86 SIMD yadif gives a different result on every run over 9 to 16 bits (its C code doesn't, and
-  FastYuv's `Yadif` follows the C code): NativeCheck runs the FFmpeg path of a deinterlaced 10-bit run with
-  `av_force_cpu_flags(0)`.

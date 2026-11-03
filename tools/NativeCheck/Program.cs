@@ -84,23 +84,9 @@ foreach (string sample in samples)
         var ours = input.Detect(baseOptions);
         var oursTime = watch.Elapsed;
         watch.Restart();
-        // FFmpeg 8.1's x86 SIMD yadif gives a different result on every run over 9 to 16 bits (its C code doesn't, and
-        // FastYuv's Yadif follows the C code: ShotDetector's DetectionOptions.Yadif): a deinterlaced run over more than
-        // 8 bits is compared with FFmpeg's C code, its SIMD off for the run (FFmpeg picks its functions as a filter or
-        // decoder starts).
-        bool cOnly = baseOptions.Deinterlace != DeinterlaceMode.Off && input.Video.PixelFormat.Contains("p10", StringComparison.Ordinal);
-        if (cOnly)
-            FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(0);
-        DetectionResult file;
-        try
-        {
-            file = ShotDetection.Detect(sample, baseOptions with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new SwscaleYuv420() });
-        }
-        finally
-        {
-            if (cOnly)
-                FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(-1);
-        }
+        // ShotDetector 3.28.0 runs FFmpeg's yadif over 9 to 16 bits on one thread, as its C code: the same on every run,
+        // FastYuv's Yadif's (before it, NativeCheck turned FFmpeg's SIMD off for such a run).
+        var file = ShotDetection.Detect(sample, baseOptions with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new SwscaleYuv420() });
 
         var fileTime = watch.Elapsed;
 

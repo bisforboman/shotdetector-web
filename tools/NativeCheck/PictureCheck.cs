@@ -16,7 +16,7 @@
 // - freezedetect with its defaults: ShotDetector's still pictures (FreezeSpans, decision 2026-11-03-spans-on-ranges.md),
 //   their freeze_start and freeze_end to the digits FFmpeg prints (one still at the end has no freeze_end); and a run
 //   deinterlacing (Deinterlace On), whose still pictures are of its deinterlaced frames, against the FFmpeg path's
-//   (Detect(path): FFmpeg's yadif, its C code over 8 bits), frames and times.
+//   (Detect(path): FFmpeg's yadif), frames and times.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
 // joined, their measures must be the whole run's, byte for byte; merged after ShotDetector's FirstRangeToScoreAgain
 // (VideoInput.ScoreAgain: a range that starts inside a still scored again), their still pictures the whole run's; and
@@ -170,26 +170,13 @@ static class PictureCheck
 
     /// <summary>
     /// A run deinterlacing every frame (Deinterlace On): its still pictures, of the deinterlaced frames, against the FFmpeg
-    /// path's (FFmpeg's yadif; its C code over 8 bits, as NativeCheck runs it).
+    /// path's (FFmpeg's yadif).
     /// </summary>
     static string Deinterlaced(string sample, VideoInput input, string libs, List<string> problems)
     {
         var options = Stills with { Deinterlace = DeinterlaceMode.On };
         var ours = input.Detect(options);
-        bool cOnly = input.Video.PixelFormat.Contains("p10", StringComparison.Ordinal);
-        if (cOnly)
-            FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(0);
-        DetectionResult file;
-        try
-        {
-            file = ShotDetection.Detect(sample, options with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new ShotDetector.FastYuv.SwscaleYuv420() });
-        }
-        finally
-        {
-            if (cOnly)
-                FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(-1);
-        }
-
+        var file = ShotDetection.Detect(sample, options with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new ShotDetector.FastYuv.SwscaleYuv420() });
         if (!SameStills(ours.FreezeSpans, file.FreezeSpans))
         {
             problems.Add($"deinterlaced, still pictures {Shown(ours.FreezeSpans)}, the FFmpeg path's {Shown(file.FreezeSpans)}");

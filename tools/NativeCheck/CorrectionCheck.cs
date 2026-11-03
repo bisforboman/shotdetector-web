@@ -11,7 +11,6 @@
 // starts of the whole run go to --out: app-check.mjs gives the starts to the App's Correct and writes its downloads
 // beside them, which tools/check.sh compares; page-check.mjs corrects the run's cuts to them on the page.
 using System.Text.Json;
-using FFmpeg.AutoGen;
 using ShotDetector;
 using ShotDetector.FastYuv;
 using ShotDetectorWeb;
@@ -46,7 +45,7 @@ internal static class CorrectionCheck
                     : ReferenceEquals(run, Options) ? detected : input.Detect(run);
                 // The FFmpeg path's run ends at the core's stopped frame (EndTime as a frame number: a time × the average
                 // rate, that frame at a constant rate).
-                var file = FilePath(sample, input, run with { EndTime = end?.ToString(System.Globalization.CultureInfo.InvariantCulture) }, libs);
+                var file = FilePath(sample, run with { EndTime = end?.ToString(System.Globalization.CultureInfo.InvariantCulture) }, libs);
                 var edited = Edit([0, .. ours.CutFrames], ours.FrameCount);
                 string name = Path.Combine(outDir, Runs.BaseName(sample, written ? "corrected" : end is null ? "corrected-deinterlaced" : "corrected-stopped"));
                 if (written)
@@ -133,25 +132,9 @@ internal static class CorrectionCheck
             yield return ($"chapters {minimum} s", $"chapters-{minimum}.json", TimelineFiles.Chapters(a, minimum), TimelineFiles.Chapters(b, minimum));
     }
 
-    /// <summary>
-    /// The FFmpeg path's run of <paramref name="sample"/>, as NativeCheck's own (Program.cs): FFmpeg in-process, a
-    /// deinterlaced run over 8 bits on FFmpeg's C code.
-    /// </summary>
-    static DetectionResult FilePath(string sample, VideoInput input, DetectionOptions options, string libs)
-    {
-        bool cOnly = options.Deinterlace != DeinterlaceMode.Off && input.Video.PixelFormat.Contains("p10", StringComparison.Ordinal);
-        if (cOnly)
-            ffmpeg.av_force_cpu_flags(0);
-        try
-        {
-            return ShotDetection.Detect(sample, options with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new SwscaleYuv420() });
-        }
-        finally
-        {
-            if (cOnly)
-                ffmpeg.av_force_cpu_flags(-1);
-        }
-    }
+    /// <summary>The FFmpeg path's run of <paramref name="sample"/>, as NativeCheck's own (Program.cs): FFmpeg in-process.</summary>
+    static DetectionResult FilePath(string sample, DetectionOptions options, string libs) =>
+        ShotDetection.Detect(sample, options with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new SwscaleYuv420() });
 
     /// <summary>
     /// The shots' first frames after a viewer's corrections, as the page makes them: the first cut removed, the last
