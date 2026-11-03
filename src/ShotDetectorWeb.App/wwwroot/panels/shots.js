@@ -221,14 +221,15 @@ on('done', ({ result }) => {
 });
 on('corrected', ({ result, edits }) => {
   clear();
+  // A shot after the first starts at its cut, result.cutFrames' (counted from 0 as decoded, as edits are).
   const added = new Set(edits.added);
-  for (const shot of result.shots) {
+  result.shots.forEach((shot, i) => {
     addRow(shot);
-    if (!added.has(shot.startFrame - 1)) continue;
+    if (i === 0 || !added.has(result.cutFrames[i - 1])) return;
     const r = body.rows[body.rows.length - 1];
     r.classList.add('corrected');
     r.title = `${r.title}. It starts at a cut you added on the page`;
-  }
+  });
 });
 on('cancelled', ({ video, done }) => {
   const from = last ? secondsOf(last.endTimecode) : 0, to = frameSeconds(video, done);

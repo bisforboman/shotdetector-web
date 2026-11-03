@@ -69,6 +69,23 @@ publish").
 
 ## Waiting
 
+- A stopped run's end at a variable rate (upstream)
+  - Why: with ShotDetector 3.28.0, frames that end early (the page's Stop) end the last shot at the frames read over
+    the average rate, where the FFmpeg path ends a run that ends early at the last frame's pts + 1 / average rate, in
+    the stream's time. At a variable rate that is another time altogether (`vfr-320x240.mp4` stopped at frame 75:
+    4.740 s against 3.5832 s); at a constant rate whose frames aren't exact in the stream's time base, a millisecond
+    or a few microseconds (`vp9-bt709-640x360-2997.webm` at frame 67: 2.236 s against 2.235 s; the 29.97 AVI's and
+    Sintel's editors' files). Sent to the shotdetector coordinator 2026-11-03; the owner chose to fix it in
+    ShotDetector (the frame source ends where the file path does).
+  - Where: the ShotDetector pin to the release with shotdetector#730, which ends it where the file path does only when
+    `YuvVideo.FrameTimestamps` is given (without them a stop looks like the video's end; the owner's choice, shotdetector's
+    decision 2026-11-03-stopped-frame-source-end.md): the core then gives every file's frame timestamps, at a constant
+    rate too (an AVI's, a WebM's), not only a variable rate's, and NativeCheck's description check follows;
+    `CorrectionCheck.cs` compares a stopped corrected run with the FFmpeg path's (`EndTime` at the stopped frame), which
+    it holds only to its own run until then.
+  - Done when: NativeCheck's stopped corrected runs agree with the FFmpeg path on every sample.
+  - Status: Waiting (2026-11-03): on the ShotDetector release with the fix
+
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
     npm's trusted publishing needs the package to exist on npmjs.com with this repository's `npm.yml` as its trusted
@@ -119,25 +136,6 @@ that waited on them are open. ShotDetector 3.25.0 and FrameReader 2.19.0 (2026-1
 [#647](https://github.com/bisforboman/shotdetector/issues/647) (`LoadScenes` over a `YuvVideo`), odd heights, and
 FrameReader's `PictureMeter` and `SilenceFinder` (the page's measures moved upstream, the owner's decision 2026-10-31
 in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 3.25.0 and FrameReader 2.19.0".
-
-- A corrected list timed as its run (upstream)
-  - Why: ShotDetector 3.26.0's `LoadScenes`, which makes a corrected list's downloads (decision
-    [2026-11-02-correcting-cuts.md](decisions/2026-11-02-correcting-cuts.md)), times cuts at frame / average rate on a
-    variable-rate file and takes the video's length as nb_frames. `Detect` uses the frames' pts and the frames played.
-    The first correction on such a file retimes every cut or moves the last shot's end (`fragmented-moov`: 38 of 114
-    frames). This is the same on the FFmpeg path, and scenedetect 0.7.2's own load-scenes gives the same numbers, so
-    `LoadScenes` stays as it is. Upstream adds an overload that takes a `DetectionResult` and the edited cuts and keeps
-    that run's frame times and length ([shotdetector#707](https://github.com/bisforboman/shotdetector/issues/707), the
-    owner's choice, 2026-11-02).
-  - Where: the ShotDetector pin to the release with shotdetector#711 (merged 2026-11-02, not yet released):
-    `LoadScenes(DetectionResult run, IEnumerable<int> cutFrames, DetectionOptions? options)` in `CorrectedCuts`. Its
-    cut frames are frames counted as decoded (`run.CutFrames`, `run.FrameOf(position)`), not the scene list's Start
-    Frame − 1, which is time × average rate and differs at a variable rate: the page's `detectedCuts()`, `correct()`
-    and the kept corrections move to decoded frames. It takes the run's MinSceneLength, DropShortScenes and
-    MergeLastScene; StartTime, EndTime and RangeDuration throw (a stopped run's range is the run's). The checks then
-    compare against `Detect`'s own exports for the uncorrected list, and `CorrectionCheck.cs`'s note becomes a failure.
-  - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
-  - Status: Waiting (on the ShotDetector release with shotdetector#711, 2026-11-02)
 
 ## Maybe
 

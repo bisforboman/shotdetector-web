@@ -104,7 +104,7 @@ on('corrected', ({ video, result, edits }) => {
   shots = result.shots.map(told);
   cuts = shots.filter(s => s.shot > 1).map(s => s.start);
   const frames = new Set(edits.added);
-  added = new Set(result.shots.filter(s => frames.has(s.startFrame - 1)).map(s => secondsOf(s.startTimecode)));
+  added = new Set(result.shots.filter((s, i) => i > 0 && frames.has(result.cutFrames[i - 1])).map(s => secondsOf(s.startTimecode)));
   removed = edits.removed.map(f => frameSeconds(video, f));
   cutsLane.draw();
 });

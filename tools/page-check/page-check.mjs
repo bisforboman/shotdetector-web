@@ -839,7 +839,7 @@ async function corrections(page, what, file, run, reload) {
   const native = join(nativeDir, stem(file));
   if (!existsSync(`${native}.corrected.starts.json`)) return fail(`${what}: no ${native}.corrected.starts.json (tools/check.sh native first)`);
   const wanted = JSON.parse(readFileSync(`${native}.corrected.starts.json`, 'utf8')).slice(1);
-  const detected = JSON.parse(readFileSync(`${native}.${run}.shots.json`, 'utf8')).slice(1).map(s => s.startFrame - 1);
+  const detected = JSON.parse(readFileSync(`${native}.corrected.cuts.json`, 'utf8')); // the run's cuts, frames as decoded
   const { num, den } = JSON.parse(await page.textContent('#about pre')).frameRate;
   const at = async frame => {
     await page.evaluate(t => new Promise(ok => {

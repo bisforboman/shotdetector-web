@@ -25,9 +25,10 @@ public static partial class Api
 
     /// <summary>
     /// Corrects the last run's cuts: <paramref name="startsJson"/> is the shots' first frames (a JSON array, counted
-    /// from 0, frame 0 among them), or <c>null</c> to go back to the run's own. Returns the result as
-    /// <see cref="Detect"/>'s JSON (the shots, the run's frame count, rate, duration, whether it was stopped, and its
-    /// warnings). For a stopped run, the corrected result also ends where the run stopped.
+    /// from 0 as decoded, frame 0 among them: the run's <c>cutFrames</c> and frame 0 give its own shots), or
+    /// <c>null</c> to go back to the run's own. Returns the result as <see cref="Detect"/>'s JSON (the shots and their
+    /// cuts' frames, the run's frame count, rate, duration, whether it was stopped, and its warnings). The corrected
+    /// result keeps the run's frame times and length (<see cref="CorrectedCuts"/>): a stopped run's ends where it stopped.
     /// </summary>
     [JSExport]
     public static string Correct(string startsJson)
@@ -46,15 +47,14 @@ public static partial class Api
                 throw new ArgumentOutOfRangeException(nameof(startsJson), $"A shot starts outside the {run.FrameCount} frames read.");
             if (!starts.Contains(0))
                 throw new ArgumentException("The first shot starts at frame 0.", nameof(startsJson));
-            _corrected = CorrectedCuts.Load(input.Video, starts, _keptOptions ?? new DetectionOptions(),
-                stopped ? run.FrameCount : null);
+            _corrected = CorrectedCuts.Load(run, starts, _keptOptions ?? new DetectionOptions());
         }
 
         var shown = Shown;
         using var shots = JsonDocument.Parse(Shots.Json(shown.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, run.FrameCount, run.Video.FrameRate, run.Video.Duration, stopped,
-                _warnings),
+            new DetectResponse(shots.RootElement, shown.CutFrames, run.FrameCount, run.Video.FrameRate, run.Video.Duration,
+                stopped, _warnings),
             ApiJson.Default.DetectResponse);
     }
 }

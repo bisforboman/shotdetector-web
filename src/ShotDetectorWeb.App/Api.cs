@@ -166,7 +166,7 @@ public static partial class Api
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
+            new DetectResponse(shots.RootElement, result.CutFrames, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
                 result.FrameCount < input.ShownFrames, _warnings),
             ApiJson.Default.DetectResponse);
     }
@@ -324,11 +324,13 @@ sealed class RunCancelledException(OperationCanceledException inner) : Exception
 /// <summary>
 /// What <see cref="Api.Detect"/> returns. Stopped: the run was stopped (<see cref="Api.Stop"/>) and its frames ended at
 /// <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is still the file's.
+/// CutFrames: the frames the shots after the first start on, counted from 0 as decoded
+/// (<see cref="DetectionResult.CutFrames"/>), which the page's corrections are in.
 /// Warnings: <see cref="DetectionResult.Warnings"/>' sentences as ShotDetector words them (empty when there are none),
 /// what the user should know about how the video was read.
 /// </summary>
 sealed record DetectResponse(
-    JsonElement Shots, int FrameCount, Fps FrameRate, TimeSpan? Duration, bool Stopped, IReadOnlyList<string> Warnings);
+    JsonElement Shots, IReadOnlyList<int> CutFrames, int FrameCount, Fps FrameRate, TimeSpan? Duration, bool Stopped, IReadOnlyList<string> Warnings);
 
 /// <summary>Durations as seconds, which JavaScript can use as they are.</summary>
 sealed class SecondsConverter : JsonConverter<TimeSpan>
