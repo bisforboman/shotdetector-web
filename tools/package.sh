@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The npm package (decision docs/decisions/2026-11-02-npm-package.md): package/'s own files (index.js, index.d.ts,
 # package.json, README.md) and the App's publishes, put together into <out> (default out/package/), ready for npm pack:
-#   aot/          the App's worker.js, blob-read.js, blob-write.js, pause.js and _framework/, compiled ahead of time
+#   aot/          the App's worker.js, blob-read.js, blob-write.js, pause.js, video-decode.js and _framework/, compiled
+#                 ahead of time
 #   interpreted/  the same, interpreted
 #   threads.js, pause.js, blob-write.js, threads/_framework/   the threaded runner and the threaded AOT bundle
 #   licenses/     FastYuv's COPYING.LGPL (LGPL-2.1: it stays its own file), LICENSE, THIRD-PARTY-NOTICES.md
@@ -51,7 +52,7 @@ if [[ -z $aotFrom ]]; then
   aotRoot=$work/aot/wwwroot threadsRoot=$work/threads/wwwroot
 fi
 
-worker=(worker.js blob-read.js blob-write.js pause.js)
+worker=(worker.js blob-read.js blob-write.js pause.js video-decode.js)
 for bundle in aot interpreted; do
   root=$([[ $bundle == aot ]] && echo "$aotRoot" || echo "$work/interpreted/wwwroot")
   mkdir -p "$out/$bundle"

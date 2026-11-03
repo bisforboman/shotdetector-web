@@ -36,7 +36,7 @@ export class ShotDetector {
     this.#end();
     this.file = file;
     this.threads = 1;
-    if (this.threadsAsked > 1 && globalThis.crossOriginIsolated === true && !await isAvi(file)) {
+    if (this.threadsAsked > 1 && globalThis.crossOriginIsolated === true && await isMp4(file)) {
       const { ThreadedRunner, threadsUsable } = await import(new URL('threads.js', this.base).href);
       if (threadsUsable()) {
         this.#listen(new ThreadedRunner(this.threadsAsked));
@@ -263,10 +263,20 @@ function abortError() {
   return new DOMException('The run was cancelled.', 'AbortError');
 }
 
-// Whether a file is an AVI (RIFF....AVI ), as VideoInput.Open tells containers apart by their first bytes.
+// A file's container by its first bytes, as VideoInput.Open tells them apart: an AVI (RIFF....AVI ), a WebM (EBML),
+// else an MP4. Only an MP4 goes on threads: an AVI's MJPEG and a WebM's frames (the browser's VideoDecoder, in the worker:
+// decision 2026-11-02-webm-browser-decoder.md) are decoded on one thread, as on the page.
+async function firstBytes(file) {
+  return new Uint8Array(await file.slice(0, 12).arrayBuffer());
+}
 async function isAvi(file) {
-  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const b = await firstBytes(file);
   return String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...b.subarray(8, 12)) === 'AVI ';
+}
+async function isMp4(file) {
+  const b = await firstBytes(file);
+  const webm = b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3;
+  return !webm && !await isAvi(file);
 }
 
 async function fromJpegs(j, times, width, quality) {

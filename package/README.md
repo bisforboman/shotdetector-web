@@ -24,8 +24,10 @@ upload form.
 ## What it reads
 
 The same input as the [page](https://bisforboman.github.io/shotdetector-web/): H.264 in MP4 (8-bit 4:2:0 or 4:2:2,
-10-bit 4:2:0, fragmented too, a constant or variable rate, rotated, progressive or interlaced as MBAFF), and MJPEG in
-AVI. Any other file is refused when it's opened, with an `Error` saying what it is.
+10-bit 4:2:0, fragmented too, a constant or variable rate, rotated, progressive or interlaced as MBAFF), MJPEG in AVI,
+and VP9 or AV1 in WebM (its frames decoded by the browser's own `VideoDecoder`, in the worker: a browser without it
+refuses the run, and such a run never goes on threads). Any other file is refused when it's opened, with an `Error`
+saying what it is.
 
 ## API
 

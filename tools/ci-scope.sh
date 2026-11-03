@@ -9,9 +9,10 @@
 #           files that no wasm check loads (index.html, style.css, app.js, which NativeCheck's DefaultsCheck reads,
 #           timeline.js, versions.js and sw.js, which only the page check runs, panels/, the installed app's
 #           manifest.webmanifest and icons) and the smoke test itself (tools/page-check/, but package-check.mjs)
-#   all     everything else: the core, the App's .NET side, blob-read.js, blob-write.js and pause.js (the wasm checks
-#           import them from the bundle), worker.js and threads.js (the npm package ships them: its check runs with
-#           the AOT check), the npm package (package/, tools/package.sh, tools/page-check/package-check.mjs), the packages, the samples' recipe, the checks' scripts, the workflows, and any
+#   all     everything else: the core, the App's .NET side, blob-read.js, blob-write.js, pause.js and video-decode.js (the
+#           wasm checks import them from the bundle), worker.js and threads.js (the npm package ships them: its check runs
+#           with the AOT check), the npm package (package/, tools/package.sh, tools/page-check/package-check.mjs), the
+#           packages, the samples' recipe, the checks' scripts, the workflows, and any
 #           path not named here. A wasm check always needs the native one: it compares the native run's CSVs.
 # A path no rule names is "all": a new file is checked in full until a rule says otherwise.
 set -euo pipefail
@@ -24,8 +25,9 @@ while IFS= read -r path; do
     tools/realworld.sh | .github/workflows/realworld.yml)
       need=none ;;
     src/ShotDetectorWeb.App/wwwroot/blob-read.js | src/ShotDetectorWeb.App/wwwroot/blob-write.js | \
-    src/ShotDetectorWeb.App/wwwroot/pause.js | src/ShotDetectorWeb.App/wwwroot/worker.js | \
-    src/ShotDetectorWeb.App/wwwroot/threads.js | tools/page-check/package-check.mjs)
+    src/ShotDetectorWeb.App/wwwroot/pause.js | src/ShotDetectorWeb.App/wwwroot/video-decode.js | \
+    src/ShotDetectorWeb.App/wwwroot/worker.js | src/ShotDetectorWeb.App/wwwroot/threads.js | \
+    tools/page-check/package-check.mjs)
       need=all ;;
     src/ShotDetectorWeb.App/wwwroot/index.html | src/ShotDetectorWeb.App/wwwroot/style.css | \
     src/ShotDetectorWeb.App/wwwroot/app.js | src/ShotDetectorWeb.App/wwwroot/timeline.js | \

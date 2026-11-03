@@ -20,7 +20,7 @@ scope) are in shotdetector's
 The page is live at **https://bisforboman.github.io/shotdetector-web/**, compiled ahead of time and deployed by
 `.github/workflows/pages.yml` on each push to `main` once the checks pass on it (Checks; it runs locally too: "Running
 the page").
-`src/ShotDetectorWeb.Core` opens an MP4 or an AVI and detects; the checks show that its scene and stats CSVs equal ShotDetector's
+`src/ShotDetectorWeb.Core` opens an MP4, an AVI or a WebM and detects; the checks show that its scene and stats CSVs equal ShotDetector's
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
@@ -37,14 +37,25 @@ little-endian words, yuv420p10le), its chroma location the SPS's (left without o
 conversion interpolates from; its picture is measured in 10-bit code values, as FFmpeg's filters measure it ("The
 picture"). **And 4:2:0 or 4:2:2 MJPEG
 in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not measured; decision
-`docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
+`docs/decisions/2026-10-30-mjpeg-avi.md`). **And VP9 or AV1 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full
+range or not, with a DefaultDuration and a Duration; decisions `docs/decisions/2026-11-02-browser-decoder.md` and
+`2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
+libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
+browser's own `VideoDecoder` (WebCodecs) in the page's worker, on that worker alone (no threads, no split, a stopped
+run not kept), its run card's chip "your browser's decoder". Natively FFmpeg stands in for the browser
+(`tools/NativeCheck/FfmpegDecoder.cs`: the core's packets as IVF to ffmpeg) and every check holds the result to
+`Detect(path)`'s byte for byte; page-check then holds Chromium's decoder to the same files on every WebM sample. A
+browser whose decoder doesn't take the codec, or whose frames aren't Y, U and V planes (Firefox's BGRX), refuses the run
+and says so; Node has no `VideoDecoder`, so app-check.mjs checks that a WebM opens and its run is refused. Its audio is
+described, not measured. Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, greyscale, 10-bit 4:2:2 or more than
 10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
 `docs/decisions/2026-10-30-scope-widening.md`). Another codec or container is named as a viewer and FFmpeg name it
-(`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4 and MJPEG in AVI
-so far.", "This is a WebM file (FFmpeg's matroska,webm), ..."), and the page says under a refusal what reads the file
-instead: ShotDetector's `shotdetect` command, and for HEVC an iPhone's Most Compatible format (decision
-`docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `vp9.webm`, `av1.mp4`). A frame size that changes midway is refused by
+(`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4, MJPEG in AVI,
+and VP9 and AV1 in WebM so far.", "The video is VP8 (FFmpeg's vp8; 'V_VP8'): ..."), and the page says under a refusal
+what reads the file instead: ShotDetector's `shotdetect` command, and for HEVC an iPhone's Most Compatible format
+(decision `docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `av1.mp4`, `vp8.webm`,
+`h264.mkv`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
 matrix, range or chroma location that changes midway in band (a splice: a later SPS with other VUI tags) is followed
@@ -991,7 +1002,13 @@ rules for changing them (adding to the page among them).
   the first bytes; what never looks at the container, below, is its; decision `2026-10-30-mjpeg-avi.md`) with
   `Mp4Input` and `AviInput` (MJPEG in AVI: `AviDemuxer`, `MjpegDecoder`, `AviHeader` for each stream's 'strh'/'strf':
   the audio's codec, rate, channels and VBR length; refuses 4:4:4 and greyscale JPEG and a file with fewer chunks than its
-  header's dwLength) each describing its file and decoding its frames. `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
+  header's dwLength) each describing its file and decoding its frames, and `WebmInput` (VP9 and AV1 in WebM, decision
+  `2026-11-02-webm-browser-decoder.md`: `MatroskaReader` for the EBML header, Info, Tracks and the video's blocks,
+  `Vp9Header`'s key frame header and `Av1Header`'s sequence header for the format and colour, as FFmpeg's vp9 and
+  libdav1d give them; its frames from the host's `IHostDecoder`, the browser's `VideoDecoder` through the App's
+  `JsDecoder`, FFmpeg in NativeCheck, each given its block's pts and its picture type; `VideoInput.DecodedFramesAsync`,
+  the frames as an asynchronous source, which the MP4 and AVI inputs give from their synchronous decoders; `Refusal`,
+  the words of a codec or container refusal). `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
   `DetectAsync`: the frames as an asynchronous source that awaits the caller every N frames and ends early when told;
   `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(options, count)`, the video split at keyframes
   from `Packets` into `FrameRange`s about equal in frames (each starting ShotDetector's `RangeFrames` margin past its
@@ -1026,7 +1043,8 @@ rules for changing them (adding to the page among them).
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
   count: `frameCount` is FFmpeg's nb_frames, null when fragmented) and `audio`: `{ codec, sampleRate,
-  channels }` from `VideoInput.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
+  channels }` from `VideoInput.Audio`, or null, and `decodedBy`: `managedcodecs`, or `browser` for a WebM, whose
+  frames `JsDecoder` gets from `wwwroot/video-decode.js`), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
   frameWindow, minContentVal, deinterlace }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
   rate, duration, `stopped` and `warnings` as JSON; one range from frame 0 scored with `OnShot` and merged without it,
   `Detect`'s result byte for byte, so that a stopped run leaves scores, pausing every 8 frames, `PauseEvery`; a run
@@ -1075,7 +1093,10 @@ rules for changing them (adding to the page among them).
   (`Detect` going on from them, the rest's shots told; kept bytes that don't resume as "The stopped run didn't resume:
   ...", on which the page detects from the start).
   `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
-  the file in slices of a megabyte). The threaded bundle (`-p:WasmEnableThreads=true`, `THREADS`; decision
+  the file in slices of a megabyte). `JsDecoder` (`IHostDecoder`) imports `decoderOpen`, `decoderDecode`, `decoderNext`,
+  `decoderTake` and `decoderClose` (`wwwroot/video-decode.js`: WebCodecs' `VideoDecoder` in the worker, software first,
+  each frame copied out packed, I420, I420P10 or I422, NV12 de-interleaved, anything else refused; a packet given, then
+  each frame awaited and copied into .NET's memory). The threaded bundle (`-p:WasmEnableThreads=true`, `THREADS`; decision
   `2026-10-30-threads.md`), published into `wwwroot/threads/_framework/` by `tools/check.sh`'s `publish_app`, runs a
   one-worker run on the page's own thread: `Host.cs` (in it the run goes to the thread pool and each host call back to
   .NET's JavaScript thread; in the worker's bundle a pass-through), `Api.Threads.cs` (`OpenThreaded(file, threads)`,

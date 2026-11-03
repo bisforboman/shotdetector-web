@@ -312,34 +312,6 @@ public sealed class Mp4Input : VideoInput
         }
     }
 
-    /// <summary>
-    /// Every shown frame's pts in presentation order (the packets' that aren't discarded, sorted: what FFmpeg labels the
-    /// frames with) when the frames don't come at the average rate, for ShotDetector's
-    /// <see cref="YuvVideo.FrameTimestamps"/> (a variable frame rate, which it then takes as the file path does); null
-    /// when every frame is within half a frame of where the average rate puts it from the first, the constant-rate check
-    /// ShotDetector makes without them (VideoReader.CheckConstantRate), so a constant-rate video is described as before.
-    /// </summary>
-    static long[]? VariableRate(VideoPackets packets, long firstPts, FrameReader.Rational timeBase, Fps rate)
-    {
-        var pts = new List<long>(packets.Count);
-        for (int i = 0; i < packets.Count; i++)
-        {
-            if ((packets.Flags[i] & PacketFlags.Discard) == 0)
-                pts.Add(packets.Pts[i]);
-        }
-
-        pts.Sort();
-        double seconds = timeBase.Num / (double)timeBase.Den, perSecond = rate.Value;
-        for (int k = 0; k < pts.Count; k++)
-        {
-            double from = (pts[k] - firstPts) * seconds, expected = k / perSecond;
-            if (!(Math.Abs(from - expected) <= 0.5 / perSecond))
-                return [.. pts];
-        }
-
-        return null;
-    }
-
     /// <summary>The video packets' count and total duration: a fragmented file's 'trun' samples, as the walk gives them.</summary>
     sealed class SampleDurations
     {

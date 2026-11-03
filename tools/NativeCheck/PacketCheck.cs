@@ -32,7 +32,7 @@ internal static class PacketCheck
             byte[] file;
             try
             {
-                ours = VideoInput.Open(sample).Packets;
+                ours = FfmpegDecoder.Open(sample).Packets;
                 file = File.ReadAllBytes(sample);
                 theirs = Probe(ffprobe, sample, Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".packets.txt"));
             }

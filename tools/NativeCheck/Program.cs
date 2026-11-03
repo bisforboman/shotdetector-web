@@ -32,7 +32,8 @@ var rejects = new List<string>();
 var RefusalNames = new Dictionary<string, string>
 {
     ["hevc.mp4"] = "FFmpeg's hevc",
-    ["vp9.webm"] = "a WebM file",
+    ["vp8.webm"] = "FFmpeg's vp8",
+    ["h264.mkv"] = "H.264 in Matroska",
     ["av1.mp4"] = "FFmpeg's av1",
     ["mpeg4.mp4"] = "FFmpeg's mpeg4",
     ["h264.avi"] = "FFmpeg's h264",
@@ -61,7 +62,7 @@ foreach (string sample in samples)
     VideoInput input;
     try
     {
-        input = VideoInput.Open(sample);
+        input = FfmpegDecoder.Open(sample);
     }
     catch (Exception e)
     {
@@ -189,7 +190,7 @@ foreach (string reject in rejects)
     {
         // Refused when opened, or, for what only the frames tell (a size that changes midway), by the run: the
         // core's frames refuse it before ShotDetector would read one at the video's size.
-        VideoInput.Open(reject).Detect();
+        FfmpegDecoder.Open(reject).Detect();
         Console.WriteLine($"Not refused: {reject}");
         failures++;
     }

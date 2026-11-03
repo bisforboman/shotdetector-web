@@ -42,8 +42,11 @@
 //      sample opened with it (PWA.launchFilesInApp: the file through launchQueue, to the page already open, as the
 //      manifest's launch_handler says), on threads and on ?threads=0; and the sample shared to the page (the share
 //      target's multipart POST, which sw.js answers) on both: each to the same downloads as 1.
-//  12. each --refused file (HEVC in MP4, VP9 in WebM) picked: the core's refusal naming the codec, what reads the file
+//  12. each --refused file (HEVC in MP4, VP8 in WebM) picked: the core's refusal naming the codec, what reads the file
 //      instead under it, the iPhone's line for HEVC alone (backlog "A refusal that says what to do").
+//  13. each --browser file (VP9 and AV1 in WebM) picked on an isolated page: decoded by Chromium's VideoDecoder on the
+//      page's worker, its chip the browser's decoder's, its downloads, picture and frame types the native check's (FFmpeg
+//      standing in for the browser) byte for byte.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -53,7 +56,7 @@
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
-//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [<more.mp4>...]
+//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -66,7 +69,7 @@ const args = process.argv.slice(2);
 const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
 if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
   console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
-    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [<more.mp4>...]');
+    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
@@ -74,10 +77,14 @@ const interlaced = di >= 0 ? resolve(args[di + 1]) : null;
 // --refused <file>, any number of times: a file the page refuses, with what reads it instead under the message.
 const refusedAt = args.flatMap((a, i) => a === '--refused' ? [i, i + 1] : []);
 const refusedFiles = refusedAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
-const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => ![at, at + 1, di, di + 1, ...refusedAt].includes(i)).map(a => resolve(a));
+// --browser <file>, any number of times: a WebM the browser's own decoder decodes (decision 2026-11-02-webm-browser-decoder.md).
+const browserAt = args.flatMap((a, i) => a === '--browser' ? [i, i + 1] : []);
+const browserFiles = browserAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
+const [root, outDir, sample, demo, avi, ...more] = args
+  .filter((_, i) => ![at, at + 1, ...(di >= 0 ? [di, di + 1] : []), ...refusedAt, ...browserAt].includes(i)).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
 const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
-  ...Object.fromEntries([...more, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
+  ...Object.fromEntries([...more, ...browserFiles, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
 const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
@@ -799,12 +806,39 @@ async function pickedRefused(file) {
     }));
     const hevc = /FFmpeg's hevc/.test(shown.message);
     console.log(`${what}: ${shown.message}`);
-    if (!/this page reads H\.264 in MP4 and MJPEG in AVI so far/.test(shown.message))
+    if (!/this page reads H\.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM so far/.test(shown.message))
       fail(`${what}: the message isn't the core's refusal: ${shown.message}`);
     if (!shown.refused || !shown.link.startsWith('https://github.com/bisforboman/shotdetector'))
       fail(`${what}: no line under the message pointing to the shotdetect command (${JSON.stringify(shown)})`);
     if (shown.hevc !== hevc)
       fail(`${what}: the iPhone's line ${shown.hevc ? 'shown' : 'not shown'} for ${hevc ? 'HEVC' : 'another codec'}`);
+  }
+  report(what, errors);
+  await context.close();
+}
+
+// A WebM picked (VP9 or AV1, decoded by the browser's own VideoDecoder: decision 2026-11-02-webm-browser-decoder.md),
+// on an isolated page: the run goes on the page's worker (not threads, not split, whatever the page's options), says the
+// browser decoded it, its card's chip is the browser's decoder's, and its downloads, picture and frame types are the
+// native check's (FFmpeg's decoder standing in for the browser), byte for byte: Chromium's decoder held to FFmpeg's path.
+async function pickedBrowser(file) {
+  const what = `${basename(file)}, decoded by the browser`;
+  const { context, page, errors } = await open();
+  await page.setInputFiles('#file', file);
+  await page.click('#detect');
+  const run = await page.inputValue('#detector');
+  const status = await finished(page, what);
+  if (status !== null) {
+    if (THREADED.test(status) || /workers/.test(status)) fail(`${what}: not on the page's worker alone: ${status}`);
+    const chip = await page.evaluate(() => {
+      const c = document.querySelector('#run h2 .chip');
+      return { text: c?.textContent, browser: c?.classList.contains('browser') };
+    });
+    if (!chip.browser || chip.text !== 'your browser\'s decoder')
+      fail(`${what}: the run card's chip is ${JSON.stringify(chip)}, not the browser's decoder's`);
+    await compare(page, what, basename(file), run);
+    await picture(page, what, file);
+    await frameTypes(page, what, file);
   }
   report(what, errors);
   await context.close();
@@ -919,7 +953,7 @@ async function manifestValid(page, cdp) {
     m.display !== 'standalone' && `display ${m.display}`,
     !['192x192', '512x512'].every(size => m.icons?.some(i => i.sizes === size && i.type === 'image/png')) &&
       'no 192 and 512 px PNG icons',
-    !['.mp4', '.avi'].every(ext => accepts.includes(ext)) && `file handlers for ${accepts.join(' ') || 'nothing'}`,
+    !['.mp4', '.avi', '.webm'].every(ext => accepts.includes(ext)) && `file handlers for ${accepts.join(' ') || 'nothing'}`,
     !(share?.method === 'POST' && share.enctype === 'multipart/form-data' && share.params?.files?.[0]?.name === 'video') &&
       'no multipart share target with a video',
   ].filter(Boolean);
@@ -992,6 +1026,7 @@ async function sharedTo(query, what) {
 
 try {
   for (const file of refusedFiles) await pickedRefused(file);
+  for (const file of browserFiles) await pickedBrowser(file);
   await pickedAvi();
   await launched('', `${basename(sample)}, opened with the installed app`);
   await launched('?threads=0', `${basename(sample)}, opened with the installed app, the page's worker`);
