@@ -255,9 +255,10 @@ the page's own reading of the shots, marked so, and following the cuts as correc
 
 - The shot statistics card adds the standard deviation of the shot lengths, the sample's (n − 1), to the count,
   average, median, shortest and longest (a stopped run's last shot, cut short, left out as for the others).
-- The Shot lengths card (`panels/shotlengths.js`) draws a bar a shot along the film, as Cinemetrics draws them: each
-  bar where its shot starts, as wide as the shot is long, its height the shot's length, with a trend line, a
-  least-squares polynomial of degree 6 (fewer for fewer than 18 shots) over the shots' middles. A bar plays its shot.
+- The Shot lengths card (`panels/shotlengths.js`), a row of its own under the shots table and the statistics, draws a
+  bar a shot along the film, as Cinemetrics draws them: each bar where its shot starts, as wide as the shot is long, its
+  height the shot's length, with a trend line, a least-squares polynomial of degree 6 (fewer for fewer than 18 shots)
+  over the shots' middles. A bar plays its shot.
 - Its download, `<file>.shot-lengths.csv`: a row a shot, `Shot,Start Frame,Start Time (seconds),Length
   (frames),Length (seconds)`, frames 1-based as in the scenes CSV, times to the millisecond.
 
@@ -1233,7 +1234,7 @@ rules for changing them (adding to the page among them).
   the shot playing removed, one added at the playhead, moved a frame (`,` `.`), undo and redo, by buttons or keys,
   through `app.js`'s `correct(cuts)`, which keeps the corrections as the detected cuts removed and the cuts added, calls
   `Correct`, tells the `corrected` event (cuts, shots, stats, run and bitrate follow it) and keeps them with the kept
-  run in IndexedDB, a corrected finished run kept too, `from` -1), `shotlengths.js` (a card, marked page: a bar a
+  run in IndexedDB, a corrected finished run kept too, `from` -1), `shotlengths.js` (a card under the timeline, its own row, marked page: a bar a
   shot along the film, a trend line of degree 6, the shot-lengths CSV; on `done` and `corrected`), `bitrate.js` (on
   `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,

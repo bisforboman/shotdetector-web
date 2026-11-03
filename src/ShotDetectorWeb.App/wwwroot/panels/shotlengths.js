@@ -1,11 +1,12 @@
-// Shot lengths for film studies (issue #91; the owner's choice, 2026-11-02: cards, not a mode), a card in the details:
-// the run's shots (the corrected ones once the cuts are corrected on the page, 'corrected') as a bar a shot along the
-// film, as Cinemetrics draws them: each bar where its shot starts, its width the shot's time on screen, its height the
-// shot's length, with a trend line through them (a least-squares polynomial of degree 6, fewer for few shots, over the
-// shots' middles). A click on a bar plays the shot. Under it, a CSV of the shot lengths to download: a row a shot, its
-// number, first frame and start, its length in frames and seconds, the numbers of the scenes CSV's shots (1-based
-// frames), the plain list that spreadsheets and shot-length tools read. Everything here is the page's own reading of
-// the shots, and the card's mark says so. A stopped run's last shot, cut short at the stop, has no length here.
+// Shot lengths for film studies (issue #91; the owner's choice, 2026-11-02: cards, not a mode), a card under the
+// timeline, a row of its own under the shots and their statistics: the run's shots (the corrected ones once the cuts
+// are corrected on the page, 'corrected') as a bar a shot along the film, as Cinemetrics draws them: each bar where its
+// shot starts, its width the shot's time on screen, its height the shot's length, with a trend line through them (a
+// least-squares polynomial of degree 6, fewer for few shots, over the shots' middles). A click on a bar plays the shot.
+// Under it, a CSV of the shot lengths to download: a row a shot, its number, first frame and start, its length in
+// frames and seconds, the numbers of the scenes CSV's shots (1-based frames), the plain list that spreadsheets and
+// shot-length tools read. Everything here is the page's own reading of the shots, and the card's mark says so. A
+// stopped run's last shot, cut short at the stop, has no length here.
 import { card, on } from '../app.js';
 import { secondsOf, seek, timecode } from '../timeline.js';
 
@@ -13,6 +14,7 @@ const DEGREE = 6;
 const W = 600, H = 160; // the SVG's own units, stretched to the card's width
 
 const section = card('Shot lengths', {
+  place: 'below',
   mark: 'page',
   markTitle: 'Worked out by the page from the shots ShotDetector found (or as you corrected them): a bar a shot, its ' +
     'height its length, a least-squares trend line through them, and the lengths as a CSV. Not ShotDetector\'s numbers',

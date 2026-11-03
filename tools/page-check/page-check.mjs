@@ -382,7 +382,7 @@ async function compare(page, what, name, run, stoppedAt = null) {
       fail(`${what}: no ${label} to download`);
       continue;
     }
-    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    const download = await clicked(page, link);
     const expectedName = `${stem(name)}.${kind}.${ext}`;
     if (download.suggestedFilename() !== expectedName) {
       fail(`${what}: the ${label} downloads as ${download.suggestedFilename()}, not ${expectedName}`);
