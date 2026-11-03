@@ -38,10 +38,10 @@
 // check wrote (--native: <sample>.packets.txt), exactly.
 // The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
 // <sample>.picture.json, FFmpeg's figures there), exactly, a 10-bit sample's in 10-bit values; a split run's merge the
-// whole run's; a stopped run's (one worker or split) for the frames its result read. The still pictures (freezedetect,
-// decision 2026-11-01-freeze-spans.md) only where the run read every frame in order from the first: the whole run's the
-// native check's, a stopped one-worker run's the whole run's up to its stop (one still there without an end), and a
-// split or resumed run says why it didn't look.
+// whole run's; a stopped run's (one worker or split) for the frames its result read. The still pictures (freezedetect:
+// ShotDetector's, decision 2026-11-03-spans-on-ranges.md) on every run: the whole run's the native check's, a split or
+// resumed run's the whole run's, a stopped run's (one worker or split) the whole run's up to its stop (one still there
+// without an end).
 // The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
 // check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
 // whole run's; a stopped run's the whole run's first frames, as many as its result read.
@@ -718,7 +718,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
     fail(`${name}: the shots told (${rangeTold.length} by the first range, ${told.length} by the merge) aren't its result's`);
   const live = told.length > 0 ? told[0].shot - 1 : rangeTold.length;
   console.error(`${name}: ${rangeTold.length} shots told by the first range as it scored, the merge's from shot ${live + 1}`);
-  if (!samePicture(Picture(), wholePicture, 'split')) fail(`${name}: the merged picture measures aren't the whole run's, or its still pictures were looked for`);
+  if (!samePicture(Picture(), wholePicture)) fail(`${name}: the merged picture measures or still pictures aren't the whole run's`);
   if (FrameTypes() !== wholeTypes) fail(`${name}: the merged frame types aren't the whole run's`);
   console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
     `${bytes.map(b => b.length).join(' + ')} bytes, ${seconds.toFixed(2)} s: ${same ? 'the whole run\'s CSVs' : 'DIFFERENT CSVs'}`);
@@ -734,7 +734,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
       `${n} frames, stopped ${partial.stopped}`);
     return;
   }
-  checkPictureStopped(`${name} stopped in range ${stopFrom}`, partial, 'split');
+  checkPictureStopped(`${name} stopped in range ${stopFrom}`, partial);
   checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, await statsText(), whole, wholeStats,
     DEINTERLACED.includes(run));
 }
@@ -758,28 +758,20 @@ function checkPicture(sample, result) {
   return json;
 }
 
-// Picture() JSON the whole run's but for the still pictures, which a split or resumed run doesn't look for (its
-// freeze.notMeasured says why, starting "Not looked for in a <how> run").
-function samePicture(json, whole, how) {
-  const picture = JSON.parse(json), { freeze } = picture;
-  delete picture.freeze;
-  const wholeOne = JSON.parse(whole);
-  delete wholeOne.freeze;
-  return JSON.stringify(picture) === JSON.stringify(wholeOne) && freeze.spans === null &&
-    freeze.notMeasured?.startsWith(`Not looked for in a ${how} run`) === true;
+// Picture() JSON the whole run's, still pictures and all (ShotDetector's, however the run was split or resumed: decision
+// 2026-11-03-spans-on-ranges.md).
+function samePicture(json, whole) {
+  return JSON.stringify(JSON.parse(json)) === JSON.stringify(JSON.parse(whole));
 }
 
 // A stopped run's picture measures and frame types: the frames its result read, the types the whole run's first. Its
-// still pictures, read in one pass (how null): the whole run's that end by its stop, then the one going on there (if
-// any) without an end; a split run's (how 'split') not looked for.
-function checkPictureStopped(name, result, how = null) {
+// still pictures (one worker or split): the whole run's that end by its stop, then the one going on there (if any)
+// without an end.
+function checkPictureStopped(name, result) {
   const picture = JSON.parse(Picture());
   if (picture.frames !== result.frameCount) fail(`${name}: picture measures of ${picture.frames} frames, the result read ${result.frameCount}`);
-  const { spans, notMeasured } = picture.freeze;
-  if (how !== null) {
-    if (spans !== null || !notMeasured?.startsWith(`Not looked for in a ${how} run`))
-      fail(`${name}: still pictures ${JSON.stringify(picture.freeze)}, not "not looked for"`);
-  } else if (wholePicture !== null) {
+  const { spans } = picture.freeze;
+  if (wholePicture !== null) {
     // The whole run's that ended by the stop; then the one going on there, if it had lasted freezedetect's 2 s by then.
     const n = result.frameCount, whole = JSON.parse(wholePicture).freeze.spans;
     const ended = whole.filter(s => s.endFrame !== null && s.endFrame < n), next = whole[ended.length];
@@ -848,7 +840,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     return scenes === wholeScenes && stats === wholeStats && sameShotFiles(wholeShotFiles) &&
       JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
       JSON.stringify(r.warnings) === JSON.stringify(whole.warnings) &&
-      samePicture(Picture(), wholePicture, 'resumed') && FrameTypes() === wholeTypes;
+      samePicture(Picture(), wholePicture) && FrameTypes() === wholeTypes;
   };
 
   // Stopped at a third, opened again (a later visit) and shown from the kept bytes, resumed and stopped at two thirds.

@@ -41,6 +41,15 @@ enc -filter_complex "$(three 480x270 24000/1001 2)" -c:v libx264 -profile:v base
 enc -filter_complex "testsrc2=s=320x240:r=25:d=2,fade=t=out:st=1.4:d=0.6[a];color=black:s=320x240:r=25:d=0.4[k];mandelbrot=s=320x240:r=25,trim=duration=2,fade=t=in:st=0:d=0.6,fade=t=out:st=1.5:d=0.5[b];smptebars=s=320x240:r=25:d=2,fade=t=in:st=0:d=0.3[c];[a][k][b][c]concat=n=4:v=1:a=0" \
   -c:v libx264 -pix_fmt yuv420p "$out/fades-320x240-25.mp4"
 
+# A still picture across ranges' starts (freezedetect; decision 2026-11-03-spans-on-ranges.md): 2 s moving, 4 s of one
+# frame, 2 s moving, a keyframe every second, so a split run's ranges start inside the still and ShotDetector's
+# FirstRangeToScoreAgain scores them again.
+enc -filter_complex "testsrc2=s=320x240:r=25:d=2[a];testsrc2=s=320x240:r=25:d=0.04,tpad=stop_mode=clone:stop_duration=4[b];mandelbrot=s=320x240:r=25,trim=duration=2[c];[a][b][c]concat=n=3:v=1:a=0" \
+  -c:v libx264 -pix_fmt yuv420p -x264-params keyint=25:min-keyint=25:scenecut=0 "$out/still-320x240-25.mp4"
+got=$("$ff" -hide_banner -nostats -i "$out/still-320x240-25.mp4" -vf freezedetect -f null - 2>&1 | grep -o 'freeze_\(start\|end\): [0-9.]*' | tr '\n' ' ')
+got+=$("$fp" -v error -select_streams v -show_entries frame=key_frame -of csv=p=0 "$out/still-320x240-25.mp4" | grep -n '^1' | cut -d: -f1 | tr '\n' ,)
+[[ $got == 'freeze_start: 2 freeze_end: 6 1,26,51,76,101,126,151,176,201,' ]] || { echo "still-320x240-25.mp4: freezedetect and keyframes are '$got'" >&2; exit 1; }
+
 # Full range (yuvj420p: video_full_range_flag in the SPS, and 'colr' nclx full range).
 enc -filter_complex "$(three 320x240 25 1.5),format=yuvj420p" -c:v libx264 -pix_fmt yuvj420p -color_range pc "$out/full-range-320x240-25.mp4"
 

@@ -94,11 +94,7 @@ public static partial class Api
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
         var go = input.Continue(earlier.Scores, request.ToOptions());
-        // A run from frame 0, not resumed, reads every frame in order: it looks for the still pictures too (decision
-        // 2026-11-01-freeze-spans.md).
-        var picture = go.Rest is { } planned
-            ? new PictureMeter(input.Video, planned, freeze: go.Earlier.Count == 0 && planned.FirstFrame == 0)
-            : null;
+        var picture = go.Rest is { } planned ? new PictureMeter(input.Video, planned) : null;
         var options = request.ToOptions(new JsProgress(go.Rest?.FirstFrame ?? 0, input.ShownFrames), new JsShots());
 
         DetectionResult result;
@@ -120,7 +116,9 @@ public static partial class Api
                     }
                 }
 
-                var merged = input.FromStart(scored);
+                // A rest that starts inside a still picture was given its frames from the still's first (Continue);
+                // ScoreAgain is then a check that nothing is left to score again (decision 2026-11-03-spans-on-ranges.md).
+                var merged = input.ScoreAgain(input.FromStart(scored), options, run.Token);
                 // The shots were told as the frames were scored, the merge's would be told twice.
                 return (input.Merge(merged, options with { OnShot = null, Progress = null }), merged);
             }));
@@ -137,11 +135,8 @@ public static partial class Api
         }
 
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
-        var freeze = picture?.FreezeSpans(result.FrameCount) is { } still
-            ? PictureFreeze.Found(still, picture.Measures.TimeBase)
-            : PictureFreeze.Resumed;
         return Answered(input, options, result, ranges,
-            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), freeze,
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result),
             earlier.Damaged.Concat(input.DamagedFrames(result.FrameCount)));
     }
 
@@ -292,6 +287,13 @@ sealed record DetectRequest
     public IReadOnlyList<DetectorRequest>? Detectors { get; init; }
     public DeinterlaceMode? Deinterlace { get; init; }
 
+    /// <summary>
+    /// Whether the run looks for still pictures (<see cref="DetectionOptions.FreezeDetect"/>, freezedetect's defaults;
+    /// decision 2026-11-03-spans-on-ranges.md): unless false. A stopped run kept before every run looked for them resumes
+    /// with false (its ranges scored without), which the page gives it.
+    /// </summary>
+    public bool? Freeze { get; init; }
+
     public DetectionOptions ToOptions(IProgress<DetectionProgress>? progress = null, IProgress<Shot>? onShot = null)
     {
         var options = new DetectionOptions
@@ -302,6 +304,7 @@ sealed record DetectRequest
             CollectStats = true,
             Progress = progress,
             OnShot = onShot,
+            FreezeDetect = Freeze == false ? null : new FreezeDetectOptions(),
         };
         if (MinSceneLength is not null)
             options = options with { MinSceneLength = MinSceneLength };

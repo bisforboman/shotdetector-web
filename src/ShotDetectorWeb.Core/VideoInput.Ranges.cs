@@ -17,7 +17,10 @@ namespace ShotDetectorWeb;
 /// <param name="From">The first frame it gives ShotDetector, the keyframe's (<see cref="ShotDetection.RangeFrames"/>' <c>From</c>).</param>
 /// <param name="To">One past the last frame it gives (<see cref="ShotDetection.RangeFrames"/>' <c>To</c>), unless it is the
 /// last range, which gives the frames to the video's end.</param>
-public sealed record FrameRange(int FirstFrame, int EndFrame, int Keyframe, int From, long To);
+/// <param name="Skip">The frames decoded from the keyframe before <see cref="From"/>, not given: a resumed run's rest
+/// that starts inside a still picture gives from the still's first frame on (<see cref="VideoInput.Continue"/>), which
+/// needn't be a keyframe.</param>
+public sealed record FrameRange(int FirstFrame, int EndFrame, int Keyframe, int From, long To, int Skip = 0);
 
 /// <summary>
 /// A stopped run's way on (<see cref="VideoInput.Continue"/>): the earlier ranges' scores to keep, in order, and the range
@@ -157,7 +160,83 @@ public abstract partial class VideoInput
         if (start.FirstFrame == 0)
             return new Continuation([], Range(options, 0, frames, 0));
         earlier.RemoveAll(r => r.FirstFrame >= start.FirstFrame);
-        return new Continuation(earlier, Range(options, start.FirstFrame, frames, start.Keyframe));
+        var rest = Range(options, start.FirstFrame, frames, start.Keyframe);
+        // freezedetect compares each frame with the still picture's first, however far back: a rest that starts inside
+        // a still gives its frames from that still's first on (ShotDetector's RangeFrames given the earlier ranges).
+        if (options?.FreezeDetect is not null && earlier.Count > 0)
+        {
+            var (from, to) = ShotDetection.RangeFrames(Video, earlier, WithConverter(options), start.FirstFrame, frames);
+            if (from < rest.From)
+            {
+                var (packet, frame) = KeyframeAtOrBefore((int)from);
+                rest = new FrameRange(start.FirstFrame, frames, packet, (int)from, to, (int)from - frame);
+            }
+        }
+
+        return new Continuation(earlier, rest);
+    }
+
+    /// <summary>
+    /// The ranges <paramref name="ranges"/> (in order from frame 0, as <see cref="Merge"/> takes them) with those that
+    /// ShotDetector's <see cref="ShotDetection.FirstRangeToScoreAgain"/> names scored again, given the ranges before
+    /// them (<see cref="ShotDetection.RangeFrames(YuvVideo, IEnumerable{RangeScores}, DetectionOptions, long, long)"/>'
+    /// frames, from a still picture's first): with <see cref="DetectionOptions.FreezeDetect"/>, a range scored on its own
+    /// that starts inside a still compares its frames with the wrong one (decision 2026-11-03-spans-on-ranges.md). Each
+    /// range scored again gets the frames it was given before, from the still's first on, so a range that stopped early
+    /// stops there again. The ranges as they are without FreezeDetect, or when none needs it.
+    /// </summary>
+    public IReadOnlyList<RangeScores> ScoreAgain(IReadOnlyList<RangeScores> ranges, DetectionOptions? options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        options = WithConverter(options) with { Progress = null, OnShot = null };
+        if (options.FreezeDetect is null)
+            return ranges;
+        var list = ranges.ToList();
+        while (ShotDetection.FirstRangeToScoreAgain(Video, list, options) is { } i)
+        {
+            var range = list[i];
+            long end = i + 1 < list.Count ? list[i + 1].FirstFrame : ShownFrames;
+            var earlier = list.Take(i).ToList();
+            var (from, to) = ShotDetection.RangeFrames(Video, earlier, options, range.FirstFrame, end);
+            long given = Math.Min(to, range.FirstFrame + range.FrameCount);
+            list[i] = ShotDetection.ScoreRange(Video, earlier, FramesBetween((int)from, given), range.FirstFrame, options,
+                cancellationToken);
+        }
+
+        return list;
+    }
+
+    /// <summary>The frames from <paramref name="from"/> (display order) to before <paramref name="to"/>, decoded from the keyframe at or before it.</summary>
+    IEnumerable<YuvFrame> FramesBetween(int from, long to)
+    {
+        var (packet, frame) = KeyframeAtOrBefore(from);
+        return Measured(Frames(packet), null).Skip(from - frame).Take((int)Math.Min(to - from, int.MaxValue));
+    }
+
+    /// <summary>The last keyframe at or before frame <paramref name="frame"/> (display order): its packet (decode order) and its frame.</summary>
+    (int Packet, int Frame) KeyframeAtOrBefore(int frame)
+    {
+        var packets = Packets;
+        var shown = new List<long>(packets.Count);
+        for (int i = 0; i < packets.Count; i++)
+        {
+            if (!packets.Flags[i].HasFlag(PacketFlags.Discard))
+                shown.Add(packets.Pts[i]);
+        }
+
+        shown.Sort();
+        (int Packet, int Frame) best = (0, 0);
+        for (int i = 0; i < packets.Count; i++)
+        {
+            if (packets.Flags[i] != PacketFlags.Keyframe)
+                continue;
+            int at = shown.BinarySearch(packets.Pts[i]);
+            if (at >= 0 && at <= frame && at >= best.Frame)
+                best = (i, at);
+        }
+
+        return best;
     }
 
     /// <summary>
@@ -173,7 +252,10 @@ public abstract partial class VideoInput
     {
         ArgumentNullException.ThrowIfNull(range);
         int limit = range.EndFrame >= ShownFrames ? int.MaxValue : (int)(range.To - range.From);
-        return Paused(Measured(FramesAsync(range.Keyframe, cancellationToken), picture), limit, every, between, cancellationToken);
+        var frames = FramesAsync(range.Keyframe, cancellationToken);
+        if (range.Skip > 0)
+            frames = frames.Skip(range.Skip);
+        return Paused(Measured(frames, picture), limit, every, between, cancellationToken);
     }
 
     /// <summary>

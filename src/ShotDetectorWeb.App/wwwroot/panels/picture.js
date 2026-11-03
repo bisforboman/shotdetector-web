@@ -8,8 +8,9 @@
 // the page works out (the mean over the run, the bars' widths, a lane point over several frames) says so in its tooltip.
 // A 10-bit video's figures are 10-bit code values (0 to 1023), as FFmpeg's filters count them at 10 bits, against their
 // thresholds at 10 bits: the card says so and gives a level's 8-bit equivalent in its tooltip; the lane's axis is 0 to
-// 1023. The still pictures (freezedetect, decision 2026-11-01-freeze-spans.md), checked against it exactly: only a run
-// that read every frame in order from the first looks for them (one worker), a split or resumed run says why not.
+// 1023. The still pictures (freezedetect: ShotDetector's FreezeSpans, decision 2026-11-03-spans-on-ranges.md), checked
+// against it exactly, on every run, split and resumed too; a deinterlaced run's are of its deinterlaced frames, and the
+// card says so. A stopped run kept before the page looked for them in every run says why there are none.
 import { call, card, frameSeconds, on } from '../app.js';
 import { lane, seek, timecode, x } from '../timeline.js';
 
@@ -209,11 +210,14 @@ function fill({ summary: p, video }) {
       `Frames ${s.firstFrame + 1} to ${s.endFrame}, ${timecode(seconds(s.firstFrame))} to ${timecode(seconds(s.endFrame))}`));
   }
 
-  // freezedetect compares each frame with a still picture's first, however far back: only a run that read every frame
-  // in order from the first looks (decision 2026-11-01-freeze-spans.md); a split or resumed run says why not.
+  // ShotDetector's freezedetect (decision 2026-11-03-spans-on-ranges.md): of the frames as the run reads them,
+  // deinterlaced when it deinterlaces; a split or resumed run's too.
+  const { spans, notMeasured, deinterlaced } = p.freeze;
   section.append(heading('Still pictures', 'freezedetect with its defaults: a frame within 0.001 of the still ' +
-    'picture\'s first (the mean difference of its samples, of their range), for 2 s or more; checked against it exactly'));
-  const { spans, notMeasured } = p.freeze;
+    'picture\'s first (the mean difference of its samples, of their range), for 2 s or more; checked against it exactly' +
+    (deinterlaced ? ', on the frames as the run deinterlaced them (yadif, then freezedetect)' : '')));
+  if (spans !== null && deinterlaced) section.append(paragraph('Of the frames as deinterlaced.',
+    'The run deinterlaced the video: its still pictures are of the frames it compared, as yadif then freezedetect finds them'));
   if (spans === null) section.append(paragraph(notMeasured));
   else if (spans.length === 0) section.append(paragraph('Still pictures: none of 2 s or more.'));
   for (const s of spans ?? []) {

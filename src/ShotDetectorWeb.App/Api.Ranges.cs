@@ -163,7 +163,9 @@ public static partial class Api
                 at += length;
             }
 
-            merged = input.FromStart(scores);
+            // A range scored on its own that starts inside a still picture is scored again, given the ranges before it
+            // (decision 2026-11-03-spans-on-ranges.md), here in the merging worker.
+            merged = input.ScoreAgain(input.FromStart(scores), request.ToOptions());
             // A resumed run's rest has no range from frame 0: the merge tells all of its shots.
             var told = kept.Length == 0 ? _toldInFirstRange ?? [] : [];
             _toldInFirstRange = null;
@@ -174,9 +176,8 @@ public static partial class Api
             throw new InvalidOperationException(NotMerged + e.Message, e);
         }
 
-        // Still pictures aren't looked for across ranges (decision 2026-11-01-freeze-spans.md).
-        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures),
-            kept.Length == 0 ? PictureFreeze.Split : PictureFreeze.Resumed, damaged);
+        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures), PictureFreeze.Of(result),
+            damaged);
     }
 
     /// <summary>

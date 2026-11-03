@@ -581,6 +581,8 @@ async function readKept() {
       return s.get(KEPT_KEY);
     }) ?? null;
     if (record && later?.saved === record.saved) record.edits = later.edits;
+    // Kept before every run looked for still pictures: its ranges were scored without, and resume so.
+    if (record?.options && !('freeze' in record.options)) record.options.freeze = false;
     return record;
   } catch {
     return null;
@@ -959,6 +961,9 @@ function options() {
   }
   // Off, ShotDetector's default, as none.
   if (deinterlace.value !== 'off') run.deinterlace = deinterlace.value;
+  // Still pictures looked for (decision 2026-11-03-spans-on-ranges.md): said, so that a stopped run kept before every
+  // run looked for them (no freeze in its options) resumes without (readKept).
+  run.freeze = true;
   return run;
 }
 
