@@ -1,0 +1,44 @@
+{
+  "name": "shotdetector-web",
+  "version": "0.1.0",
+  "description": "Shot detection in the visitor's browser, before upload: ShotDetector on WebAssembly, the same shots and CSVs as its FFmpeg path, byte for byte.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "threads.js",
+    "pause.js",
+    "blob-write.js",
+    "aot/",
+    "interpreted/",
+    "threads/",
+    "licenses/",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "shot detection",
+    "scene detection",
+    "video",
+    "webassembly",
+    "scenedetect",
+    "h264",
+    "mp4"
+  ],
+  "license": "MIT AND LGPL-2.1-or-later",
+  "homepage": "https://github.com/bisforboman/shotdetector-web#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bisforboman/shotdetector-web.git",
+    "directory": "package"
+  },
+  "bugs": "https://github.com/bisforboman/shotdetector-web/issues"
+}

@@ -22,7 +22,7 @@ static class AudioStreamCheck
             string ours, theirs;
             try
             {
-                ours = Describe(VideoInput.Open(file).Audio);
+                ours = Describe(FfmpegDecoder.Open(file).Audio);
                 var stream = MediaProbe.Probe(file).Streams.FirstOrDefault(s => s.Type == StreamType.Audio);
                 theirs = Describe(stream is null ? null : new AudioStream(stream.Codec, stream.SampleRate ?? 0, stream.Channels ?? 0));
             }

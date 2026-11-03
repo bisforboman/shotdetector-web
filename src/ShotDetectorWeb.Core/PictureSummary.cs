@@ -21,6 +21,7 @@ namespace ShotDetectorWeb;
 /// <param name="Brng">signalstats' BRNG over the frames.</param>
 /// <param name="Levels">signalstats' YMIN, YAVG and YMAX over the frames.</param>
 /// <param name="Crop">cropdetect's crop with its defaults after the last frame; null for three frames or fewer.</param>
+/// <param name="Freeze">freezedetect's still pictures, or why they weren't looked for (decision 2026-11-01-freeze-spans.md).</param>
 public sealed record PictureSummary(
     int Frames,
     bool FullRange,
@@ -30,7 +31,8 @@ public sealed record PictureSummary(
     IReadOnlyList<PictureSpan> Bars,
     PictureBrng Brng,
     PictureLevels Levels,
-    CropArea? Crop)
+    CropArea? Crop,
+    PictureFreeze Freeze)
 {
     /// <summary>The most points the lane gets: a frame each up to this many frames, then several.</summary>
     public const int MostPoints = 2000;
@@ -38,9 +40,11 @@ public sealed record PictureSummary(
     /// <summary>blackdetect's default <c>d</c>: the card lists the spans this long or longer.</summary>
     public const double BlackSeconds = 2;
 
-    public static PictureSummary Of(PictureMeasures m)
+    /// <summary>The summary of <paramref name="m"/>, with <paramref name="freeze"/>'s still pictures (or why there are none).</summary>
+    public static PictureSummary Of(PictureMeasures m, PictureFreeze freeze)
     {
         ArgumentNullException.ThrowIfNull(m);
+        ArgumentNullException.ThrowIfNull(freeze);
         int per = Math.Max(1, (m.Count + MostPoints - 1) / MostPoints);
         int points = (m.Count + per - 1) / per;
         var min = new int[points];
@@ -88,7 +92,7 @@ public sealed record PictureSummary(
         var levels = m.Count == 0 ? new PictureLevels(null, null, null)
             : new PictureLevels(lowest, Math.Round(means / m.Count, 2), highest);
         return new PictureSummary(m.Count, m.FullRange, m.BitDepth, new PicturePoints(per, min, mean, max, brng), black, bars,
-            new PictureBrng(brngFrames, largest, largestAt < 0 ? null : largestAt), levels, m.Crop());
+            new PictureBrng(brngFrames, largest, largestAt < 0 ? null : largestAt), levels, m.Crop(), freeze);
     }
 
     static PictureSpan Span(PictureMeasures m, FrameSpan s, bool isLong)
@@ -116,6 +120,40 @@ public sealed record PictureBrng(int Frames, double Largest, int? At);
 
 /// <summary>The lowest YMIN, the mean of the frames' YAVG (to two decimals: the page's) and the highest YMAX; null without frames.</summary>
 public sealed record PictureLevels(int? Min, double? Mean, int? Max);
+
+/// <summary>
+/// freezedetect's still pictures (its defaults: n=0.001, d=2 s) in a run that read every frame in order from the first
+/// (<see cref="PictureMeter.FreezeSpans"/>), or why they weren't looked for: a split run reads ranges, a resumed run the
+/// rest, and freezedetect compares each frame with a still picture's first, however far back.
+/// </summary>
+/// <param name="Spans">The still pictures, in order; null when not looked for.</param>
+/// <param name="NotMeasured">Why not, in the page's words; null when looked for.</param>
+public sealed record PictureFreeze(IReadOnlyList<PictureStill>? Spans, string? NotMeasured)
+{
+    /// <summary>A split run's: no still pictures looked for.</summary>
+    public static PictureFreeze Split { get; } = new(null,
+        "Not looked for in a split run: freezedetect compares each frame with a still picture's first, however far back, and the run reads the video in ranges. One worker (?workers=1) reads it in one pass.");
+
+    /// <summary>A resumed run's, or a stopped one shown again from what was kept: no still pictures looked for.</summary>
+    public static PictureFreeze Resumed { get; } = new(null,
+        "Not looked for in a resumed run: freezedetect compares each frame with a still picture's first, however far back, and the run read the video in two parts.");
+
+    /// <summary>The still pictures <paramref name="spans"/> found, their times in seconds at <paramref name="timeBase"/>.</summary>
+    public static PictureFreeze Found(IEnumerable<FrozenSpan> spans, Rational timeBase)
+    {
+        ArgumentNullException.ThrowIfNull(spans);
+        double tb = timeBase.Num / (double)timeBase.Den;
+        return new([.. spans.Select(s => new PictureStill(s.FirstFrame, s.EndFrame, s.StartPts * tb, s.EndPts * tb))], null);
+    }
+}
+
+/// <summary>
+/// A still picture as freezedetect reports it: from its first frame (the one the others were compared with) to the first
+/// that differs, <see cref="Start"/> and <see cref="End"/> their pts in seconds (freeze_start, freeze_end); one still
+/// running where the frames end has no end (freezedetect prints no freeze_end), <see cref="EndFrame"/> and
+/// <see cref="End"/> null.
+/// </summary>
+public sealed record PictureStill(int FirstFrame, int? EndFrame, double Start, double? End);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(PictureSummary))]

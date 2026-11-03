@@ -25,10 +25,12 @@ public static partial class Api
     const string Damaged = "The file is damaged or not a video this page can read: ";
 
     /// <summary>
-    /// Opens an MP4 or an AVI for <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with the frames it shows
+    /// Opens an MP4, an AVI or a WebM (its VP9 or AV1 decoded by the browser, <see cref="JsDecoder"/>) for
+    /// <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with the frames it shows
     /// (<see cref="VideoInput.ShownFrames"/>, what a whole run reads, where <c>frameCount</c> is FFmpeg's nb_frames: null in a
     /// fragmented file, the track's samples past an edit list's end) as <c>frames</c>, and its audio track
-    /// (<see cref="VideoInput.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one; or the
+    /// (<see cref="VideoInput.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one, and
+    /// who decodes it as <c>decodedBy</c> (<c>managedcodecs</c> or <c>browser</c>); or the
     /// library's exception (a damaged file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
     /// in slices as the library needs them (<see cref="BlobStream"/>), never copied in whole.
     /// </summary>
@@ -38,10 +40,11 @@ public static partial class Api
         _input = null;
         _result = null;
         _picture = null;
+        _freeze = null;
         _toldInFirstRange = null;
         _file?.Dispose();
         _file = file;
-        return Opened(DamagedPrefixed(() => VideoInput.Open(() => new BlobStream(file))));
+        return Opened(DamagedPrefixed(() => VideoInput.Open(() => new BlobStream(file), JsDecoder.Instance)));
     }
 
     /// <summary><see cref="Open"/>'s JSON of the file just opened, which <see cref="Detect"/> then runs on.</summary>
@@ -50,6 +53,9 @@ public static partial class Api
         _input = input;
         var json = JsonSerializer.SerializeToNode(input.Video, ApiJson.Default.YuvVideo)!.AsObject();
         json["frames"] = input.ShownFrames;
+        // Who decodes the frames: ManagedCodecs, or the browser (a WebM's VP9 or AV1, JsDecoder), which the page marks
+        // and runs on its own worker only (decision 2026-11-02-webm-browser-decoder.md).
+        json["decodedBy"] = input is WebmInput ? "browser" : "managedcodecs";
         json["audio"] = input.Audio is { } a
             ? new JsonObject { ["codec"] = a.Codec, ["sampleRate"] = a.SampleRate, ["channels"] = a.Channels }
             : null;
@@ -79,6 +85,7 @@ public static partial class Api
     {
         _result = null;
         _picture = null;
+        _freeze = null;
         _kept = null;
         _toldInFirstRange = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
@@ -87,7 +94,11 @@ public static partial class Api
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
         var go = input.Continue(earlier.Scores, request.ToOptions());
-        var picture = go.Rest is { } planned ? new PictureMeter(input.Video, planned) : null;
+        // A run from frame 0, not resumed, reads every frame in order: it looks for the still pictures too (decision
+        // 2026-11-01-freeze-spans.md).
+        var picture = go.Rest is { } planned
+            ? new PictureMeter(input.Video, planned, freeze: go.Earlier.Count == 0 && planned.FirstFrame == 0)
+            : null;
         var options = request.ToOptions(new JsProgress(go.Rest?.FirstFrame ?? 0, input.ShownFrames), new JsShots());
 
         DetectionResult result;
@@ -126,8 +137,11 @@ public static partial class Api
         }
 
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
+        var freeze = picture?.FreezeSpans(result.FrameCount) is { } still
+            ? PictureFreeze.Found(still, picture.Measures.TimeBase)
+            : PictureFreeze.Resumed;
         return Answered(input, options, result, ranges,
-            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()));
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), freeze);
     }
 
     /// <summary>
@@ -135,11 +149,12 @@ public static partial class Api
     /// <see cref="Kept"/> its ranges), and its answer as JSON (<see cref="DetectResponse"/>).
     /// </summary>
     static string Answered(VideoInput input, DetectionOptions options, DetectionResult result, IReadOnlyList<RangeScores> ranges,
-        PictureMeasures? picture)
+        PictureMeasures? picture, PictureFreeze freeze)
     {
         _result = result;
         _corrected = null;
         _picture = picture?.Take(result.FrameCount);
+        _freeze = freeze;
         _kept = new KeptRun(ranges, _picture);
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));

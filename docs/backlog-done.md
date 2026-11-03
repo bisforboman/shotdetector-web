@@ -1477,6 +1477,95 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     and takes the browser's decoder only for VP9 and AV1, rows "A refusal that says what to do" and "VP9 and AV1 in
     WebM through the browser's decoder" in backlog.md
 
+- A contact sheet of the shots, as PNG and PDF ([#93](https://github.com/bisforboman/shotdetector-web/issues/93))
+  - Why: editors, directors and archivists review footage and plan edits on a printed sheet of the shots; browser
+    tools show thumbnails on screen, none a sheet to print or keep. The page already decodes a still per shot.
+  - Where: `wwwroot/panels/sheet.js` (a card under the run's, marked `page`: the stills are the browser's decode,
+    not exact), the stills through `shots.js`' own grabber (the hidden `<video>`, or an AVI's JPEG through
+    `frameAt(t)`), the PDF written by hand with the JPEGs embedded (no dependency, no build step); `index.html`,
+    `style.css`, `tools/page-check` (`tools/ci-scope.sh`'s `panels/*` already puts `sheet.js` in the page tier).
+  - Done when: the run's card has a contact sheet to download as PNG and as a PDF on A4 or Letter, each shot's still
+    (1 or 3) with its number, start timecode and length, the columns chosen, a header with the file's name, duration,
+    shot count and average shot length; page-check downloads both, a still per shot in each, a valid PNG and PDF.
+  - Not: the exact sheet from the decoded frames, ShotDetector CLI's (shotdetector#649); a print stylesheet.
+  - Status: Done (2026-11-02, #130: a card under the run's, marked the page's; the PDF written by hand, PDF 1.4 with
+    DCTDecode JPEGs and Helvetica, rather than print CSS, which gives no file and leaves the paper to the browser's
+    dialog; page-check makes it on each sample picked on threads and the AVI: a PNG, an A4 and a Letter PDF, each valid,
+    a still per shot)
+
+- A refusal that says what to do
+  - Why: HEVC (most phone video), VP9, AV1 and WebM files get an error and nothing else; the decision's option 3.
+  - Where: the core's `UnsupportedVideoException` messages (`Mp4Input`, `VideoInput.Open` for a container it doesn't
+    read: name the codec as FFmpeg does, `hevc`, `vp9`, `av1`, and WebM/Matroska as such); the page's error state
+    (`app.js`, `index.html`, `style.css`): a line under the message pointing to the `shotdetect` CLI and its release
+    binaries (same results, FFmpeg reads everything) and, for HEVC, the iPhone's Camera > Formats > Most Compatible or
+    an export to H.264; README.
+  - Done when: `make-samples.sh` makes an HEVC MP4 and a VP9 WebM (refused samples, checked to be what they say with
+    ffprobe); NativeCheck, app-check.mjs and page-check open each and expect the message and, on the page, the link.
+  - Not: decoding anything new; a hidden `<video>` or WebCodecs.
+  - Status: Done (2026-11-02, #133): `Refusal` names the codec or container as FFmpeg does (HEVC, VP9, AV1, MPEG-4
+    Part 2, ProRes in MP4 and AVI; WebM, Matroska, MPEG-TS and others by the first bytes) and ends with what the page
+    reads; the page's `#refused` links the `shotdetect` command, and for HEVC the iPhone's Most Compatible;
+    `samples/reject/hevc.mp4`, `vp9.webm`, `av1.mp4` checked by NativeCheck, app-check.mjs and page-check
+
+- VP9 and AV1 in WebM through the browser's decoder
+  - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
+    I420/I420P10, which FastYuv and the frame source take; a visitor's YouTube download gets a result.
+  - Where: the core: a WebM/Matroska reader and VP9 frame header / AV1 sequence header readers, a `VideoInput` whose
+    frames come from the page; the App and the page: `VideoDecoder`, a `browser` chip; decision
+    `2026-11-02-webm-browser-decoder.md` first.
+  - Status: Done (2026-11-02, #135): `WebmInput` (`MatroskaReader`, `Vp9Header`, `Av1Header`) describes the file as
+    FFmpeg does, its frames from an `IHostDecoder` through `VideoInput`'s asynchronous frame path; the App's `JsDecoder`
+    over `video-decode.js`'s `VideoDecoder`, the run on the page's worker alone, not kept, its chip the browser's
+    decoder's; NativeCheck's `FfmpegDecoder` (ffmpeg standing in for the browser) holds the seven WebM samples (VP9
+    untagged, BT.709 at 29.97, full range, 10-bit, 4:2:2; AV1 with Opus, 10-bit) to `Detect(path)` in every check,
+    page-check's `--browser` holds Chromium's decoder to the same files, app-check opens them and is refused under Node
+
+- The npm package
+  - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
+    trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner
+    2026-11-02, design in decision [2026-11-02-npm-package.md](decisions/2026-11-02-npm-package.md)).
+  - Where: `package/` (`index.js`, `index.d.ts`, `package.json`, README): `detectShots(file, options)` and
+    `ShotDetector` over `worker.js`' call-by-name (and `threads.js`' runner for threads), stills from the browser's
+    decode; `tools/package.sh` (the App's AOT, interpreted and threaded AOT publishes copied into `aot/`,
+    `interpreted/`, `threads/`, FastYuv's licence, `-p:FastYuvAssembly` passed on); `tools/check.sh package` and a test
+    page under `tools/page-check/`; `tools/ci-scope.sh`; `.github/workflows/npm.yml` (on a tag `package-v<version>`,
+    the checks, then `npm publish --provenance` by trusted publishing); README and CLAUDE.md.
+  - Done when: the packed tarball, installed into a test page in Chromium, gives each sample's shots, scenes and stats
+    CSVs byte for byte the native run's on each bundle (threads on an isolated page; asked for on one that isn't, the
+    worker); a run stopped, one paused and resumed, one cancelled; a still per shot; a changed FastYuv rebuilt through
+    `tools/package.sh` runs; CI green. Publishing itself waits for the owner to create `shotdetector-web` on npmjs.com
+    with this workflow as its trusted publisher.
+  - Not: a `<shot-detector>` element or split runs across workers (the owner, 2026-11-02: later rows if asked); a
+    change to `worker.js`' messages or the page.
+  - Status: Done (2026-11-02, #132: `package/`, `tools/package.sh`, `tools/check.sh package` and
+    `tools/page-check/package-check.mjs` passing locally on the three samples, each bundle and threads, stop, pause and
+    cancel; 0.1.0 packs to 13.2 MB, 40.4 MB unpacked, 107 files. `threads.js` and its imports sit at the package's
+    root, where they find `threads/_framework/` unchanged. Found: a host must serve `.mjs` as JavaScript or the
+    threaded runtime's workers don't start; the package's README says so. The publish waits: Waiting, "The npm
+    package's first publish")
+
+- Freeze spans on the page
+  - Why: 3.26.0's `DetectionOptions.FreezeDetect` and FrameReader 2.20.0's `FreezeDetector` find still pictures as
+    FFmpeg's `freezedetect` does, a delivery check beside the black spans. Ranges refuse `FreezeDetect` (and
+    `BlackDetect`, "yet"), and every run on the page is a range: decision
+    [2026-11-01-freeze-spans.md](decisions/2026-11-01-freeze-spans.md), the owner's A: the core feeds
+    `FreezeDetector` in a run that reads every frame in order from the first; a split or resumed run says why not.
+    ShotDetector's `BlackSpans` equal the page's own on every sample, but ranges refuse `BlackDetect`: the page keeps
+    its own.
+  - Where: the core's `PictureMeter` (`freeze`, `FreezeSpans`), `PictureSummary`'s `Freeze` (`PictureFreeze`,
+    `PictureStill`); `Api.Detect` (from frame 0, not resumed) and `Api.Merge` (split, resumed) say which;
+    `panels/picture.js` (a band in the lane, a "Still pictures" part of the card) and `style.css`; PictureCheck
+    (`freezedetect` in its graph, and ShotDetector's own `FreezeSpans`), app-check (split, stopped and resumed runs) and
+    page-check (the card's still pictures, and "not looked for" on two workers).
+  - Done when: `tools/check.sh native wasm aot page` passes: the still pictures `freezedetect`'s on every sample, the
+    page's the native run's.
+  - Not: still pictures across ranges (ShotDetector refuses them there); ShotDetector's `BlackSpans` (not in ranges yet).
+  - Status: Done (2026-11-02: the still pictures `freezedetect`'s on every sample natively, and ShotDetector's own
+    `FreezeSpans`; Sintel's 48.458 to 50.8 s, the variable-rate samples' still to their end; interpreted and AOT the
+    native run's; the page's card the native check's, "not looked for" when split; FreezeDetector about 0.15 ms a
+    frame on Sintel)
+
 - Correcting the cuts on the page (issue #90)
   - Why: ShotDetector 3.25.0's `LoadScenes(YuvVideo, TextReader, column, options)` (shotdetector#647) reads a scenes
     CSV back over a `YuvVideo`, which a page that lets a viewer add and drop cuts before exporting needs: the edited

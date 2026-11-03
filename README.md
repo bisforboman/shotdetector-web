@@ -20,7 +20,7 @@ scope) are in shotdetector's
 The page is live at **https://bisforboman.github.io/shotdetector-web/**, compiled ahead of time and deployed by
 `.github/workflows/pages.yml` on each push to `main` once the checks pass on it (Checks; it runs locally too: "Running
 the page").
-`src/ShotDetectorWeb.Core` opens an MP4 or an AVI and detects; the checks show that its scene and stats CSVs equal ShotDetector's
+`src/ShotDetectorWeb.Core` opens an MP4, an AVI or a WebM and detects; the checks show that its scene and stats CSVs equal ShotDetector's
 FFmpeg path's on every sample, all five detectors, natively and on browser-wasm (interpreted and AOT), the latter
 through the page's own exports (`src/ShotDetectorWeb.App`, the .NET side of the page's worker).
 
@@ -37,10 +37,25 @@ little-endian words, yuv420p10le), its chroma location the SPS's (left without o
 conversion interpolates from; its picture is measured in 10-bit code values, as FFmpeg's filters measure it ("The
 picture"). **And 4:2:0 or 4:2:2 MJPEG
 in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not measured; decision
-`docs/decisions/2026-10-30-mjpeg-avi.md`). Anything else is refused when the file is opened, with an
+`docs/decisions/2026-10-30-mjpeg-avi.md`). **And VP9 or AV1 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full
+range or not, with a DefaultDuration and a Duration; decisions `docs/decisions/2026-11-02-browser-decoder.md` and
+`2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
+libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
+browser's own `VideoDecoder` (WebCodecs) in the page's worker, on that worker alone (no threads, no split, a stopped
+run not kept), its run card's chip "your browser's decoder". Natively FFmpeg stands in for the browser
+(`tools/NativeCheck/FfmpegDecoder.cs`: the core's packets as IVF to ffmpeg) and every check holds the result to
+`Detect(path)`'s byte for byte; page-check then holds Chromium's decoder to the same files on every WebM sample. A
+browser whose decoder doesn't take the codec, or whose frames aren't Y, U and V planes (Firefox's BGRX), refuses the run
+and says so; Node has no `VideoDecoder`, so app-check.mjs checks that a WebM opens and its run is refused. Its audio is
+described, not measured. Anything else is refused when the file is opened, with an
 `UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, greyscale, 10-bit 4:2:2 or more than
 10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
-`docs/decisions/2026-10-30-scope-widening.md`). A frame size that changes midway is refused by
+`docs/decisions/2026-10-30-scope-widening.md`). Another codec or container is named as a viewer and FFmpeg name it
+(`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4, MJPEG in AVI,
+and VP9 and AV1 in WebM so far.", "The video is VP8 (FFmpeg's vp8; 'V_VP8'): ..."), and the page says under a refusal
+what reads the file instead: ShotDetector's `shotdetect` command, and for HEVC an iPhone's Most Compatible format
+(decision `docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `av1.mp4`, `vp8.webm`,
+`h264.mkv`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
 matrix, range or chroma location that changes midway in band (a splice: a later SPS with other VUI tags) is followed
@@ -130,7 +145,14 @@ up to the second, a last chapter shorter than that joined to the one before; You
 least three, so with fewer the card says why instead (Timeline's words). The titles are typed on the page, under
 Titles, a field a chapter with Timeline's placeholder in it: the download carries them, a chapter left empty keeps
 "Chapter n" (the titles last while the run is shown, not kept with a stopped run: backlog, "Chapter titles kept with
-the kept run"). A file
+the kept run"). Under the run's card, a contact sheet (`panels/sheet.js`, issue #93, marked the page's): each shot's
+still, or three (its first, middle and last frame, as scenedetect's `--num-images 3`), with its number, start timecode
+and length, in the columns chosen, under a header with the file's name, duration, shot count and average shot length;
+made when asked, downloaded as `<file>.sheet.png` and as a PDF to print, `<file>.sheet.a4.pdf` or
+`<file>.sheet.letter.pdf`. The stills are the shots table's, the browser's decode (an AVI's own JPEGs), not
+ShotDetector's frames; the exact sheet from the decoded frames is ShotDetector CLI's (shotdetector#649). The PDF is
+written on the page, PDF 1.4 with the stills as JPEGs and the text in Helvetica, no library, rather than print CSS
+and `window.print()`, which gives no file and leaves the paper and margins to the browser's dialog. A file
 of any size runs: the worker gets the `File` itself, and .NET reads it in slices of a megabyte as it needs them
 (`BlobStream` over `FileReaderSync`), so it is never copied into memory whole (Large files, below). Before a run the
 page says how long it will take, an estimate from the frame count and picture size (this browser's speed from its last
@@ -704,6 +726,31 @@ resume and is detected again), the summary says `bitDepth`, and the page's card 
 in its tooltip, the lane's axis 0 to 1023 (backlog-done, "Picture measures at 10 bits"). On the page it is `Api.Picture()` after a run, the JSON of `PictureSummary`
 (CLAUDE.md, "Layout"), at most 2,000 points for the lane whatever the file's length.
 
+A run that reads every frame in order from the first (one worker, from frame 0, not resumed) also finds the still
+pictures as FFmpeg's `freezedetect` does with its defaults (n=0.001, d=2 s), with FrameReader's `FreezeDetector` (2.20.0)
+fed the frames as decoded: each frame compared with a still picture's first, however far back, by the mean difference
+of its samples. That comparison spans the whole video, so ShotDetector refuses `FreezeDetect` in ranges, and a split or
+resumed run doesn't look: the picture card says why (decision
+[2026-11-01-freeze-spans.md](docs/decisions/2026-11-01-freeze-spans.md), the owner's choice). It costs about 0.15 ms a
+frame natively at 854x480 (3% of a run). A stopped run's are those found by its stop, one still going there without an
+end. ShotDetector's own `BlackSpans` (3.26.0's `BlackDetect`) equal the page's black spans on every sample, but ranges
+refuse `BlackDetect` too, so the page keeps its own.
+
+## The npm package
+
+`shotdetector-web` on npm (decision
+[2026-11-02-npm-package.md](docs/decisions/2026-11-02-npm-package.md), issue #92): the page's engine for another site,
+to detect shots in its visitor's browser before an upload. `package/` holds its own files: `index.js` (the API,
+`detectShots(file, options)` and `ShotDetector`, over the App's `worker.js` called by name and, for threads,
+`threads.js`' runner), `index.d.ts`, `package.json` and its README (its use, serving the files, the size, FastYuv's
+recipe). `tools/package.sh` puts it together in `out/package/` from the App's publishes: `aot/` and `interpreted/`
+(each `worker.js`, its imports and `_framework/`), `threads.js` and `threads/_framework/` (the threaded AOT bundle),
+`licenses/` (FastYuv's COPYING.LGPL); `-p:FastYuvAssembly=<dll>` packs a FastYuv built from its source, as for the
+page (Licensing). `tools/check.sh package` packs it with `npm pack` and checks the tarball (Checks); CI runs it with the
+AOT check, then `npm publish --dry-run`. `.github/workflows/npm.yml` publishes on a tag `package-v<version>` (the
+version in `package/package.json`): the checks, then `npm publish --provenance` through npm's trusted publishing.
+The owner creates the package on npmjs.com with that workflow as its trusted publisher before the first one.
+
 ## Checks
 
 ```
@@ -712,6 +759,7 @@ export SHOTDETECTOR_FFMPEG_LIBS=<FFmpeg 8.1 shared build folder>   # also put on
 tools/check.sh               # native, then wasm (interpreted); tools/check.sh wasm aot for the AOT build
 tools/check.sh page          # the page in Chromium (Playwright: npm ci and npx playwright install chromium in tools/page-check)
 tools/check.sh replace       # FastYuv replaced from its source (needs github.com); add aot for the AOT build
+tools/check.sh package       # the npm package packed and installed in a test site in Chromium (after native)
 tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named (the files to refuse and without AAC all)
 ```
 
@@ -728,7 +776,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   (`<sample>.<run>.chapters-<minimum>.json`, ShotDetector's `Timeline.YouTubeChapters` and `ChapterStarts`) too, within
   YouTube's rules (`ChaptersCheck.cs`). It also
   checks that `samples/reject/` is refused, each file with its own message (when opened, or by its run: a size that
-  changes midway), and compares each sample's
+  changes midway), another codec's or container's naming it as FFmpeg does (`hevc`, `av1`, WebM), and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
   same packets in the same order, each with the same pts, pts_time, size and K and D flags (`PacketCheck.cs`; ffprobe's
   lines go to `out/native/<sample>.packets.txt` for the wasm check); each sample's frames' types as a run keeps them
@@ -776,7 +824,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   are FFmpeg's and the filters count integers over them. Per frame, `signalstats=stat=brng`'s YMIN and YMAX equal and
   its YAVG and BRNG to the digits it prints, `cropdetect=reset=1:skip=0`'s x1, x2, y1, y2, w, h, x and y equal;
   `cropdetect`'s crop with its defaults after the last frame; `blackdetect`'s spans at `d=0` and at its default 2 s,
-  their times to the digits it prints (`-copyts`, the stream's own pts as ours). The colour bars by their definition:
+  their times to the digits it prints (`-copyts`, the stream's own pts as ours); `freezedetect`'s still pictures with
+  its defaults, their `freeze_start` and `freeze_end` to the digits it prints (one still at the end has no end), and
+  the same frames as ShotDetector's own `FreezeSpans` on the run. The colour bars by their definition:
   on the samples that end in `smptehdbars` (make-samples.sh's three shots), one span, the last shot's frames exactly;
   on the fades sample, one span from within its `smptebars` fade-in to the end; none on the others. The run split
   into ranges, each measured while it is scored, must join into the whole run's measures byte for byte. Each sample's
@@ -875,7 +925,18 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   minute compiled ahead of time (2026-10-29).
 - **replace** (`tools/replace-check.mjs`, under Node): LGPL-2.1, FastYuv replaceable (Licensing). It clones shotdetector
   at the tag of the packaged FastYuv, makes its converter's constructor throw, builds it, publishes the App against it
-  (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement.
+  (`-p:FastYuvAssembly`) and fails unless `Detect` throws that message: the rebuilt bundle runs the replacement. With
+  `package`, the npm package is packed again against it and every bundle (AOT, interpreted, threads) must throw it.
+- **package** (`tools/page-check/package-check.mjs`, Playwright in Chromium): the npm package (The npm package) put
+  together by `tools/package.sh`, packed with `npm pack`, unpacked into `node_modules/shotdetector-web/` of a test site
+  served on two origins, one cross-origin isolated, and imported by a page as a site would. `detectShots` on
+  `with-audio-320x240-25.mp4` (adaptive), `mjpeg-320x240-25.avi` (adaptive) and `rotated-90-320x240-25.mp4` (all
+  five detectors) with each bundle: the scenes and stats CSVs and the shots as JSON and HTML the native run's byte for
+  byte, a JPEG still per shot, nothing left in the page; the first sample on two threads where isolated (the result's
+  `threads` 2) and asked for where not (1), the same files; a `ShotDetector` stopped half-way (the stats CSV the
+  native run's rows up to there), paused (no progress while paused) and resumed (the native run's CSVs), cancelled
+  through an `AbortSignal` (an `AbortError`) and used again. Any page or worker error fails it. It reuses the AOT
+  bundles `wasm` or `page` published in the same call when `aot`, and publishes the interpreted one.
 
 Needs the .NET 10 SDK, Node 22 and the `wasm-tools` workload (`dotnet workload install wasm-tools`; the App is a
 browser-wasm project, so build it with `dotnet publish src/ShotDetectorWeb.App`, not as part of a solution), and for
@@ -1009,7 +1070,13 @@ rules for changing them (adding to the page among them).
   the first bytes; what never looks at the container, below, is its; decision `2026-10-30-mjpeg-avi.md`) with
   `Mp4Input` and `AviInput` (MJPEG in AVI: `AviDemuxer`, `MjpegDecoder`, `AviHeader` for each stream's 'strh'/'strf':
   the audio's codec, rate, channels and VBR length; refuses 4:4:4 and greyscale JPEG and a file with fewer chunks than its
-  header's dwLength) each describing its file and decoding its frames. `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
+  header's dwLength) each describing its file and decoding its frames, and `WebmInput` (VP9 and AV1 in WebM, decision
+  `2026-11-02-webm-browser-decoder.md`: `MatroskaReader` for the EBML header, Info, Tracks and the video's blocks,
+  `Vp9Header`'s key frame header and `Av1Header`'s sequence header for the format and colour, as FFmpeg's vp9 and
+  libdav1d give them; its frames from the host's `IHostDecoder`, the browser's `VideoDecoder` through the App's
+  `JsDecoder`, FFmpeg in NativeCheck, each given its block's pts and its picture type; `VideoInput.DecodedFramesAsync`,
+  the frames as an asynchronous source, which the MP4 and AVI inputs give from their synchronous decoders; `Refusal`,
+  the words of a codec or container refusal). `Mp4Input` (open, describe, frames, detect; `FramesAsync` and
   `DetectAsync`: the frames as an asynchronous source that awaits the caller every N frames and ends early when told;
   `Audio`, the audio track as ffprobe describes it; `VideoInput.Ranges.cs`: `Ranges(options, count)`, the video split at keyframes
   from `Packets` into `FrameRange`s about equal in frames (each starting ShotDetector's `RangeFrames` margin past its
@@ -1030,10 +1097,14 @@ rules for changing them (adding to the page among them).
   parameter of `Detect`, `DetectAsync`, `ScoreRangeAsync`: FrameReader's `PictureMeter` given a `YuvVideo`'s frames
   (its `PictureFormat`, a range's frames before its first skipped, ManagedCodecs' `VideoFrame.PictureType` as
   FrameReader's), what FFmpeg's `signalstats`, `blackdetect` and `cropdetect` count, a 10-bit frame in 10-bit values,
-  and colour bars by their definition; shotdetector's decision 2026-10-31: the page's own copy moved upstream), and
+  and colour bars by their definition; shotdetector's decision 2026-10-31: the page's own copy moved upstream; with
+  `freeze`, for a run from frame 0 that reads every frame in order, FrameReader's `FreezeDetector`, `freezedetect`'s
+  still pictures, `FreezeSpans(frames)`: decision `2026-11-01-freeze-spans.md`, ranges refuse ShotDetector's
+  `FreezeDetect`), and
   FrameReader's `PictureMeasures` (by column; `Types()` one character a frame, as ffprobe prints them; FFmpeg's figures
   from them, `ToBytes`/`FromBytes` hashed, `Join` for a split run's ranges); `PictureSummary.cs`: the page's JSON of them
-  (`PictureJson`), which NativeCheck also writes; `TimelineFiles` (a result's shots in scenedetect's timeline formats,
+  (`PictureJson`), which NativeCheck also writes, its `Freeze` (`PictureFreeze`: the still pictures, or why a split or
+  resumed run didn't look for them); `TimelineFiles` (a result's shots in scenedetect's timeline formats,
   ShotDetector's `Timeline` with its defaults: `edl`, `fcpx`, `fcp7`, `otio`, `qp`, `keyframes`, `shotchanges` (Subtitle
   Edit's, `Timeline.ShotChanges`) and each one's extension, the
   result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files;
@@ -1047,7 +1118,8 @@ rules for changing them (adding to the page among them).
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
   count: `frameCount` is FFmpeg's nb_frames, null when fragmented) and `audio`: `{ codec, sampleRate,
-  channels }` from `VideoInput.Audio`, or null), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
+  channels }` from `VideoInput.Audio`, or null, and `decodedBy`: `managedcodecs`, or `browser` for a WebM, whose
+  frames `JsDecoder` gets from `wwwroot/video-decode.js`), `Detect(string optionsJson)` (`{ detector, threshold, minSceneLength,
   frameWindow, minContentVal, deinterlace }`, each null for the library's default, or `detectors`; a promise: shots, frame count,
   rate, duration, `stopped` and `warnings` as JSON; one range from frame 0 scored with `OnShot` and merged without it,
   `Detect`'s result byte for byte, so that a stopped run leaves scores, pausing every 8 frames, `PauseEvery`; a run
@@ -1082,7 +1154,9 @@ rules for changing them (adding to the page among them).
   indexes; an AVI's packets' offsets in the file, null for an MP4);
   `Api.Picture.cs` `Picture()`: the last run's `PictureSummary` (camelCase: `frames`, `fullRange`, `bitDepth` (8 or 10: the levels' code values), `points` { `framesPerPoint`,
   `min`, `mean`, `max`, `brng` }, `black` and `bars` [{ `firstFrame`, `endFrame`, `start`, `end`, `long` }], `brng` {
-  `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null), and `RangeBytes`' packing
+  `frames`, `largest`, `at` }, `levels` { `min`, `mean`, `max` }, `crop` cropdetect's or null, `freeze` { `spans`
+  [{ `firstFrame`, `endFrame`, `start`, `end` }] (end null for one still where the frames end) or null, `notMeasured` }),
+  and `RangeBytes`' packing
   (the scores' length, the scores, the range's picture measures); `Api.FrameTypes.cs` `FrameTypes()`: the last run's frames' types from its
   `PictureMeasures`, one character a frame in display order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's
   `av_get_picture_type_char`), not JSON; `Api.Ranges.cs` a long video across workers (decision `2026-10-26-workers.md`): `Ranges(optionsJson, count, from)` (`{ frames, ranges:
@@ -1098,7 +1172,10 @@ rules for changing them (adding to the page among them).
   (`Detect` going on from them, the rest's shots told; kept bytes that don't resume as "The stopped run didn't resume:
   ...", on which the page detects from the start).
   `BlobStream` imports `read(blob, position, view)` (a seekable `Stream` over
-  the file in slices of a megabyte). The threaded bundle (`-p:WasmEnableThreads=true`, `THREADS`; decision
+  the file in slices of a megabyte). `JsDecoder` (`IHostDecoder`) imports `decoderOpen`, `decoderDecode`, `decoderNext`,
+  `decoderTake` and `decoderClose` (`wwwroot/video-decode.js`: WebCodecs' `VideoDecoder` in the worker, software first,
+  each frame copied out packed, I420, I420P10 or I422, NV12 de-interleaved, anything else refused; a packet given, then
+  each frame awaited and copied into .NET's memory). The threaded bundle (`-p:WasmEnableThreads=true`, `THREADS`; decision
   `2026-10-30-threads.md`), published into `wwwroot/threads/_framework/` by `tools/check.sh`'s `publish_app`, runs a
   one-worker run on the page's own thread: `Host.cs` (in it the run goes to the thread pool and each host call back to
   .NET's JavaScript thread; in the worker's bundle a pass-through), `Api.Threads.cs` (`OpenThreaded(file, threads)`,
@@ -1146,7 +1223,10 @@ rules for changing them (adding to the page among them).
   Subtitle Edit's shot changes, and YouTube chapters of `YouTubeChapters` at the minimum typed beside them, their reason
   when there are none, a title a chapter typed under Titles, which the download carries), `shots.js`
   (the table below the timeline; marks the shot playing's row; a still of each shot's middle frame, the browser's
-  decode from a hidden `<video>` of its own, as rows come into view), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
+  decode from a hidden `<video>` of its own, as rows come into view; `stillAt` and `stillTimes` for the sheet, one
+  seek at a time with the table's), `sheet.js` (a card under the run's, marked page: the contact sheet, issue #93, 1
+  or 3 stills a shot from `shots.js`' grabber, its number, start and length, columns, a header; a PNG from a canvas
+  and a PDF written by hand, the JPEGs embedded, A4 or Letter), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots, the standard deviation among them), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `corrections.js` (a card beside the video, marked page: the cut that starts
@@ -1160,7 +1240,7 @@ rules for changing them (adding to the page among them).
   the page's own reading), `frametypes.js` (after a run: a lane under the bitrate's of each frame's type from
   `FrameTypes()`, a bar a frame on a `<canvas>`, I tall, P shorter, B shortest, and a card of the counts, marked core),
   `picture.js` (after a run: a lane of each frame's luma band and mean, the black spans, the
-  colour bars and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
+  colour bars, the still pictures and out-of-range ticks, and a card of the measures from `Picture()`, marked measured), `about.js` (a card on the `opened` event: Open's description in a viewer's words, its JSON
   folded under them). `Api` prefixes ManagedCodecs'
   `InvalidDataException` for the page (a .NET exception's type doesn't reach JavaScript).
 
@@ -1185,7 +1265,7 @@ rules for changing them (adding to the page among them).
   the run with each typed in vs the run without, on every sample; `AudioCheck.cs`: `Mp4Audio` vs FFmpeg's measures (FrameReader's `WaveformData.Read`,
   `FindReferenceTone`, `silencedetect`, `ebur128`) within tolerances, and `samples/no-aac/` answered with a reason;
   `PictureCheck.cs`: the default run's `PictureMeter` vs `signalstats` (one graph, `-reinit_filter 0`, where a frame's tags change), `cropdetect` (per frame and whole) and
-  `blackdetect` (d=0 and 2 s) exactly, the 10-bit samples in 10-bit values, the colour bars by their definition on the samples that have them, the ranges'
+  `blackdetect` (d=0 and 2 s) and `freezedetect` (and ShotDetector's own `FreezeSpans`) exactly, the 10-bit samples in 10-bit values, the colour bars by their definition on the samples that have them, the ranges'
   measures joined vs the whole run's (`out/native/<sample>.picture.json`, which app-check.mjs compares `Picture()` with);
   `tools/app-check.mjs`: the App's published bundle
   under Node through the same exports, the samples as `Blob`s read through the published `blob-read.js`
@@ -1197,11 +1277,16 @@ rules for changing them (adding to the page among them).
   the run never paused's CSVs and shots once resumed; on the first sample one stopped while paused), the default and all-detector runs (the latter deinterlaced too) split into ranges and merged (the whole run's CSVs and shots),
   stopped in its second range (the result for its start), and merges of ranges that don't match failing as the page
   expects, and `Picture()` and `FrameTypes()` the native check's (a split run's the whole run's, a stopped run's its frames); `tools/replace-check.mjs`: a bundle
-  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`); `tools/page-check/page-check.mjs`: the page itself in
+  rebuilt with a changed FastYuv runs it (`tools/check.sh replace`; with `package`, every bundle of the npm package
+  rebuilt with it too); `tools/package.sh`: the npm package from `package/` and the App's publishes (The npm package,
+  above); `tools/page-check/package-check.mjs`: its tarball installed into a test site in Chromium (`tools/check.sh
+  package`), `detectShots` on three samples with each bundle, on threads where isolated and asked for where not, a
+  stop, a pause and a cancel, the files the native run's; `tools/page-check/page-check.mjs`: the page itself in
   Chromium (Playwright pinned by its `package-lock.json`; `tools/check.sh page`), the published `wwwroot` served with
   the demo clip, each page isolated by its service worker first, a sample picked on threads, on the page's worker
   (`?threads=0`) and on two workers, `mjpeg-320x240-25.avi` picked (the player the file's JPEG at the playhead after
-  clicks on the timeline and a shot's row, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
+  clicks on the timeline and a shot's row, a still per shot), the contact sheet of each sample picked on threads and of the AVI (a PNG
+  and A4 and Letter PDFs downloaded, each valid, a still per shot), a rotated, a variable-rate and a 10-bit one on threads and on two workers, the demo on
   threads paused and resumed, then stopped while paused, then run again
   offline from the cache, the demo stopped while paused shown again after a reload and resumed on threads, split
   across two workers stopped and resumed, and in Firefox (`PAGE_CHECK_FIREFOX=skip` where Playwright has none) stopped,
@@ -1245,6 +1330,7 @@ rules for changing them (adding to the page among them).
   `2026-10-30-scope-widening.md`: fragmented MP4, rotation and a variable rate, what each needs and where;
   `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
   `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
+  `2026-11-01-freeze-spans.md`: still pictures only in a run that reads every frame in order, the owner's A;
   `2026-11-02-correcting-cuts.md`: correcting the cuts on the page, a corrected finished run kept, `LoadScenes` as it is;
   `2026-11-02-browser-decoder.md`: the files the page refuses, a refusal that says what to do, then VP9 and AV1
   through the browser's decoder, checked in Chromium;

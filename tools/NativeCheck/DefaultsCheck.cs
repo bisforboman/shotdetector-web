@@ -40,8 +40,8 @@ static partial class DefaultsCheck
             var cells = new List<string>();
             foreach (var (_, library, page_) in typed)
             {
-                var a = VideoInput.Open(sample).Detect(library);
-                var b = VideoInput.Open(sample).Detect(page_);
+                var a = FfmpegDecoder.Open(sample).Detect(library);
+                var b = FfmpegDecoder.Open(sample).Detect(page_);
                 bool same = a.Cuts.SequenceEqual(b.Cuts) && a.Shots.Count == b.Shots.Count;
                 cells.Add(same ? $"same ({a.Shots.Count} shots)" : $"DIFFERS: {b.Shots.Count} shots, the default run {a.Shots.Count}");
                 if (!same)

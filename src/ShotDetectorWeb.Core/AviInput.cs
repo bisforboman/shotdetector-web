@@ -27,7 +27,7 @@ public sealed class AviInput : VideoInput
         using var demuxer = new AviDemuxer(stream, leaveOpen: true);
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The AVI file has no video stream.");
         if (info.Codec != CodecIds.Mjpeg)
-            throw new UnsupportedVideoException($"The video is '{info.Codec}', not MJPEG: only MJPEG is supported in AVI so far.");
+            throw new UnsupportedVideoException($"The video is {Refusal.AviCodec(info.Codec)}, not MJPEG: {Refusal.Scope}");
         var strh = header.Video ?? throw new UnsupportedVideoException("The AVI file has no video stream.");
 
         // The first frame's size and format: a JPEG's chroma subsampling is its own, frame by frame.

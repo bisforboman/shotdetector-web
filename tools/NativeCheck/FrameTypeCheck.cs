@@ -33,7 +33,7 @@ internal static class FrameTypeCheck
             string name = Path.GetFileName(sample);
             try
             {
-                var input = VideoInput.Open(sample);
+                var input = FfmpegDecoder.Open(sample);
                 string theirs = Probe(ffprobe, sample);
                 File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".frametypes.txt"), theirs);
                 string ours = Types(input, 1);

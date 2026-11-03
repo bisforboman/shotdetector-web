@@ -43,7 +43,10 @@ export async function host(wwwroot) {
   const { read } = await import(pathToFileURL(resolve(wwwroot, 'blob-read.js')).href);
   const { parts, append, blob } = await import(pathToFileURL(resolve(wwwroot, 'blob-write.js')).href);
   const { pause, hold, release } = await import(pathToFileURL(resolve(wwwroot, 'pause.js')).href);
-  return { read, parts, append, blob, pause, hold, release };
+  // The browser's decoder for WebM (JsDecoder): Node has no VideoDecoder, so a WebM opens and its run is refused.
+  const decoding = await import(pathToFileURL(resolve(wwwroot, 'video-decode.js')).href);
+  const { decoderOpen, decoderDecode, decoderNext, decoderTake, decoderClose } = decoding;
+  return { read, parts, append, blob, pause, hold, release, decoderOpen, decoderDecode, decoderNext, decoderTake, decoderClose };
 }
 
 // A file as the page gets one: a Blob (a File is one) of its bytes.
