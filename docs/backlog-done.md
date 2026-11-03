@@ -1544,3 +1544,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     root, where they find `threads/_framework/` unchanged. Found: a host must serve `.mjs` as JavaScript or the
     threaded runtime's workers don't start; the package's README says so. The publish waits: Waiting, "The npm
     package's first publish")
+
+- Freeze spans on the page
+  - Why: 3.26.0's `DetectionOptions.FreezeDetect` and FrameReader 2.20.0's `FreezeDetector` find still pictures as
+    FFmpeg's `freezedetect` does, a delivery check beside the black spans. Ranges refuse `FreezeDetect` (and
+    `BlackDetect`, "yet"), and every run on the page is a range: decision
+    [2026-11-01-freeze-spans.md](decisions/2026-11-01-freeze-spans.md), the owner's A: the core feeds
+    `FreezeDetector` in a run that reads every frame in order from the first; a split or resumed run says why not.
+    ShotDetector's `BlackSpans` equal the page's own on every sample, but ranges refuse `BlackDetect`: the page keeps
+    its own.
+  - Where: the core's `PictureMeter` (`freeze`, `FreezeSpans`), `PictureSummary`'s `Freeze` (`PictureFreeze`,
+    `PictureStill`); `Api.Detect` (from frame 0, not resumed) and `Api.Merge` (split, resumed) say which;
+    `panels/picture.js` (a band in the lane, a "Still pictures" part of the card) and `style.css`; PictureCheck
+    (`freezedetect` in its graph, and ShotDetector's own `FreezeSpans`), app-check (split, stopped and resumed runs) and
+    page-check (the card's still pictures, and "not looked for" on two workers).
+  - Done when: `tools/check.sh native wasm aot page` passes: the still pictures `freezedetect`'s on every sample, the
+    page's the native run's.
+  - Not: still pictures across ranges (ShotDetector refuses them there); ShotDetector's `BlackSpans` (not in ranges yet).
+  - Status: Done (2026-11-02: the still pictures `freezedetect`'s on every sample natively, and ShotDetector's own
+    `FreezeSpans`; Sintel's 48.458 to 50.8 s, the variable-rate samples' still to their end; interpreted and AOT the
+    native run's; the page's card the native check's, "not looked for" when split; FreezeDetector about 0.15 ms a
+    frame on Sintel)

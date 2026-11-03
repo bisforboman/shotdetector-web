@@ -326,7 +326,7 @@ video, .frame {
 
 /* The picture: each frame's luma as a band (YMIN to YMAX) and a line (YAVG), the out-of-range ticks along the bottom as
    tall as the share out of range (an SVG stretched over the frames read), the black spans hatched and the colour bars
-   (as their luma steps) as marks over it; the measures' card. */
+   (as their luma steps) and the still pictures (freezedetect) as marks over it; the measures' card. */
 .track.picture, .lane-label.picture { height: 3.5rem; }
 .lane-label.picture { line-height: 3.5rem; }
 .track.picture svg { position: absolute; top: 0; height: 100%; }
@@ -341,6 +341,10 @@ video, .frame {
   bottom: auto; height: 0.4rem;
   background: linear-gradient(90deg, #c0c0c0 0 14.3%, #adadad 0 28.6%, #8f8f8f 0 42.9%, #7c7c7c 0 57.1%, #5a5a5a 0 71.4%,
     #474747 0 85.7%, #2a2a2a 0);
+}
+.mark.freeze {
+  top: 0.5rem; bottom: auto; height: 0.35rem;
+  background: color-mix(in srgb, var(--accent) 35%, transparent); border-inline: 1px solid var(--accent);
 }
 #picture h3 { margin: 0.75rem 0 0.25rem; font-size: 0.85rem; }
 #picture p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
