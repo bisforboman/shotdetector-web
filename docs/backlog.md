@@ -73,7 +73,7 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Done when: the frame types of every WebM sample on four threads equal one thread's on repeated native checks (run
     `FrameTypeCheck` on the AV1 samples in a loop, say 50 times, before and after), and the cause is named in the PR.
   - Not: loosening the check, skipping WebM in it, or re-running CI until green.
-  - Status: Open
+  - Status: In progress (2026-11-03)
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
