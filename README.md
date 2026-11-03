@@ -1044,8 +1044,9 @@ measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for t
 10-bit 4:2:0 (no chroma location in the VUI, and topleft with full range and BT.709, its sources tagged BT.709 before
 the concat so that its colour bars stay BT.709's) and 8-bit 4:2:2 (limited and full range) H.264; files to refuse (AVIs: 4:4:4, 4:1:1 and 4:4:0 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
 H.264; one MP4 whose size changes midway); and three whose audio isn't measured. A deinterlaced run over 10 bits is
-compared with FFmpeg's yadif with its SIMD off (FFmpeg 8.1's x86 SIMD yadif differs from run to run there; FastYuv's
-`Yadif`, the core's, follows its C code).
+compared with FFmpeg's yadif as ShotDetector's FFmpeg path runs it: since 3.28.0 on one thread over 9 to 16 bits, as
+its C code, which FastYuv's `Yadif`, the core's, follows (FFmpeg 8.1's x86 SIMD yadif differs from run to run there,
+and NativeCheck turned it off before).
 
 ### Real world
 
