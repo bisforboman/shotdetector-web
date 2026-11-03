@@ -13,7 +13,7 @@
 // ('corrected', panels/corrections.js), the figures and every download but the stats CSV are the corrected list's,
 // made by ShotDetector (Api's Correct: LoadScenes of the list), still checked byte for byte; the stats CSV, each frame's
 // scores, stays the run's.
-import { call, card, frameSeconds, on } from '../app.js';
+import { browserDecoded, call, card, frameSeconds, on } from '../app.js';
 import { secondsOf, timecode } from '../timeline.js';
 
 const section = card('This run', {
@@ -129,6 +129,20 @@ function clear({ keepTitles = false } = {}) {
   summary.textContent = '';
   shots = [];
 }
+
+// Whose shots these are: scenedetect's, byte for byte, from ManagedCodecs' frames; or, for a WebM's VP9 or AV1, from
+// the browser's own decoder's (decision 2026-11-02-webm-browser-decoder.md), checked in Chromium only.
+const chip = section.querySelector('h2 .chip'), exactChip = { text: chip.textContent, title: chip.title };
+const BROWSER_TITLE = 'Decoded by your browser\'s own decoder (WebCodecs\' VideoDecoder), not ManagedCodecs: the page ' +
+  'can\'t check your browser. Chromium\'s software VP9 and AV1 decoders were checked to give FFmpeg\'s frames, and ' +
+  'its runs the CSVs, JSON, HTML and editors\' files of ShotDetector\'s FFmpeg path byte for byte on the samples.';
+on('opened', ({ video }) => {
+  const browser = browserDecoded(video);
+  chip.classList.toggle('exact', !browser);
+  chip.classList.toggle('browser', browser);
+  chip.textContent = browser ? 'your browser\'s decoder' : exactChip.text;
+  chip.title = browser ? BROWSER_TITLE : exactChip.title;
+});
 
 on('chose', ({ file }) => {
   runs++;

@@ -28,7 +28,7 @@ internal static class ThreadsCheck
             string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
             try
             {
-                var input = VideoInput.Open(sample);
+                var input = FfmpegDecoder.Open(sample);
                 input.DecoderThreads = Threads;
                 string whole = Same(input.Detect(options), baseName);
 

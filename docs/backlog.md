@@ -70,22 +70,8 @@ The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then
 
 The owner's choice of 2026-11-02 ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)):
 a refusal that says what to do first, then VP9 and AV1 through the browser's decoder, held to the FFmpeg path's CSVs.
-
-- VP9 and AV1 in WebM through the browser's decoder
-  - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
-    I420/I420P10, which FastYuv and the frame source take; a visitor's YouTube download gets a result.
-  - Where: the core: a WebM/Matroska reader and VP9 frame header / AV1 sequence header readers (`YuvVideo` as ffprobe
-    says it: rate, frames, duration, time base, colour tags, never `VideoFrame.colorSpace`, which Chromium defaults
-    to bt709), a `VideoInput` whose frames come from the page; the App: an export taking frames from JavaScript; the
-    page: `VideoDecoder` (`prefer-software` first), `copyTo` I420/I420P10 (NV12 de-interleaved), a `browser` chip and
-    a status line saying the browser decoded it; a browser giving RGB (Firefox) or no decoder gets row 1's refusal.
-    A design question the row doesn't settle (ranges and resume over the browser's decoder, the frames crossing on
-    threads) goes to `docs/decisions/` first.
-  - Done when: VP9 and AV1 WebM samples in `make-samples.sh`; NativeCheck compares the description with ffprobe field
-    by field; page-check picks them in Chromium, their CSVs, shots and timeline files the FFmpeg path's byte for byte.
-  - Not: H.264 or MJPEG through the browser (always ManagedCodecs); HEVC (no decoder CI can run); RGB frames.
-  - Depends on: "A refusal that says what to do" (done, #133).
-  - Status: Open
+Both rows are done (backlog-done, #133 and #135); what they left is in Maybe ("WebM runs split, resumed and on
+threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "A Matroska demuxer in ManagedCodecs").
 
 ### The npm package (issue #92)
 
@@ -157,6 +143,29 @@ Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) ta
 a frame of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
+
+- WebM runs split, resumed and on threads
+  - Why: a browser-decoded WebM runs on the page's worker alone, and a stopped one isn't kept (decision
+    `2026-11-02-webm-browser-decoder.md`, the owner's "one worker only"). NativeCheck's ranges, threads and resume
+    checks already pass on the WebM samples with FFmpeg standing in: what is missing is the page's side (a
+    `VideoDecoder` per range's worker from its keyframe, the threaded runtime's imports on the main thread).
+  - Where: `app.js`'s `ranges`, `go` and `keep` (`browserDecoded`), `threads.js` (the decoder imports), page-check.
+  - Done when: page-check splits a WebM across two workers, stops and resumes one, to the native run's files.
+  - Status: Maybe (2026-11-02)
+
+- WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
+  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration (FFmpeg's rate then comes from the frames
+    it probes) or whose Segment has no Duration (a live recording), and AV1 in MP4 (YouTube's) is refused as another
+    codec in `Mp4Input`. Each needs FFmpeg's rule for it, a sample, and the checks.
+  - Where: `WebmInput`, `Mp4Input` (an MP4 track's 'vp09' or 'av01' through the browser's decoder), make-samples.sh.
+  - Status: Maybe (2026-11-02)
+
+- A Matroska demuxer in ManagedCodecs
+  - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs has a
+    Matroska demuxer that gives packets and the track's headers as its MP4 and AVI demuxers do.
+  - Where: an issue on ManagedCodecs (not filed from this session: the repository wasn't in its scope), then
+    `WebmInput` on its demuxer.
+  - Status: Maybe (2026-11-02)
 
 - Chapter titles kept with the kept run
   - Why: the titles typed for a run's YouTube chapters (the run card's Titles) last while the run is shown; a stopped

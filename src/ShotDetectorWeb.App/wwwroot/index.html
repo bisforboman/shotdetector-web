@@ -50,7 +50,7 @@
 
     <form id="form">
       <div class="drop" id="drop">
-        <input type="file" id="file" accept=".mp4,.avi,video/mp4,video/x-msvideo">
+        <input type="file" id="file" accept=".mp4,.avi,.webm,video/mp4,video/x-msvideo,video/webm">
         <label for="file">
           <strong id="drop-text">Choose an MP4 or an AVI, or drop one here</strong>
           <small>H.264 at 8-bit 4:2:0 or 4:2:2 or 10-bit 4:2:0 (progressive or MBAFF interlaced, deinterlaced if asked) or 4:2:0 or 4:2:2 MJPEG, constant or variable frame rate, any size: it is read in parts, never uploaded</small>
@@ -162,7 +162,9 @@
       and the CSVs, checked equal to ShotDetector's FFmpeg path on every sample; <span class="chip">measured</span> the
       core's measure of the sound, checked against FFmpeg's within a tolerance; <span class="chip">the core's</span> the
       core's description of the file, checked against FFmpeg's field by field; <span class="chip">the page's</span>
-      worked out here for display. A row of another kind says so in its tooltip.</p>
+      worked out here for display; <span class="chip browser">your browser's decoder</span> a WebM's VP9 or AV1, whose
+      frames your browser decodes, checked equal to the FFmpeg path in Chromium only. A row of another kind says so in
+      its tooltip.</p>
     <p>Nothing leaves your machine: the file is read here, there is no upload, no server and no analytics.</p>
     <p><a href="https://github.com/bisforboman/shotdetector-web">Source</a> ·
       <a href="https://github.com/bisforboman/shotdetector-web/blob/main/LICENSE">MIT license</a> ·

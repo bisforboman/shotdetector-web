@@ -76,6 +76,7 @@ select, input { font: inherit; padding: 0.3rem 0.4rem; }
 }
 h2 .chip { cursor: help; }
 .chip.exact { border-color: var(--exact); color: var(--exact); }
+.chip.browser { border-color: var(--keyframe); color: var(--keyframe); }
 
 /* The landing (no file picked): the pitch, the drop zone with the demo in it, the options and Detect under it. */
 h1 { margin: 0.5rem 0 0.25rem; font-size: 1.6rem; }

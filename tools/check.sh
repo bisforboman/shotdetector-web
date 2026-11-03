@@ -10,7 +10,8 @@
 #           then a rotated, a variable-rate and a 10-bit sample, each on threads and on two workers, an interlaced one deinterlaced
 #           (auto) on threads and on two workers, the demo on threads paused
 #           and resumed, then stopped while paused, shown again after a reload and resumed, then offline, split across
-#           two workers stopped and resumed, and in Firefox stopped, reloaded and resumed (PAGE_CHECK_FIREFOX=skip
+#           two workers stopped and resumed, every samples/*.webm decoded by Chromium's own VideoDecoder, and in Firefox
+#           stopped, reloaded and resumed (PAGE_CHECK_FIREFOX=skip
 #           leaves Firefox out where Playwright has none), each run's downloaded CSVs, JSON and HTML against the native
 #           run's (the samples named are not used: always those);
 #           the only check of the threaded bundle. Reuses the bundles wasm published in the same call, else publishes
@@ -18,9 +19,9 @@
 #   replace: LGPL-2.1, FastYuv replaceable: one built from its source at the package's tag, with a visible change, in a
 #           bundle rebuilt with -p:FastYuvAssembly, must be the one that runs (tools/replace-check.mjs).
 #
-# Usage: tools/check.sh [native] [wasm] [page] [replace] [aot] [<sample.mp4|.avi>...]
+# Usage: tools/check.sh [native] [wasm] [page] [replace] [aot] [<sample.mp4|.avi|.webm>...]
 #   (default: native wasm; aot: the wasm and replace bundles compiled ahead of time; samples named: only those, instead
-#   of every samples/*.mp4 and *.avi, the files to refuse and those without AAC still all: CI's interpreted check on a pull
+#   of every samples/*.mp4, *.avi and *.webm, the files to refuse and those without AAC still all: CI's interpreted check on a pull
 #   request, README "Checks". wasm compares the files of the samples it ran, so native may have run more.)
 #   Needs samples/ (tools/make-samples.sh), SHOTDETECTOR_FFMPEG_LIBS (an FFmpeg 8.1 shared build's folder, also on
 #   LD_LIBRARY_PATH) for native, Node plus the wasm-tools workload (dotnet workload install wasm-tools) for wasm, page
@@ -38,7 +39,7 @@ for arg in "$@"; do
     page) page=true ;;
     replace) replace=true ;;
     aot) aot=true ;;
-    *.mp4 | *.avi) [[ -f $arg ]] || { echo "No such sample: $arg" >&2; exit 2; }; samples+=("$arg") ;;
+    *.mp4 | *.avi | *.webm) [[ -f $arg ]] || { echo "No such sample: $arg" >&2; exit 2; }; samples+=("$arg") ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -62,7 +63,7 @@ publish_app() {
   cp -r "$threads/wwwroot/_framework" "$publish/wwwroot/threads/_framework"
   rm -rf "$threads"
 }
-if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4 samples/*.avi); fi
+if [[ ${#samples[@]} == 0 ]]; then samples=(samples/*.mp4 samples/*.avi samples/*.webm); fi
 rejects=(samples/reject/*)
 noAac=(samples/no-aac/*)
 if [[ ${#samples[@]} == 0 ]]; then echo "No samples: run tools/make-samples.sh first." >&2; exit 1; fi
@@ -107,6 +108,8 @@ if [[ $wasm == true ]]; then
   # named), each written by the run.
   files=0 differ=0 extra=0 missing=0
   for s in "${samples[@]}"; do
+    # A WebM's frames are the browser's decoder's, which Node hasn't: page-check compares its runs.
+    [[ $s == *.webm ]] && continue
     b=out/native/$(basename "${s%.*}")
     written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html "$b".*.edl "$b".*.fcpxml "$b".*.fcp7.xml "$b".*.otio "$b".*.qp "$b".*.keyframes.txt "$b".*.shotchanges \
       "$b".*.chapters-*.json)
@@ -142,14 +145,18 @@ if [[ $page == true ]]; then
   avi=samples/mjpeg-320x240-25.avi
   more=(samples/rotated-90-320x240-25.mp4 samples/vfr-320x240.mp4 samples/yuv420p10-full-topleft-bt709-320x240-25.mp4)
   interlaced=samples/interlaced-tff-320x240-25.mp4
-  for f in "$sample" "$demo" "$avi" "${more[@]}" "$interlaced" samples/reject/hevc.mp4 samples/reject/vp9.webm; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
+  # Every WebM sample, decoded by Chromium's own VideoDecoder (decision 2026-11-02-webm-browser-decoder.md).
+  browser=()
+  for f in samples/*.webm; do browser+=(--browser "$f"); done
+  (( ${#browser[@]} > 0 )) || { echo "No WebM samples (tools/make-samples.sh)" >&2; exit 1; }
+  for f in "$sample" "$demo" "$avi" "${more[@]}" "$interlaced" samples/reject/hevc.mp4 samples/reject/vp8.webm; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
   if [[ $wasm == false ]]; then publish_app; fi
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" "$avi" --native out/native --deinterlace "$interlaced" \
-    --refused samples/reject/hevc.mp4 --refused samples/reject/vp9.webm "${more[@]}" || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, an AVI's picture and stills from its JPEGs, a rotated, a variable-rate and a 10-bit video on threads and on two workers, an interlaced one deinterlaced on threads and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's, HEVC and WebM refused with what reads them instead" || echo "FAILED")."
+    --refused samples/reject/hevc.mp4 --refused samples/reject/vp8.webm "${browser[@]}" "${more[@]}" || status=$?
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, an AVI's picture and stills from its JPEGs, a rotated, a variable-rate and a 10-bit video on threads and on two workers, an interlaced one deinterlaced on threads and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's, HEVC and VP8 refused with what reads them instead, every WebM sample decoded by Chromium's VideoDecoder to the native run's files" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi

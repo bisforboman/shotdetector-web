@@ -1508,6 +1508,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     reads; the page's `#refused` links the `shotdetect` command, and for HEVC the iPhone's Most Compatible;
     `samples/reject/hevc.mp4`, `vp9.webm`, `av1.mp4` checked by NativeCheck, app-check.mjs and page-check
 
+- VP9 and AV1 in WebM through the browser's decoder
+  - Why: the decision's option 2: Chromium's software VP9 and AV1 decoders gave FFmpeg's frames, 8- and 10-bit, as
+    I420/I420P10, which FastYuv and the frame source take; a visitor's YouTube download gets a result.
+  - Where: the core: a WebM/Matroska reader and VP9 frame header / AV1 sequence header readers, a `VideoInput` whose
+    frames come from the page; the App and the page: `VideoDecoder`, a `browser` chip; decision
+    `2026-11-02-webm-browser-decoder.md` first.
+  - Status: Done (2026-11-02, #135): `WebmInput` (`MatroskaReader`, `Vp9Header`, `Av1Header`) describes the file as
+    FFmpeg does, its frames from an `IHostDecoder` through `VideoInput`'s asynchronous frame path; the App's `JsDecoder`
+    over `video-decode.js`'s `VideoDecoder`, the run on the page's worker alone, not kept, its chip the browser's
+    decoder's; NativeCheck's `FfmpegDecoder` (ffmpeg standing in for the browser) holds the seven WebM samples (VP9
+    untagged, BT.709 at 29.97, full range, 10-bit, 4:2:2; AV1 with Opus, 10-bit) to `Detect(path)` in every check,
+    page-check's `--browser` holds Chromium's decoder to the same files, app-check opens them and is refused under Node
+
 - Correcting the cuts on the page (issue #90)
   - Why: ShotDetector 3.25.0's `LoadScenes(YuvVideo, TextReader, column, options)` (shotdetector#647) reads a scenes
     CSV back over a `YuvVideo`, which a page that lets a viewer add and drop cuts before exporting needs: the edited
