@@ -59,6 +59,22 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
     (on nuget.org since 2026-11-02); the bump to it is this row's work
 
+### Found by CI (2026-11-03)
+
+- An AV1 WebM's last frame type on four decoder threads
+  - Why: the native check's frame-type check failed once on `av1-yuv420p10-320x240-25.webm`, "same **DIFFERS: frame
+    113: ? vs one thread's P**": on four decoder threads the last frame's type came out `?` (unknown) where one
+    thread gives `P` ([run 41600891725](https://github.com/bisforboman/shotdetector-web/actions/runs/41600891725),
+    attempt 1, on #141, a PR that changes no code). The re-run passed, so it depends on timing: a check that passes
+    or fails by chance stops proving anything, and a PR that runs the full tier hits it at random.
+  - Where: `tools/NativeCheck/FrameTypeCheck.cs` (`Types(input, threads)`), and the WebM path's frames on threads:
+    `WebmInput` with `FfmpegDecoder` standing in for the browser's decoder (`IHostDecoder`). A guess, not checked: the
+    last frame's type depends on whether it comes out before or after the decoder is flushed.
+  - Done when: the frame types of every WebM sample on four threads equal one thread's on repeated native checks (run
+    `FrameTypeCheck` on the AV1 samples in a loop, say 50 times, before and after), and the cause is named in the PR.
+  - Not: loosening the check, skipping WebM in it, or re-running CI until green.
+  - Status: Open
+
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
