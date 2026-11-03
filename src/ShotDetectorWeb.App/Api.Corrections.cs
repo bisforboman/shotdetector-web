@@ -54,7 +54,7 @@ public static partial class Api
         using var shots = JsonDocument.Parse(Shots.Json(shown.Shots));
         return JsonSerializer.Serialize(
             new DetectResponse(shots.RootElement, run.FrameCount, run.Video.FrameRate, run.Video.Duration, stopped,
-                run.Warnings),
+                _warnings),
             ApiJson.Default.DetectResponse);
     }
 }

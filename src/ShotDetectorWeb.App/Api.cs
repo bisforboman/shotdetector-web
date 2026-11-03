@@ -141,28 +141,38 @@ public static partial class Api
             ? PictureFreeze.Found(still, picture.Measures.TimeBase)
             : PictureFreeze.Resumed;
         return Answered(input, options, result, ranges,
-            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), freeze);
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), freeze,
+            earlier.Damaged.Concat(input.DamagedFrames(result.FrameCount)));
     }
 
     /// <summary>
     /// A run's result kept for the exports that show more of it (<see cref="Picture"/> for the frames it read,
     /// <see cref="Kept"/> its ranges), and its answer as JSON (<see cref="DetectResponse"/>).
     /// </summary>
+    /// <remarks>
+    /// Its warnings are ShotDetector's, then the core's for the <paramref name="damaged"/> frames the run read (0-based,
+    /// repeats ignored: <see cref="VideoInput.DamagedWarning"/>, decision 2026-11-02-damaged-jpeg.md).
+    /// </remarks>
     static string Answered(VideoInput input, DetectionOptions options, DetectionResult result, IReadOnlyList<RangeScores> ranges,
-        PictureMeasures? picture, PictureFreeze freeze)
+        PictureMeasures? picture, PictureFreeze freeze, IEnumerable<int> damaged)
     {
+        var read = damaged.Where(f => f < result.FrameCount).Distinct().Order().ToArray();
+        _warnings = VideoInput.DamagedWarning(read, result.FrameCount) is { } warning ? [.. result.Warnings, warning] : result.Warnings;
         _result = result;
         _corrected = null;
         _picture = picture?.Take(result.FrameCount);
         _freeze = freeze;
-        _kept = new KeptRun(ranges, _picture);
+        _kept = new KeptRun(ranges, _picture, read);
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
             new DetectResponse(shots.RootElement, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
-                result.FrameCount < input.ShownFrames, result.Warnings),
+                result.FrameCount < input.ShownFrames, _warnings),
             ApiJson.Default.DetectResponse);
     }
+
+    /// <summary>The last run's warnings, as its answer gave them (<see cref="Answered"/>).</summary>
+    static IReadOnlyList<string> _warnings = [];
 
     /// <summary>
     /// Ends the running <see cref="Detect"/>'s frames at its next pause, as if the file ended there: it then gives the
