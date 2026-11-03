@@ -59,6 +59,24 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
     (on nuget.org since 2026-11-02); the bump to it is this row's work
 
+### ManagedCodecs 0.6.0, FrameReader 2.21.0 and ShotDetector 3.27.0
+
+- ManagedCodecs 0.6.0 and FrameReader 2.21.0, with the AVI scope widened; ShotDetector and FastYuv 3.27.0
+  - Why: the coordinator's row of 2026-11-02, the owner adding ShotDetector 3.27.0 (its hash fix, shotdetector#701,
+    the row above). ManagedCodecs 0.6.0 reads the other AVI FourCCs FFmpeg takes as MJPEG, decodes 4:1:1 and 4:4:0
+    JPEG and a JPEG whose scan runs past its data (`VideoFrame.IsDamaged`) instead of throwing.
+  - Where: `Directory.Packages.props`; `AviInput` (4:1:1 and 4:4:0 refused by name: ShotDetector 3.27.0's frame source
+    takes neither, reported to the shotdetector coordinator); `VideoInput.Damaged.cs` and `Api` (decision
+    [2026-11-02-damaged-jpeg.md](decisions/2026-11-02-damaged-jpeg.md), the owner's A: the damaged frames decoded as
+    ManagedCodecs does and named in the run's warnings, carried by a range's bytes and the kept run); NativeCheck's
+    `DamagedCheck.cs`; app-check.mjs; `make-samples.sh` (`mjpeg-dmb1-*`, `mjpeg-damaged-*`, `reject/mjpeg-411.avi`,
+    `reject/mjpeg-440.avi`); README.
+  - Done when: `tools/check.sh native wasm aot page` passes: the dmb1 sample byte for byte; the damaged one with the
+    core's damaged frames FFmpeg's and everything else byte for byte but the stats rows that read the frame; 4:1:1 and
+    4:4:0 refused with their names. After the merge, realworld.yml's tears and clips jobs green on main (the row above).
+  - Not: converting 4:1:1 or 4:4:0 here (ShotDetector's); ManagedCodecs 0.7.0.
+  - Status: In progress (2026-11-03)
+
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
 The owner asked on 2026-11-01 to move the page to the packages released that day: the bump, then deinterlaced runs
@@ -93,6 +111,21 @@ publish").
     closed after.
   - Done when: `npm view shotdetector-web` shows 0.1.0 with provenance.
   - Status: Waiting (2026-11-02): the owner's npm setup
+
+- Freeze spans and ShotDetector's black spans on split and resumed runs
+  - Why: the page looks for still pictures only in a run that reads every frame in order (decision
+    [2026-11-01-freeze-spans.md](decisions/2026-11-01-freeze-spans.md)) and keeps its own black spans, because ranges
+    refused `FreezeDetect` and `BlackDetect`. shotdetector#712 (merged 2026-11-03; shotdetector's decision
+    2026-11-02-freeze-spans-for-ranges.md) lets ranges take both: `Merge`'s `FreezeSpans` and `BlackSpans` equal
+    `Detect`'s however the run is split, with `FirstRangeToScoreAgain`/`RangeFrames` for split runs and the
+    `RangeFrames(video, earlier, options, first, end)` overload for resumed ones (`RangeScores` format v2 only when
+    either option is set).
+  - Where: `Directory.Packages.props`; `VideoInput.Ranges.cs`, `Api.Ranges.cs`, `Api.Resume.cs`, `PictureSummary.cs`,
+    `panels/picture.js`; PictureCheck, RangeCheck, ResumeCheck, app-check.mjs, page-check.
+  - Done when: a split and a resumed run's still pictures and black spans are the whole run's on every sample, and
+    `freezedetect`'s and `blackdetect`'s natively; `tools/check.sh native wasm aot page` passes.
+  - Not: building it before the release.
+  - Status: Waiting (2026-11-03): the ShotDetector release with shotdetector#712 (3.28.0, not on nuget.org yet)
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and

@@ -37,7 +37,12 @@ little-endian words, yuv420p10le), its chroma location the SPS's (left without o
 conversion interpolates from; its picture is measured in 10-bit code values, as FFmpeg's filters measure it ("The
 picture"). **And 4:2:0 or 4:2:2 MJPEG
 in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not measured; decision
-`docs/decisions/2026-10-30-mjpeg-avi.md`). **And VP9 or AV1 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full
+`docs/decisions/2026-10-30-mjpeg-avi.md`), under any FourCC FFmpeg reads as MJPEG (`MJPG`, `dmb1`, `AVI1`, `AVRn`'s
+kin: ManagedCodecs 0.6.0's list; `samples/mjpeg-dmb1-320x240-25.avi`). A damaged JPEG, whose scan ends before its
+picture does, is decoded with the part it doesn't reach black, where FFmpeg leaves an earlier frame's picture, which
+one depending on its threads: the run's warnings name it, and the checks hold everything else to FFmpeg's, the stats
+rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`, the owner's choice;
+`samples/mjpeg-damaged-320x240-25.avi`). **And VP9 or AV1 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full
 range or not, with a DefaultDuration and a Duration; decisions `docs/decisions/2026-11-02-browser-decoder.md` and
 `2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
 libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
@@ -48,7 +53,8 @@ run not kept), its run card's chip "your browser's decoder". Natively FFmpeg sta
 browser whose decoder doesn't take the codec, or whose frames aren't Y, U and V planes (Firefox's BGRX), refuses the run
 and says so; Node has no `VideoDecoder`, so app-check.mjs checks that a WebM opens and its run is refused. Its audio is
 described, not measured. Anything else is refused when the file is opened, with an
-`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, greyscale, 10-bit 4:2:2 or more than
+`UnsupportedVideoException` saying what (neither MP4 nor AVI, another codec, 4:4:4, 4:1:1 or 4:4:0 JPEG (which ManagedCodecs decodes
+and ShotDetector's frame source doesn't take yet), greyscale, 10-bit 4:2:2 or more than
 10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
 `docs/decisions/2026-10-30-scope-widening.md`). Another codec or container is named as a viewer and FFmpeg name it
 (`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4, MJPEG in AVI,
@@ -212,7 +218,8 @@ A stopped run can be resumed, in the same visit or a later one (backlog-done, "R
 decision [2026-10-30-resume-across-visits.md](docs/decisions/2026-10-30-resume-across-visits.md)). Every run keeps its
 ranges' scores and its picture measures; once stopped, the page asks for them (`Api.Kept`: a `Blob` of
 `KeptRun.ToBytes`, little-endian,
-its first int the frame the rest starts at, -1 for none) and keeps them in IndexedDB with the file's name, size and
+its first int the frame the rest starts at, -1 for none; the damaged frames read last, so a resumed run still names
+them) and keeps them in IndexedDB with the file's name, size and
 modified time and the
 run's options, one record in all (the owner's choice: only the last stopped run, of any file). Picking that file again,
 in this visit or a later one, puts the run's options in the form and shows the stopped part at once (`Api.Merge` of
@@ -288,7 +295,8 @@ the packets before it walked with their data skipped as opening does, and gives 
 (the frame before the range's first), the range's own frames and the next range's first (the overlap frame, which the
 merge compares). Each worker's scores come back as bytes (`Api.RangeBytes`: the scores' length, the scores
 (`RangeScores.ToBytes`, about
-97 bytes a frame for the adaptive detector), then the range's picture measures), and the page's own worker merges them
+97 bytes a frame for the adaptive detector), then the range's picture measures and the damaged frames its worker
+decoded), and the page's own worker merges them
 (`Api.Merge`: a stopped run's kept bytes, empty for none, then the ranges' bytes one after another; `stopped` when they
 don't reach the end), after which the CSVs come as
 from a one-worker run. Meanwhile the timeline's Ranges lane shows each worker's range and how far it has got; the
@@ -796,7 +804,10 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   (`TimelineFiles`: EDL, FCPXML, FCP7 XML, OTIO, QP and Aegisub keyframes, both results given the sample's name) must
   be equal (and Subtitle Edit's shot changes, `TimelineFiles`' `shotchanges`), and the YouTube chapters at 10 and 30 s
   (`<sample>.<run>.chapters-<minimum>.json`, ShotDetector's `Timeline.YouTubeChapters` and `ChapterStarts`) too, within
-  YouTube's rules (`ChaptersCheck.cs`). It also
+  YouTube's rules (`ChaptersCheck.cs`). A damaged JPEG (`DamagedCheck.cs`): the core's damaged frames must be
+  those FFmpeg's decoder logs an overread for (one thread, paired with `showinfo`'s frame numbers), and the stats CSV
+  the FFmpeg path's but for the rows that read one (its own and the next, the adaptive window on each side, one more
+  each side deinterlaced); the picture check leaves the damaged frames themselves out. It also
   checks that `samples/reject/` is refused, each file with its own message (when opened, or by its run: a size that
   changes midway), another codec's or container's naming it as FFmpeg does (`hevc`, `av1`, WebM), and compares each sample's
   `VideoInput.Packets` with `ffprobe -show_packets -select_streams v:0` (the ffprobe beside the FFmpeg libraries): the
@@ -1014,9 +1025,10 @@ The samples (tools/make-samples.sh) each isolate something the description must 
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
-measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does; 4:2:2);
+measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does; 4:2:2;
+`dmb1`; a damaged JPEG);
 10-bit 4:2:0 (no chroma location in the VUI, and topleft with full range and BT.709, its sources tagged BT.709 before
-the concat so that its colour bars stay BT.709's) and 8-bit 4:2:2 (limited and full range) H.264; seven files to refuse (three of them AVIs: 4:4:4 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
+the concat so that its colour bars stay BT.709's) and 8-bit 4:2:2 (limited and full range) H.264; files to refuse (AVIs: 4:4:4, 4:1:1 and 4:4:0 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
 H.264; one MP4 whose size changes midway); and three whose audio isn't measured. A deinterlaced run over 10 bits is
 compared with FFmpeg's yadif with its SIMD off (FFmpeg 8.1's x86 SIMD yadif differs from run to run there; FastYuv's
 `Yadif`, the core's, follows its C code).
@@ -1117,6 +1129,9 @@ rules for changing them (adding to the page among them).
   and decoded (Using the library).
 - `AviInput.cs` and `AviHeader.cs`: MJPEG in AVI, through ManagedCodecs' `AviDemuxer` and `MjpegDecoder`; `AviHeader`
   reads each stream's 'strh' and 'strf' (Using the library).
+- `VideoInput.Damaged.cs`: `DamagedFrames(frames)`, the frames the decoder said were damaged (ManagedCodecs'
+  `VideoFrame.IsDamaged`: a JPEG cut short), as the runs on the input decoded them, and `DamagedWarning`, the run's
+  warning naming them (decision `2026-11-02-damaged-jpeg.md`).
 - `WebmInput.cs`, `MatroskaReader.cs` (the EBML header, Info, Tracks and the video's blocks) and `CodecHeaders.cs`
   (`Vp9Header`'s key frame header, `Av1Header`'s sequence header): VP9 and AV1 in WebM (Status; decision
   `2026-11-02-webm-browser-decoder.md`), the frames from the host's `IHostDecoder` (the App's `JsDecoder`, FFmpeg in
@@ -1209,7 +1224,7 @@ decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`):
   `waveform.js` (a lane: The sound); `run.js` (the run's card: figures and downloads, `ShotsJson()` and `ShotsHtml()`
   asked for on `done`, the timeline files after them); `shots.js` (the table; `stillAt` and `stillTimes` for the sheet,
   one seek at a time with the table's); `sheet.js` (the contact sheet); `warnings.js` (a card only when a run has
-  warnings: ShotDetector's sentences as they are); `stats.js` (the shots' statistics: Shot lengths for film studies);
+  warnings: ShotDetector's sentences as they are, then the core's naming damaged frames); `stats.js` (the shots' statistics: Shot lengths for film studies);
   `sound.js` (on the `audio` event: the tone and silences lane and the sound's card, marked measured, what the page
   derives saying so in its tooltip); `corrections.js` (a card marked page: Correcting the cuts; through `app.js`'s
   `correct(cuts)`, which tells the `corrected` event that cuts, shots, stats, run and bitrate follow, a corrected
@@ -1272,8 +1287,9 @@ under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each f
 0.4.0 reads only the tracks asked for and gives packets without their data, ManagedCodecs#233, below "What the heap
 holds"; 0.5.0 gives each frame's colour tags and sample aspect ratio, the stream's colour, 'pasp', rotation and
 duration, and seeking, which the core doesn't use yet: `Mp4Header`, `SpsInfo` and `AviHeader` still read what FFmpeg says; 0.6.0 takes the
-other AVI FourCCs FFmpeg reads as MJPEG and decodes a JPEG whose scan runs past its data as FFmpeg does, and decodes
-4:1:1 and 4:4:0 JPEG, which ShotDetector's frame source doesn't take yet)
+other AVI FourCCs FFmpeg reads as MJPEG, decodes a JPEG whose scan runs past its data (the rest 0, `IsDamaged`; FFmpeg's
+picture there is undefined, Status), and decodes 4:1:1 and 4:4:0 JPEG, which ShotDetector's frame source doesn't take
+yet)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
