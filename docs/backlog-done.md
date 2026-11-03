@@ -1586,3 +1586,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     CSV, all marked the page's and following the corrected cuts; the page check holds the bars, the CSV and the
     deviation to the native run's shots, and to the corrected ones. A Cinemetrics file waits on a sample of one: row
     "A Cinemetrics file")
+
+- ManagedCodecs 0.7.0 and FrameReader 2.22.0, with the AVI scope widened; ShotDetector and FastYuv 3.28.0
+  - Why: the coordinator's row of 2026-11-02, the owner adding ShotDetector 3.27.0 (its hash fix, shotdetector#701,
+    the row above), then 3.28.0 and FrameReader 2.22.0 once on nuget.org (the owner's choice, 2026-11-03; ManagedCodecs 0.7.0 rather than 0.6.0, the owner's choice of 2026-11-03: its only addition, JPEG
+    thumbnails, the page doesn't use). ManagedCodecs 0.6.0 reads the other AVI FourCCs FFmpeg takes as MJPEG, decodes 4:1:1 and 4:4:0
+    JPEG and a JPEG whose scan runs past its data (`VideoFrame.IsDamaged`) instead of throwing.
+  - Where: `Directory.Packages.props`; `AviInput` (4:1:1 and 4:4:0 refused by name: ShotDetector 3.28.0's frame source
+    takes neither, reported to the shotdetector coordinator); `VideoInput.Damaged.cs` and `Api` (decision
+    [2026-11-02-damaged-jpeg.md](decisions/2026-11-02-damaged-jpeg.md), the owner's A: the damaged frames decoded as
+    ManagedCodecs does and named in the run's warnings, carried by a range's bytes and the kept run); NativeCheck's
+    `DamagedCheck.cs`; app-check.mjs; `make-samples.sh` (`mjpeg-dmb1-*`, `mjpeg-damaged-*`, `reject/mjpeg-411.avi`,
+    `reject/mjpeg-440.avi`); README.
+  - Done when: `tools/check.sh native wasm aot page` passes: the dmb1 sample byte for byte; the damaged one with the
+    core's damaged frames FFmpeg's and everything else byte for byte but the stats rows that read the frame; 4:1:1 and
+    4:4:0 refused with their names. After the merge, realworld.yml's tears and clips jobs green on main (the row above).
+  - Not: converting 4:1:1 or 4:4:0 here (ShotDetector's: a Maybe row there); ShotDetector 3.28.0's features (rows of
+    their own).
+  - Status: Done (2026-11-03: native, AOT wasm (4773 files, 44 samples) and the page in Chromium on 3.28.0, the AVIs
+    interpreted too; the damaged sample's stats the FFmpeg path's but rows 38-43 around frame 40, its damaged frame
+    ffprobe's with `-err_detect explode`; 4:1:1 and 4:4:0 refused by name. The realworld runs on main: row "Tears of
+    Steel's hash_dist under AOT: ShotDetector's fix")
