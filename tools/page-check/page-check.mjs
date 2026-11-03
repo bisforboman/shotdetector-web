@@ -585,8 +585,9 @@ async function paused(page, what, from) {
 
 // The picture's card after a whole run: its cropdetect line, its colour bars and its still pictures the native check's
 // (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown; a 10-bit video's levels said to
-// be 10-bit code values. A split run (split) doesn't look for still pictures and says so (decision
-// 2026-11-01-freeze-spans.md).
+// be 10-bit code values. A split run's still pictures are the whole run's too (ShotDetector's, decision
+// 2026-11-03-spans-on-ranges.md); a deinterlaced run's are of its deinterlaced frames, which on the interlaced sample are
+// none, as the native check's run.
 async function picture(page, what, file, split = false) {
   const native = join(nativeDir, `${stem(file)}.picture.json`);
   if (!existsSync(native)) {
@@ -607,12 +608,10 @@ async function picture(page, what, file, split = false) {
   if (p.bitDepth === 10 && !text.includes('In 10-bit code values (0 to 1023)'))
     fail(`${what}: a 10-bit video's picture card doesn't say its levels are 10-bit: "${text.slice(0, 300)}"`);
   const stills = (text.match(/Still picture: \d/g) ?? []).length, freezeMarks = await page.locator('.track.picture .mark.freeze').count();
-  const freezeOk = split
-    ? text.includes('Not looked for in a split run') && stills === 0 && freezeMarks === 0
-    : stills === p.freeze.spans.length && freezeMarks === stills && (stills > 0 || text.includes('Still pictures: none'));
+  const freezeOk = stills === p.freeze.spans.length && freezeMarks === stills && (stills > 0 || text.includes('Still pictures: none'));
   if (!text.includes(crop) || bars !== p.bars.length || lane !== 1 || !freezeOk)
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${stills} still pictures, ${lane} lane), ` +
-      `not ${crop}, ${p.bars.length} colour bars and ${split ? 'still pictures not looked for' : `${p.freeze.spans.length} still pictures`}`);
+      `not ${crop}, ${p.bars.length} colour bars and ${p.freeze.spans.length} still pictures`);
   else
     console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${split ? 'still pictures not looked for (split)' : `${stills} still pictures`}, as the native check's`);
 }

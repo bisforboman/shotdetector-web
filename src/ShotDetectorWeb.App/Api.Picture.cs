@@ -28,7 +28,7 @@ public static partial class Api
     [JSExport]
     public static string Picture() =>
         JsonSerializer.Serialize(PictureSummary.Of(_picture ?? throw new InvalidOperationException("Detect first."),
-            _freeze ?? PictureFreeze.Resumed), PictureJson.Default.PictureSummary);
+            _freeze ?? PictureFreeze.KeptWithout), PictureJson.Default.PictureSummary);
 
     /// <summary>
     /// A range's bytes, little-endian: the scores' length, the scores, the picture measures' length, the measures, then the

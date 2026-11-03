@@ -13,12 +13,16 @@
 //   variable-rate ones at their own timestamps, the 10-bit ones in 10-bit levels), one span, the last shot's frames (from the default run's last cut; decoded frame 100 on for
 //   the variable-rate ones, whose cuts are numbered by time at the average rate); on the fades sample
 //   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none;
-// - freezedetect with its defaults (decision 2026-11-01-freeze-spans.md): the same still pictures, their freeze_start and
-//   freeze_end to the digits FFmpeg prints (one still at the end has no freeze_end), and the same frames as
-//   ShotDetector's own FreezeSpans (DetectionOptions.FreezeDetect) on the run.
+// - freezedetect with its defaults: ShotDetector's still pictures (FreezeSpans, decision 2026-11-03-spans-on-ranges.md),
+//   their freeze_start and freeze_end to the digits FFmpeg prints (one still at the end has no freeze_end); and a run
+//   deinterlacing (Deinterlace On), whose still pictures are of its deinterlaced frames, against the FFmpeg path's
+//   (Detect(path): FFmpeg's yadif, its C code over 8 bits), frames and times.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
-// joined, their measures must be the whole run's, byte for byte. Each sample's summary (the App's Picture() JSON) goes
-// to the output folder as <sample>.picture.json, which the wasm check compares its own with.
+// joined, their measures must be the whole run's, byte for byte; merged after ShotDetector's FirstRangeToScoreAgain
+// (VideoInput.ScoreAgain: a range that starts inside a still scored again), their still pictures the whole run's; and
+// the run stopped half-way and resumed (VideoInput.Continue: a rest inside a still given from its first frame), its
+// still pictures the whole run's too. Each sample's summary (the App's Picture() JSON) goes to the output folder as
+// <sample>.picture.json, which the wasm check compares its own with.
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
@@ -66,9 +70,9 @@ static class PictureCheck
     static void Check(string sample, string libs, string outDir, List<string> problems, List<string> cells)
     {
         var input = FfmpegDecoder.Open(sample);
-        var meter = new PictureMeter(input.Video, freeze: true);
+        var meter = new PictureMeter(input.Video);
         var watch = Stopwatch.StartNew();
-        var result = input.Detect(new DetectionOptions { FreezeDetect = new FreezeDetectOptions() }, picture: meter);
+        var result = input.Detect(Stills, picture: meter);
         var time = watch.Elapsed;
         var ours = meter.Measures;
         if (ours.Count != result.FrameCount)
@@ -136,17 +140,23 @@ static class PictureCheck
 
         cells.Add(string.Join("; ", blackCells));
         cells.Add(Bars(sample, ours, result, problems));
-        var freeze = PictureFreeze.Found(meter.FreezeSpans(result.FrameCount)!, ours.TimeBase);
-        cells.Add(Freeze(freeze, theirs.Freeze, result, problems));
-        cells.Add(Ranges(input, ours, problems));
+        var freeze = PictureFreeze.Of(result, input.Video);
+        cells.Add(Freeze(freeze, theirs.Freeze, problems) + "; " + Deinterlaced(sample, input, libs, problems));
+        cells.Add(Ranges(input, ours, result, problems));
         cells.Add($"{time.TotalSeconds:F2} s");
 
         File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".picture.json"),
             JsonSerializer.Serialize(PictureSummary.Of(ours, freeze), PictureJson.Default.PictureSummary));
     }
 
-    /// <summary>The still pictures against freezedetect's and against ShotDetector's own (<see cref="DetectionResult.FreezeSpans"/>).</summary>
-    static string Freeze(PictureFreeze ours, List<FreezeLine> theirs, DetectionResult result, List<string> problems)
+    /// <summary>The page's run with the still pictures looked for (the App's options: freezedetect's defaults).</summary>
+    static DetectionOptions Stills => new() { FreezeDetect = new FreezeDetectOptions() };
+
+    /// <summary>
+    /// The still pictures against freezedetect's (-copyts: the stream's own pts, as the page times them;
+    /// <see cref="PictureFreeze.Of"/> adds the stream's start to ShotDetector's).
+    /// </summary>
+    static string Freeze(PictureFreeze ours, List<FreezeLine> theirs, List<string> problems)
     {
         var spans = ours.Spans!;
         bool same = spans.Count == theirs.Count && spans.Zip(theirs).All(p => Printed(p.Second.Start, p.First.Start) &&
@@ -154,16 +164,49 @@ static class PictureCheck
         string Shown(PictureStill s) => $"{s.Start:0.######}-{(s.End is { } e ? e.ToString("0.######", CultureInfo.InvariantCulture) : "end")}";
         if (!same)
             problems.Add($"freezedetect: {string.Join(", ", spans.Select(Shown))}, FFmpeg's {string.Join(", ", theirs.Select(t => $"{t.Start}-{t.End ?? "end"}"))}");
-        var sd = result.FreezeSpans ?? [];
-        if (sd.Count != spans.Count || sd.Zip(spans).Any(p => p.First.StartFrame != p.Second.FirstFrame || p.First.EndFrame != p.Second.EndFrame))
-        {
-            problems.Add($"still pictures {string.Join(", ", spans.Select(s => $"{s.FirstFrame}-{s.EndFrame?.ToString(CultureInfo.InvariantCulture) ?? "end"}"))}, " +
-                $"ShotDetector's FreezeSpans {string.Join(", ", sd.Select(s => $"{s.StartFrame}-{s.EndFrame?.ToString(CultureInfo.InvariantCulture) ?? "end"}"))}");
-        }
-
         return spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s =>
             $"{s.Start:0.###}-{(s.End is { } e ? e.ToString("0.###", CultureInfo.InvariantCulture) : "end")} s"));
     }
+
+    /// <summary>
+    /// A run deinterlacing every frame (Deinterlace On): its still pictures, of the deinterlaced frames, against the FFmpeg
+    /// path's (FFmpeg's yadif; its C code over 8 bits, as NativeCheck runs it).
+    /// </summary>
+    static string Deinterlaced(string sample, VideoInput input, string libs, List<string> problems)
+    {
+        var options = Stills with { Deinterlace = DeinterlaceMode.On };
+        var ours = input.Detect(options);
+        bool cOnly = input.Video.PixelFormat.Contains("p10", StringComparison.Ordinal);
+        if (cOnly)
+            FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(0);
+        DetectionResult file;
+        try
+        {
+            file = ShotDetection.Detect(sample, options with { FfmpegDirectory = libs, Decoder = VideoDecoder.InProcess, Yuv420Converter = new ShotDetector.FastYuv.SwscaleYuv420() });
+        }
+        finally
+        {
+            if (cOnly)
+                FFmpeg.AutoGen.ffmpeg.av_force_cpu_flags(-1);
+        }
+
+        if (!SameStills(ours.FreezeSpans, file.FreezeSpans))
+        {
+            problems.Add($"deinterlaced, still pictures {Shown(ours.FreezeSpans)}, the FFmpeg path's {Shown(file.FreezeSpans)}");
+            return "deinterlaced: DIFFER";
+        }
+
+        return $"deinterlaced: {(ours.FreezeSpans!.Count == 0 ? "none" : Shown(ours.FreezeSpans))}, the FFmpeg path's";
+    }
+
+    /// <summary>Whether two runs' still pictures are the same: frames and times.</summary>
+    static bool SameStills(IReadOnlyList<FreezeSpan>? a, IReadOnlyList<FreezeSpan>? b) =>
+        a is not null && b is not null && a.Count == b.Count && a.Zip(b).All(p => p.First.StartFrame == p.Second.StartFrame &&
+            p.First.EndFrame == p.Second.EndFrame && p.First.Start == p.Second.Start && p.First.End == p.Second.End);
+
+    /// <summary>Still pictures as frames.</summary>
+    static string Shown(IReadOnlyList<FreezeSpan>? spans) => spans is null ? "not looked for" :
+        string.Join(", ", spans.Select(s => $"{s.StartFrame}-{s.EndFrame?.ToString(CultureInfo.InvariantCulture) ?? "end"}"));
 
     /// <summary>The colour bars against what make-samples.sh put in the sample (above).</summary>
     static string Bars(string sample, PictureMeasures ours, DetectionResult result, List<string> problems)
@@ -206,16 +249,22 @@ static class PictureCheck
         return found;
     }
 
-    /// <summary>The run split into ranges, each measured while it is scored, joined: the whole run's measures.</summary>
-    static string Ranges(VideoInput input, PictureMeasures whole, List<string> problems)
+    /// <summary>
+    /// The run split into ranges, each measured while it is scored, joined: the whole run's measures; merged after
+    /// <see cref="VideoInput.ScoreAgain"/>, the whole run's still pictures; and stopped half-way and resumed
+    /// (<see cref="VideoInput.Continue"/>), the whole run's still pictures too.
+    /// </summary>
+    static string Ranges(VideoInput input, PictureMeasures whole, DetectionResult run, List<string> problems)
     {
-        var ranges = input.Ranges(null, MostRanges);
+        var options = Stills;
+        var ranges = input.Ranges(options, MostRanges);
         var parts = new List<PictureMeasures>();
+        var scores = new List<RangeScores>();
         foreach (var range in ranges)
         {
             var meter = new PictureMeter(input.Video, range);
-            input.ScoreRangeAsync(range, 8, _ => ValueTask.FromResult(true), new DetectionOptions(), picture: meter)
-                .GetAwaiter().GetResult();
+            scores.Add(input.ScoreRangeAsync(range, 8, _ => ValueTask.FromResult(true), options, picture: meter)
+                .GetAwaiter().GetResult());
             parts.Add(PictureMeasures.FromBytes(meter.Measures.ToBytes()));
         }
 
@@ -223,7 +272,30 @@ static class PictureCheck
         bool same = joined is not null && joined.ToBytes().AsSpan().SequenceEqual(whole.ToBytes());
         if (!same)
             problems.Add($"the {ranges.Count} ranges' measures joined ({joined?.Count ?? 0} frames) aren't the whole run's");
-        return $"{ranges.Count}: {(same ? "the whole run's" : "DIFFER")}";
+
+        var again = input.ScoreAgain(scores, options);
+        int scoredAgain = again.Where((r, i) => !ReferenceEquals(r, scores[i])).Count();
+        var merged = input.Merge(again, options);
+        bool stills = SameStills(merged.FreezeSpans, run.FreezeSpans);
+        if (!stills)
+            problems.Add($"the {ranges.Count} ranges' still pictures {Shown(merged.FreezeSpans)}, the whole run's {Shown(run.FreezeSpans)}");
+
+        // Stopped half-way and resumed, as the page's Resume goes on.
+        int half = run.FrameCount / 2;
+        var stopped = input.ScoreRangeAsync(input.Ranges(options, 1)[0], 1, given => ValueTask.FromResult(given < half), options)
+            .GetAwaiter().GetResult();
+        var go = input.Continue([stopped], options);
+        var all = go.Earlier.ToList();
+        if (go.Rest is { } rest)
+            all.Add(input.ScoreRangeAsync(go.Earlier, rest, 8, _ => ValueTask.FromResult(true), options).GetAwaiter().GetResult());
+        var resumed = input.Merge(input.ScoreAgain(input.FromStart(all), options), options);
+        bool resumedStills = SameStills(resumed.FreezeSpans, run.FreezeSpans);
+        if (!resumedStills)
+            problems.Add($"resumed at frame {half}, still pictures {Shown(resumed.FreezeSpans)}, the whole run's {Shown(run.FreezeSpans)}");
+
+        return $"{ranges.Count}: measures {(same ? "the whole run's" : "DIFFER")}, still pictures " +
+            $"{(stills ? "the whole run's" : "DIFFER")}{(scoredAgain > 0 ? $" ({scoredAgain} scored again)" : "")}; " +
+            $"resumed{(go.Rest is { Skip: > 0 } r ? $" from the still's first frame, {r.From}" : "")}: {(resumedStills ? "the whole run's" : "DIFFER")}";
     }
 
     /// <summary>

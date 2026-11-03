@@ -95,21 +95,6 @@ publish").
   - Done when: `npm view shotdetector-web` shows 0.1.0 with provenance.
   - Status: Waiting (2026-11-02): the owner's npm setup
 
-- Freeze spans and ShotDetector's black spans on split and resumed runs
-  - Why: the page looks for still pictures only in a run that reads every frame in order (decision
-    [2026-11-01-freeze-spans.md](decisions/2026-11-01-freeze-spans.md)) and keeps its own black spans, because ranges
-    refused `FreezeDetect` and `BlackDetect`. shotdetector#712 (merged 2026-11-03; shotdetector's decision
-    2026-11-02-freeze-spans-for-ranges.md) lets ranges take both: `Merge`'s `FreezeSpans` and `BlackSpans` equal
-    `Detect`'s however the run is split, with `FirstRangeToScoreAgain`/`RangeFrames` for split runs and the
-    `RangeFrames(video, earlier, options, first, end)` overload for resumed ones (`RangeScores` format v2 only when
-    either option is set).
-  - Where: `Directory.Packages.props`; `VideoInput.Ranges.cs`, `Api.Ranges.cs`, `Api.Resume.cs`, `PictureSummary.cs`,
-    `panels/picture.js`; PictureCheck, RangeCheck, ResumeCheck, app-check.mjs, page-check.
-  - Done when: a split and a resumed run's still pictures and black spans are the whole run's on every sample, and
-    `freezedetect`'s and `blackdetect`'s natively; `tools/check.sh native wasm aot page` passes.
-  - Not: building it before the release.
-  - Status: Waiting (2026-11-03): the ShotDetector release with shotdetector#712 (3.28.0, not on nuget.org yet)
-
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
 [#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an

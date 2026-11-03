@@ -122,28 +122,33 @@ public sealed record PictureBrng(int Frames, double Largest, int? At);
 public sealed record PictureLevels(int? Min, double? Mean, int? Max);
 
 /// <summary>
-/// freezedetect's still pictures (its defaults: n=0.001, d=2 s) in a run that read every frame in order from the first
-/// (<see cref="PictureMeter.FreezeSpans"/>), or why they weren't looked for: a split run reads ranges, a resumed run the
-/// rest, and freezedetect compares each frame with a still picture's first, however far back.
+/// freezedetect's still pictures (its defaults: n=0.001, d=2 s), ShotDetector's (<see cref="ShotDetector.DetectionResult.FreezeSpans"/>,
+/// decision 2026-11-03-spans-on-ranges.md): of the frames as the run reads them, deinterlaced when it deinterlaces
+/// (<see cref="Deinterlaced"/>); or why they weren't looked for (a stopped run kept before they were).
 /// </summary>
 /// <param name="Spans">The still pictures, in order; null when not looked for.</param>
 /// <param name="NotMeasured">Why not, in the page's words; null when looked for.</param>
-public sealed record PictureFreeze(IReadOnlyList<PictureStill>? Spans, string? NotMeasured)
+/// <param name="Deinterlaced">Whether the frames compared were deinterlaced (the run's).</param>
+public sealed record PictureFreeze(IReadOnlyList<PictureStill>? Spans, string? NotMeasured, bool Deinterlaced = false)
 {
-    /// <summary>A split run's: no still pictures looked for.</summary>
-    public static PictureFreeze Split { get; } = new(null,
-        "Not looked for in a split run: freezedetect compares each frame with a still picture's first, however far back, and the run reads the video in ranges. One worker (?workers=1) reads it in one pass.");
+    /// <summary>A run resumed from ranges kept before still pictures were looked for in every run: none looked for.</summary>
+    public static PictureFreeze KeptWithout { get; } = new(null,
+        "Not looked for: the stopped part was kept before the page looked for still pictures in every run. A run from the start looks for them.");
 
-    /// <summary>A resumed run's, or a stopped one shown again from what was kept: no still pictures looked for.</summary>
-    public static PictureFreeze Resumed { get; } = new(null,
-        "Not looked for in a resumed run: freezedetect compares each frame with a still picture's first, however far back, and the run read the video in two parts.");
-
-    /// <summary>The still pictures <paramref name="spans"/> found, their times in seconds at <paramref name="timeBase"/>.</summary>
-    public static PictureFreeze Found(IEnumerable<FrozenSpan> spans, Rational timeBase)
+    /// <summary>
+    /// <paramref name="result"/>'s still pictures, or <see cref="KeptWithout"/> when it didn't look for them. ShotDetector
+    /// times them from the stream's start, as <c>ffmpeg -vf freezedetect</c> prints them; the page times its spans by the
+    /// stream's own pts (as <c>-copyts</c> prints them, the black spans too): <paramref name="video"/>'s start is added.
+    /// </summary>
+    public static PictureFreeze Of(ShotDetector.DetectionResult result, ShotDetector.YuvVideo video)
     {
-        ArgumentNullException.ThrowIfNull(spans);
-        double tb = timeBase.Num / (double)timeBase.Den;
-        return new([.. spans.Select(s => new PictureStill(s.FirstFrame, s.EndFrame, s.StartPts * tb, s.EndPts * tb))], null);
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(video);
+        double start = video.TimeBase is { } tb ? video.StartPts * tb.Num / (double)tb.Den : 0;
+        return result.FreezeSpans is { } spans
+            ? new([.. spans.Select(s => new PictureStill(s.StartFrame, s.EndFrame, s.Start + start, s.End + start))], null,
+                result.Video.Deinterlaced)
+            : KeptWithout;
     }
 }
 

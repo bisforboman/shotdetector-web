@@ -1662,3 +1662,25 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     sample, whole and deinterlaced byte for byte, the list made the list given, the length the run's, and the run's own
     cuts its own downloads; a stopped run held to its own run until ShotDetector ends a run that ends early as the file
     path does: row "A stopped run's end at a variable rate (upstream)", Waiting)
+
+- Freeze spans and ShotDetector's black spans on split and resumed runs
+  - Why: the page looks for still pictures only in a run that reads every frame in order (decision
+    [2026-11-01-freeze-spans.md](decisions/2026-11-01-freeze-spans.md)) and keeps its own black spans, because ranges
+    refused `FreezeDetect` and `BlackDetect`. shotdetector#712 (merged 2026-11-03; shotdetector's decision
+    2026-11-02-freeze-spans-for-ranges.md) lets ranges take both: `Merge`'s `FreezeSpans` and `BlackSpans` equal
+    `Detect`'s however the run is split, with `FirstRangeToScoreAgain`/`RangeFrames` for split runs and the
+    `RangeFrames(video, earlier, options, first, end)` overload for resumed ones (`RangeScores` format v2 only when
+    either option is set).
+  - Where: `Directory.Packages.props`; `VideoInput.Ranges.cs`, `Api.Ranges.cs`, `Api.Resume.cs`, `PictureSummary.cs`,
+    `panels/picture.js`; PictureCheck, RangeCheck, ResumeCheck, app-check.mjs, page-check.
+  - Done when: a split and a resumed run's still pictures and black spans are the whole run's on every sample, and
+    `freezedetect`'s and `blackdetect`'s natively; `tools/check.sh native wasm aot page` passes.
+  - Not: building it before the release.
+  - Status: Done (2026-11-03; decision [2026-11-03-spans-on-ranges.md](decisions/2026-11-03-spans-on-ranges.md), the
+    owner's 1A and 2A: ShotDetector's still pictures on every run, a deinterlaced run's of its deinterlaced frames,
+    timed by the stream's own pts; a split run's ranges scored again where `FirstRangeToScoreAgain` names one
+    (`VideoInput.ScoreAgain`), a resumed rest inside a still given its frames from the still's first (`Continue`); the
+    page's own black spans kept; a run kept before resumes without (`freeze: false`). A new sample,
+    `still-320x240-25.mp4`, has keyframes inside a still: its split run scores a range again. PictureCheck holds a
+    split, a resumed and a deinterlaced run's still pictures; app-check every run's split, resumed and stopped ones to
+    its own whole run's)
