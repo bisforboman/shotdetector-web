@@ -251,6 +251,12 @@ for (const [i, sample] of samples.entries()) {
     if (!Array.isArray(result.warnings) || result.warnings.some(w => typeof w !== 'string'))
       fail(`${basename(sample)} ${run}: warnings ${JSON.stringify(result.warnings)}, not a list of strings`);
     for (const warning of result.warnings ?? []) console.error(`${basename(sample)} ${run}: warning: ${warning}`);
+    // A damaged JPEG (decision 2026-11-02-damaged-jpeg.md; make-samples.sh cuts the 40th frame's scan short): the
+    // core's warning names it, and only it; a split or resumed run's must be the same (checkRanges, checkResume).
+    const damaged = (result.warnings ?? []).filter(w => / damaged /.test(w));
+    const wantDamaged = basename(sample).includes('-damaged-') ? ['Frame 40 is'] : [];
+    if (JSON.stringify(damaged.map(w => w.slice(0, w.indexOf(' damaged ')))) !== JSON.stringify(wantDamaged))
+      fail(`${basename(sample)} ${run}: the damaged frames' warnings are ${JSON.stringify(damaged)}, wanted ${JSON.stringify(wantDamaged)}`);
     if (run === Object.keys(RUNS)[0]) {
       wholePicture = checkPicture(sample, result);
       wholeTypes = checkFrameTypes(sample, result);
@@ -833,6 +839,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     if (scenes !== wholeScenes || stats !== wholeStats) tellCsvs(sample, run, what, [wholeScenes, wholeStats], [scenes, stats]);
     return scenes === wholeScenes && stats === wholeStats && sameShotFiles(wholeShotFiles) &&
       JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
+      JSON.stringify(r.warnings) === JSON.stringify(whole.warnings) &&
       samePicture(Picture(), wholePicture, 'resumed') && FrameTypes() === wholeTypes;
   };
 

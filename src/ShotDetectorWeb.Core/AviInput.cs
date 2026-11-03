@@ -12,8 +12,8 @@ namespace ShotDetectorWeb;
 /// </summary>
 /// <remarks>
 /// So far: baseline or extended Huffman JPEG at 4:2:0 or 4:2:2 (FFmpeg's yuvj420p, yuvj422p), every frame a chunk of
-/// its own; anything else throws <see cref="UnsupportedVideoException"/> when opened: 4:4:4 and greyscale JPEG
-/// (ShotDetector's frame source takes 4:2:0 and 4:2:2 only), and a file whose video chunks are fewer than its header says (a dropped frame, or an OpenDML file over
+/// its own; anything else throws <see cref="UnsupportedVideoException"/> when opened: 4:4:4, 4:1:1, 4:4:0 and greyscale
+/// JPEG (ShotDetector's frame source takes 4:2:0 and 4:2:2 only), and a file whose video chunks are fewer than its header says (a dropped frame, or an OpenDML file over
 /// 1 GB, whose later parts ManagedCodecs doesn't read). Audio streams are described, not decoded.
 /// </remarks>
 public sealed class AviInput : VideoInput
@@ -36,10 +36,13 @@ public sealed class AviInput : VideoInput
         {
             string chroma = format switch
             {
-                PixelFormat.Yuv444P => "4:4:4",
-                PixelFormat.Gray8 => "greyscale",
+                PixelFormat.Yuv444P => "4:4:4 (FFmpeg's yuvj444p)",
+                PixelFormat.Yuv411P => "4:1:1 (FFmpeg's yuvj411p)",
+                PixelFormat.Yuv440P => "4:4:0 (FFmpeg's yuvj440p)",
+                PixelFormat.Gray8 => "greyscale (FFmpeg's gray)",
                 _ => format.ToString(),
             };
+            // ManagedCodecs decodes them all (4:1:1 and 4:4:0 since 0.6.0); ShotDetector's frame source doesn't take them yet.
             throw new UnsupportedVideoException($"The video is {chroma} JPEG: only 4:2:0 and 4:2:2 are supported so far (ShotDetector takes 8-bit 4:2:0 and 4:2:2 frames, and 10-bit 4:2:0).");
         }
 

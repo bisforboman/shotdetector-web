@@ -62,24 +62,25 @@ public static partial class Api
 }
 
 /// <summary>
-/// A run's ranges' scores from the start (<see cref="VideoInput.FromStart"/>) and its picture measures joined from frame 0
-/// (null when it has none), as the page keeps them.
+/// A run's ranges' scores from the start (<see cref="VideoInput.FromStart"/>), its picture measures joined from frame 0
+/// (null when it has none) and the damaged frames it read (0-based, in order: <see cref="VideoInput.DamagedFrames"/>), as
+/// the page keeps them.
 /// </summary>
-sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Picture)
+sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Picture, IReadOnlyList<int> Damaged)
 {
-    public static readonly KeptRun None = new([], null);
+    public static readonly KeptRun None = new([], null, []);
 
     /// <summary>
     /// Little-endian: the rest's first frame for <paramref name="input"/> and <paramref name="options"/>, the run's
     /// (-1: none left), the ranges' count, each one's
     /// length, the picture's length (0: none), then each range's <see cref="RangeScores.ToBytes"/> and the picture's
-    /// <see cref="PictureMeasures.ToBytes"/>, each checked by its own hash.
+    /// <see cref="PictureMeasures.ToBytes"/>, each checked by its own hash; then the damaged frames' count and each.
     /// </summary>
     public byte[] ToBytes(VideoInput input, DetectionOptions? options)
     {
         var scores = Scores.Select(s => s.ToBytes()).ToList();
         var picture = Picture?.ToBytes() ?? [];
-        var bytes = new byte[4 * (3 + scores.Count) + scores.Sum(s => s.Length) + picture.Length];
+        var bytes = new byte[4 * (3 + scores.Count) + scores.Sum(s => s.Length) + picture.Length + 4 * (1 + Damaged.Count)];
         var span = bytes.AsSpan();
         BinaryPrimitives.WriteInt32LittleEndian(span, input.Continue(Scores, options).Rest?.FirstFrame ?? -1);
         BinaryPrimitives.WriteInt32LittleEndian(span[4..], scores.Count);
@@ -98,7 +99,29 @@ sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Pictur
             at += s.Length;
         }
 
+        WriteFrames(span[at..], Damaged);
         return bytes;
+    }
+
+    /// <summary>Writes <paramref name="frames"/>' count, then each, little-endian, at the start of <paramref name="span"/>.</summary>
+    public static void WriteFrames(Span<byte> span, IReadOnlyList<int> frames)
+    {
+        BinaryPrimitives.WriteInt32LittleEndian(span, frames.Count);
+        for (int i = 0; i < frames.Count; i++)
+            BinaryPrimitives.WriteInt32LittleEndian(span[(4 + 4 * i)..], frames[i]);
+    }
+
+    /// <summary><see cref="WriteFrames"/>' frames back from all of <paramref name="span"/>; <paramref name="what"/> names the bytes.</summary>
+    /// <exception cref="InvalidDataException">Not such bytes.</exception>
+    public static int[] ReadFrames(ReadOnlySpan<byte> span, string what)
+    {
+        int count = span.Length >= 4 ? BinaryPrimitives.ReadInt32LittleEndian(span) : -1;
+        if (count < 0 || span.Length != 4 + 4L * count)
+            throw new InvalidDataException($"{what} are damaged (the damaged frames).");
+        var frames = new int[count];
+        for (int i = 0; i < count; i++)
+            frames[i] = BinaryPrimitives.ReadInt32LittleEndian(span[(4 + 4 * i)..]);
+        return frames;
     }
 
     /// <summary><see cref="ToBytes"/>' run back; empty bytes are <see cref="None"/>.</summary>
@@ -118,7 +141,7 @@ sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Pictur
         for (int i = 0; i <= count; i++)
             lengths[i] = Int(bytes, 8 + 4 * i);
         long total = 4L * (3 + count) + lengths.Sum(l => (long)l);
-        if (lengths.Any(l => l < 0) || total != bytes.Length)
+        if (lengths.Any(l => l < 0) || total + 4 > bytes.Length)
             throw new InvalidDataException("The kept run's bytes are damaged (the lengths).");
         int at = 4 * (3 + count);
         var scores = new List<RangeScores>();
@@ -128,6 +151,7 @@ sealed record KeptRun(IReadOnlyList<RangeScores> Scores, PictureMeasures? Pictur
             at += length;
         }
 
-        return new KeptRun(scores, lengths[^1] == 0 ? null : PictureMeasures.FromBytes(bytes[at..]));
+        var picture = lengths[^1] == 0 ? null : PictureMeasures.FromBytes(bytes.Slice(at, lengths[^1]));
+        return new KeptRun(scores, picture, ReadFrames(bytes[(at + lengths[^1])..], "The kept run's bytes"));
     }
 }

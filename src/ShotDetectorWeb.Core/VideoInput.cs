@@ -15,7 +15,8 @@ namespace ShotDetectorWeb;
 /// </summary>
 /// <remarks>
 /// What each container takes is on its class; anything else throws <see cref="UnsupportedVideoException"/> when opened.
-/// Damaged files throw ManagedCodecs' <see cref="InvalidDataException"/>.
+/// Damaged files throw ManagedCodecs' <see cref="InvalidDataException"/>; a damaged frame the decoder decodes all the same
+/// (a JPEG cut short) goes to ShotDetector as decoded, and <see cref="DamagedFrames"/> says which (VideoInput.Damaged.cs).
 /// </remarks>
 public abstract partial class VideoInput
 {
@@ -199,7 +200,10 @@ public abstract partial class VideoInput
         await foreach (var (frame, type) in DecodedFramesAsync(fromPacket, cancellationToken))
         {
             using (frame)
+            {
+                NoteDamaged(frame);
                 yield return (ToYuv(frame, format), type);
+            }
         }
     }
 
