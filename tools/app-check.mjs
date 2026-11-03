@@ -101,6 +101,9 @@ let progress = [], told = [], toldAt = [];
 // ranges tell none.
 let rangeTold = [];
 let wholePicture = null; // the sample's first run's Picture(), which every other whole run's must be
+// The run's own Picture() whole, which its split, resumed and stopped runs' must be: a deinterlaced run's still pictures
+// are of its deinterlaced frames (decision 2026-11-03-spans-on-ranges.md).
+let runPicture = null;
 let wholeTypes = null;   // and its FrameTypes()
 // Detect's pauses (the 'pause' import, pause.js as in the worker): how many, and how long they took in all, and the
 // frame to stop the run at, at the first pause from there (as the worker does on a 'stop' message: Api's Stop, between
@@ -263,6 +266,7 @@ for (const [i, sample] of samples.entries()) {
       wholeTypes = checkFrameTypes(sample, result);
       await checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles);
     }
+    runPicture = Picture();
     if (!light) await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive' && !light) await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
@@ -270,6 +274,7 @@ for (const [i, sample] of samples.entries()) {
   }
   if (!light) {
     await checkNotResumed(sample);
+    await checkKeptWithoutStills(sample);
     await checkNotMerged(sample);
   }
   checkAudio(sample, video);
@@ -718,7 +723,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
     fail(`${name}: the shots told (${rangeTold.length} by the first range, ${told.length} by the merge) aren't its result's`);
   const live = told.length > 0 ? told[0].shot - 1 : rangeTold.length;
   console.error(`${name}: ${rangeTold.length} shots told by the first range as it scored, the merge's from shot ${live + 1}`);
-  if (!samePicture(Picture(), wholePicture)) fail(`${name}: the merged picture measures or still pictures aren't the whole run's`);
+  if (!samePicture(Picture(), runPicture)) fail(`${name}: the merged picture measures or still pictures aren't the whole run's`);
   if (FrameTypes() !== wholeTypes) fail(`${name}: the merged frame types aren't the whole run's`);
   console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
     `${bytes.map(b => b.length).join(' + ')} bytes, ${seconds.toFixed(2)} s: ${same ? 'the whole run\'s CSVs' : 'DIFFERENT CSVs'}`);
@@ -771,9 +776,9 @@ function checkPictureStopped(name, result) {
   const picture = JSON.parse(Picture());
   if (picture.frames !== result.frameCount) fail(`${name}: picture measures of ${picture.frames} frames, the result read ${result.frameCount}`);
   const { spans } = picture.freeze;
-  if (wholePicture !== null) {
+  if (runPicture !== null) {
     // The whole run's that ended by the stop; then the one going on there, if it had lasted freezedetect's 2 s by then.
-    const n = result.frameCount, whole = JSON.parse(wholePicture).freeze.spans;
+    const n = result.frameCount, whole = JSON.parse(runPicture).freeze.spans;
     const ended = whole.filter(s => s.endFrame !== null && s.endFrame < n), next = whole[ended.length];
     const going = next && next.firstFrame < n ? [{ ...next, endFrame: null, end: null }] : [];
     if (spans === null || (JSON.stringify(spans) !== JSON.stringify(ended) && JSON.stringify(spans) !== JSON.stringify([...ended, ...going])))
@@ -840,7 +845,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     return scenes === wholeScenes && stats === wholeStats && sameShotFiles(wholeShotFiles) &&
       JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
       JSON.stringify(r.warnings) === JSON.stringify(whole.warnings) &&
-      samePicture(Picture(), wholePicture) && FrameTypes() === wholeTypes;
+      samePicture(Picture(), runPicture) && FrameTypes() === wholeTypes;
   };
 
   // Stopped at a third, opened again (a later visit) and shown from the kept bytes, resumed and stopped at two thirds.
@@ -902,6 +907,32 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
 // A stopped run's kept bytes resumed with other options than its own: NOT_RESUMED and ShotDetector's reason. Stopped
 // at 90% of the frames, past the last place a range can start on every sample (the tone sample's is frame 252 of
 // 375): kept bytes with no place to resume from but frame 0 start over, and nothing of theirs is compared.
+// A stopped run kept before every run looked for still pictures (its options without freeze; the page gives such a
+// record freeze: false): its ranges, scored without, resume with freeze: false to the whole run's scenes CSV, and its
+// still pictures aren't looked for; the same bytes with freeze on don't resume (NOT_RESUMED). Decision
+// 2026-11-03-spans-on-ranges.md.
+async function checkKeptWithoutStills(sample) {
+  const name = `${basename(sample)} kept without still pictures`, without = { ...RUNS.adaptive, freeze: false };
+  await Detect(JSON.stringify(without));
+  const scenes = ScenesCsv();
+  stopAt = Math.floor(JSON.parse(Ranges(JSON.stringify(without), 1, 0)).frames / 2);
+  try { await Detect(JSON.stringify(without)); } finally { stopAt = null; }
+  const { bytes, from } = await kept();
+  if (from <= 0) return console.error(`${name}: no place to resume from but frame 0`);
+  let message = null;
+  try {
+    await Resume(JSON.stringify(RUNS.adaptive), bytes);
+  } catch (e) {
+    message = e.message.split('\n')[0];
+  }
+  if (!message?.startsWith(NOT_RESUMED)) fail(`${name}: resumed with still pictures looked for, or failed otherwise: ${message}`);
+  await Resume(JSON.stringify(without), bytes);
+  const { freeze } = JSON.parse(Picture());
+  if (ScenesCsv() !== scenes || freeze.spans !== null || !freeze.notMeasured?.startsWith('Not looked for: the stopped part was kept before'))
+    fail(`${name}: resumed to another scenes CSV, or still pictures ${JSON.stringify(freeze)}`);
+  else console.error(`${name}: resumes without (freeze: false), the whole run's scenes CSV; with freeze on: "${message}"`);
+}
+
 async function checkNotResumed(sample) {
   stopAt = Math.floor(JSON.parse(Ranges(JSON.stringify(RUNS.content), 1, 0)).frames * 9 / 10);
   try { await Detect(JSON.stringify(RUNS.content)); } finally { stopAt = null; }
