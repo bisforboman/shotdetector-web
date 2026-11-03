@@ -173,6 +173,29 @@ want="mjpeg,yuvj420p,25/1,114,114,K__,4.560000 mjpeg,yuvj420p,30000/1001,135,135
 [[ $got == "$want" ]] || { echo "MJPEG samples: codec, pix_fmt, rate, nb_frames, packets, flags, duration are $got" >&2; exit 1; }
 [[ $("$fp" -v error -select_streams a -show_entries stream=codec_name,duration -of csv=p=0 "$out/mjpeg-pcm-640x360-2997.avi") == pcm_s16le,N/A ]] \
   || { echo "mjpeg-pcm: the audio isn't PCM without a duration." >&2; exit 1; }
+# Another of the AVI FourCCs FFmpeg reads as MJPEG ('dmb1', a capture card's; ManagedCodecs reads them since 0.6.0),
+# and a damaged JPEG (decision 2026-11-02-damaged-jpeg.md): the 40th frame's scan cut halfway, an EOI there and the rest
+# of its chunk zeros, which FFmpeg's decoder logs as an overread and ManagedCodecs decodes with the rest 0
+# (VideoFrame.IsDamaged); FFmpeg fills it from its buffer pool, so the rows around it are left out of the comparison.
+enc -filter_complex "$(three 320x240 25 1.5),format=yuvj420p" -c:v mjpeg -q:v 3 -vtag dmb1 "$out/mjpeg-dmb1-320x240-25.avi"
+python3 -I - "$out/mjpeg-320x240-25.avi" "$out/mjpeg-damaged-320x240-25.avi" <<'PY'
+import sys
+d = bytearray(open(sys.argv[1], "rb").read())
+start = d.find(b"movi") + 4
+for _ in range(40):
+    start = d.find(b"00dc", start) + 4
+size = int.from_bytes(d[start:start + 4], "little")
+data = start + 4
+sos = d.find(b"\xff\xda", data, data + size)
+cut = sos + (data + size - sos) // 2
+d[cut:cut + 2] = b"\xff\xd9"
+d[cut + 2:data + size] = bytes(data + size - cut - 2)
+open(sys.argv[2], "wb").write(d)
+PY
+got=$("$fp" -v error -show_entries stream=codec_tag_string,pix_fmt,nb_frames -of csv=p=0 "$out/mjpeg-dmb1-320x240-25.avi")
+got+=" $("$ff" -hide_banner -nostats -threads 1 -i "$out/mjpeg-damaged-320x240-25.avi" -vf showinfo -f null - 2>&1 |
+  grep -A1 overread | grep -o ' n: *[0-9]*' | head -1 | tr -d ' ')"
+[[ $got == 'dmb1,yuvj420p,114 n:39' ]] || { echo "mjpeg-dmb1, mjpeg-damaged: tag, pix_fmt, frames and the damaged frame are $got" >&2; exit 1; }
 
 # 10-bit 4:2:0 and 8-bit 4:2:2 H.264 (libx264's High 10 and High 4:2:2; backlog "10-bit 4:2:0 and 8-bit 4:2:2"), which
 # ShotDetector's frame source takes since 3.24.0, and 4:2:2 MJPEG (yuvj422p, most cameras'). 10-bit's conversion
@@ -342,15 +365,37 @@ enc -r 25 -i "$out/reject/size.h264" -c copy "$out/reject/size-change.mp4"
 rm "$out/reject/size-a.h264" "$out/reject/size-b.h264" "$out/reject/size.h264"
 got=$("$fp" -v error -show_entries frame=width,height -of csv=p=0 "$out/reject/size-change.mp4" | grep -v ',$' | uniq | tr '\n' ' ')
 [[ $got == '320,240 352,288 ' ]] || { echo "size-change.mp4: its frames' sizes are $got" >&2; exit 1; }
-# MJPEG at 4:4:4, which ShotDetector's frame source doesn't take yet; an AVI
+# MJPEG at 4:4:4, 4:1:1 and 4:4:0, which ShotDetector's frame source doesn't take yet (ManagedCodecs decodes all three
+# since 0.6.0): ffmpeg's encoder writes neither of the last two, so they are its 4:2:0 and 4:2:2 JPEGs with the SOF's
+# sampling factors rewritten (Y 2x2 to 4x1; Cb and Cr 1x2 to 2x1), the same blocks to an MCU and, at 320x240, the same
+# MCUs (the picture scrambled, the stream valid: FFmpeg decodes it without a warning); an AVI
 # with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
 # which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj444p -c:v mjpeg "$out/reject/mjpeg-444.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj420p -c:v mjpeg "$out/reject/mjpeg-411.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj422p -c:v mjpeg "$out/reject/mjpeg-440.avi"
+python3 -I - "$out/reject/mjpeg-411.avi" "$out/reject/mjpeg-440.avi" <<'PY'
+import sys
+sof = bytes.fromhex("ffc000110800f0014003")
+for path, changes in ((sys.argv[1], {11: (0x22, 0x41)}), (sys.argv[2], {14: (0x12, 0x21), 17: (0x12, 0x21)})):
+    d = bytearray(open(path, "rb").read())
+    i, n = 0, 0
+    while (i := d.find(sof, i)) >= 0:
+        for at, (was, now) in changes.items():
+            assert d[i + at] == was, (path, i, at, d[i + at])
+            d[i + at] = now
+        n += 1
+        i += len(sof)
+    assert n == 25, (path, n)
+    open(path, "wb").write(d)
+PY
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=2,format=yuvj420p -f lavfi -i sine=d=3 -c:v mjpeg -c:a libmp3lame "$out/reject/mjpeg-dropped-frame.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/h264.avi"
-got=$(for f in mjpeg-444; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
+got=$(for f in mjpeg-444 mjpeg-411 mjpeg-440; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
+[[ -z $("$ff" -v warning -i "$out/reject/mjpeg-411.avi" -i "$out/reject/mjpeg-440.avi" -map 0 -map 1 -f null - 2>&1) ]] ||
+  { echo "mjpeg-411, mjpeg-440: FFmpeg warns as it decodes them" >&2; exit 1; }
 got+=$("$fp" -v error -select_streams v -count_packets -show_entries stream=nb_frames,nb_read_packets -of csv=p=0 "$out/reject/mjpeg-dropped-frame.avi")
-[[ $got == 'yuvj444p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
+[[ $got == 'yuvj444p yuvj411p yuvj440p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
 # The codecs and containers the core doesn't read, refused with their names (decision 2026-11-02-browser-decoder.md,
 # backlog "A refusal that says what to do"): HEVC in MP4 as a phone writes it ('hvc1'), AV1 in MP4, VP8 in WebM and
 # H.264 in Matroska (WebM's VP9 and AV1 are read, below).
