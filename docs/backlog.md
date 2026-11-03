@@ -137,25 +137,6 @@ that waited on them are open. ShotDetector 3.25.0 and FrameReader 2.19.0 (2026-1
 FrameReader's `PictureMeter` and `SilenceFinder` (the page's measures moved upstream, the owner's decision 2026-10-31
 in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 3.25.0 and FrameReader 2.19.0".
 
-- A corrected list timed as its run (upstream)
-  - Why: ShotDetector 3.26.0's `LoadScenes`, which makes a corrected list's downloads (decision
-    [2026-11-02-correcting-cuts.md](decisions/2026-11-02-correcting-cuts.md)), times cuts at frame / average rate on a
-    variable-rate file and takes the video's length as nb_frames. `Detect` uses the frames' pts and the frames played.
-    The first correction on such a file retimes every cut or moves the last shot's end (`fragmented-moov`: 38 of 114
-    frames). This is the same on the FFmpeg path, and scenedetect 0.7.2's own load-scenes gives the same numbers, so
-    `LoadScenes` stays as it is. Upstream adds an overload that takes a `DetectionResult` and the edited cuts and keeps
-    that run's frame times and length ([shotdetector#707](https://github.com/bisforboman/shotdetector/issues/707), the
-    owner's choice, 2026-11-02).
-  - Where: the ShotDetector pin to the release with shotdetector#711 (merged 2026-11-02, not yet released):
-    `LoadScenes(DetectionResult run, IEnumerable<int> cutFrames, DetectionOptions? options)` in `CorrectedCuts`. Its
-    cut frames are frames counted as decoded (`run.CutFrames`, `run.FrameOf(position)`), not the scene list's Start
-    Frame − 1, which is time × average rate and differs at a variable rate: the page's `detectedCuts()`, `correct()`
-    and the kept corrections move to decoded frames. It takes the run's MinSceneLength, DropShortScenes and
-    MergeLastScene; StartTime, EndTime and RangeDuration throw (a stopped run's range is the run's). The checks then
-    compare against `Detect`'s own exports for the uncorrected list, and `CorrectionCheck.cs`'s note becomes a failure.
-  - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
-  - Status: In progress (2026-11-03): released in ShotDetector 3.28.0, pinned since #143
-
 ## Maybe
 
 Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) takes 8-bit 4:2:0 (of an even height until
