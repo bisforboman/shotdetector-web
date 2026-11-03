@@ -44,6 +44,7 @@ also has `stop()`, `pause()`, `resume()` and `cancel()`.
 | `detectors` | | several in one run: `[{ kind: 'content', threshold: 30 }, ...]` |
 | `deinterlace` | `'off'` | `'auto'` or `'on'` (yadif) |
 | `onProgress`, `onShot` | | each progress `{ done, expected }`; each shot as soon as it's known |
+| `onPaused` | | after `pause()`, once the run is held: `{ frames }` read, where a `stop()` now ends it |
 | `signal` | | an `AbortSignal`: the run is cancelled and its promise rejects with an `AbortError` |
 | `stills` | `'middle'` | a still per shot of its `'middle'` or `'first'` frame, or `false` |
 | `stillWidth` | `320` | the stills' width in pixels |

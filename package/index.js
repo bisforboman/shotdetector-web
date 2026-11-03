@@ -69,6 +69,8 @@ export class ShotDetector {
     const listeners = this.listeners = {
       progress: ({ done, expected }) => options.onProgress?.({ done, expected }),
       shot: ({ shot }) => options.onShot?.(shot),
+      // A paused run is held at a pause (worker.js' 'held'): the frames read, where a stop now ends it.
+      held: ({ frames }) => options.onPaused?.({ frames }),
     };
     const answer = this.#call('Detect', JSON.stringify(request));
     const result = answer.then(json => {
