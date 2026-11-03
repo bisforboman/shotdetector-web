@@ -12,6 +12,7 @@
   --tone: #059669;
   --keyframe: #7c3aed;
   --exact: #047857;
+  --corrected: #b45309;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
 }
@@ -30,6 +31,7 @@
     --tone: #34d399;
     --keyframe: #c4b5fd;
     --exact: #34d399;
+    --corrected: #fbbf24;
   }
 }
 
@@ -250,6 +252,9 @@ video, .frame {
 .track .shot:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .track .shot.current { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--fg); font-weight: 600; }
 .tick { position: absolute; top: 15%; bottom: 15%; width: 2px; margin-left: -1px; background: var(--fg); }
+/* Corrected on the page (panels/corrections.js): a cut added in the corrections' colour, a detected cut removed hollow. */
+.tick.added { background: var(--corrected); width: 3px; margin-left: -1.5px; }
+.tick.removed { background: none; border: 1px dashed var(--muted); top: 25%; bottom: 25%; }
 
 /* The waveform lane: taller than the others, the sound's envelope across it (an SVG stretched over the points' span). */
 .track.waveform, .lane-label.waveform { height: 3.5rem; }
@@ -414,3 +419,10 @@ tbody tr.unfinished td { border-bottom-style: dashed; }
 
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
 footer .chip { font-size: 0.7rem; }
+
+/* The corrections card (panels/corrections.js): small buttons in a row that wraps; a corrected row of the shots table
+   marked in the corrections' colour. */
+.edit-buttons { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.25rem 0; }
+.edit-buttons button { padding: 0.2rem 0.5rem; font-size: 0.85rem; }
+#corrections-summary { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
+#shots tr.corrected td:first-child { box-shadow: inset 3px 0 0 var(--corrected); }

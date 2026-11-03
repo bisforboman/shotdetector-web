@@ -3,7 +3,7 @@ using System.Runtime.Versioning;
 
 namespace ShotDetectorWeb.App;
 
-/// <summary>The run card's YouTube chapters: the last run's cuts as a video description's chapter list, ShotDetector's <c>Timeline</c>'s.</summary>
+/// <summary>The run card's YouTube chapters: the last run's cuts (its corrected ones once <see cref="Correct"/> has them) as a video description's chapter list, ShotDetector's <c>Timeline</c>'s.</summary>
 [SupportedOSPlatform("browser")]
 public static partial class Api
 {
@@ -13,5 +13,5 @@ public static partial class Api
     /// for the description or null, <c>notMade</c> why there are none or null.
     /// </summary>
     [JSExport]
-    public static string YouTubeChapters(int minimum) => TimelineFiles.Chapters(Result, minimum);
+    public static string YouTubeChapters(int minimum) => TimelineFiles.Chapters(Shown, minimum);
 }

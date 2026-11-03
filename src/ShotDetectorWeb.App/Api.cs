@@ -152,6 +152,7 @@ public static partial class Api
         PictureMeasures? picture, PictureFreeze freeze)
     {
         _result = result;
+        _corrected = null;
         _picture = picture?.Take(result.FrameCount);
         _freeze = freeze;
         _kept = new KeptRun(ranges, _picture);

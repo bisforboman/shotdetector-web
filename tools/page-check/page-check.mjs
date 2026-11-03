@@ -788,6 +788,7 @@ async function picked(query, what, file = sample, deinterlace = null) {
     await picture(page, what, file, split);
     await frameTypes(page, what, file);
     if (query === '' && !deinterlace) await contactSheet(page, what, file);
+    if (file === sample && !split) await corrections(page, what, file, run, query === '');
   }
   report(what, errors);
   await context.close();
@@ -821,6 +822,107 @@ async function pickedRefused(file) {
   }
   report(what, errors);
   await context.close();
+}
+
+// Correcting the cuts (issue #90, panels/corrections.js), on the default run: the native check's corrected list
+// (<sample>.corrected.starts.json: CorrectionCheck.Edit's first cut removed, last moved a frame later, two added a frame
+// apart) made with the keys as a viewer would, the playhead on each frame (Delete, '.', C): every download but the stats
+// CSV then the native check's for that list (LoadScenes, held to the FFmpeg path's), the stats CSV the run's, the cuts
+// lane with its added and removed ticks; undone to the detected cuts, the run's downloads again; redone. With reload:
+// the page reloaded and the file picked again, the corrected run shown again from the browser (a finished run kept for
+// its corrections), its downloads the corrected list's; then Forget.
+async function corrections(page, what, file, run, reload) {
+  what = `${what}, corrected`;
+  const native = join(nativeDir, stem(file));
+  if (!existsSync(`${native}.corrected.starts.json`)) return fail(`${what}: no ${native}.corrected.starts.json (tools/check.sh native first)`);
+  const wanted = JSON.parse(readFileSync(`${native}.corrected.starts.json`, 'utf8')).slice(1);
+  const detected = JSON.parse(readFileSync(`${native}.${run}.shots.json`, 'utf8')).slice(1).map(s => s.startFrame - 1);
+  const { num, den } = JSON.parse(await page.textContent('#about pre')).frameRate;
+  const at = async frame => {
+    await page.evaluate(t => new Promise(ok => {
+      const v = document.getElementById('video');
+      v.addEventListener('seeked', ok, { once: true });
+      v.currentTime = t;
+    }), (frame + 0.5) * den / num);
+  };
+  // Keys go to the page, not to a field that has the focus (the file input, after a pick).
+  await page.evaluate(() => document.activeElement?.blur());
+  const press = async (frame, key) => {
+    await at(frame);
+    await page.keyboard.press(key);
+  };
+  // A move first (a detected cut removed with the frame after it added: '.'), then the removals, then the additions.
+  const removed = detected.filter(c => !wanted.includes(c)), added = wanted.filter(c => !detected.includes(c));
+  const moved = removed.filter(c => added.includes(c + 1));
+  for (const c of moved) await press(c, '.');
+  for (const c of removed.filter(c => !moved.includes(c))) await press(c, 'Delete');
+  for (const c of added.filter(c => !moved.includes(c - 1))) await press(c, 'c');
+  const edits = removed.length + added.length - moved.length;
+  // Settled: no correction on its way, and the run card showing the downloads of as many removed and added cuts.
+  const settled = (n, why) => page.waitForFunction(n => document.getElementById('corrections')?.dataset.pending === '0' &&
+    document.getElementById('run')?.dataset.edits === String(n), n, { timeout: 30000 }).then(() => true, () => {
+    fail(`${what}: ${why}`);
+    return false;
+  });
+  if (!await settled(removed.length + added.length, 'the run card didn\'t show the corrected list')) return;
+  await downloadsCorrected(page, what, file, run);
+  const lane = await page.evaluate(() => [document.querySelectorAll('.tick.added').length,
+    document.querySelectorAll('.tick.removed').length]);
+  if (lane[0] !== added.length || lane[1] !== removed.length)
+    fail(`${what}: the cuts lane has ${lane[0]} added and ${lane[1]} removed ticks, not ${added.length} and ${removed.length}`);
+  const rows = await page.locator('#shots tbody tr.corrected').count();
+  if (rows !== added.length) fail(`${what}: ${rows} rows of the shots table marked corrected, not ${added.length}`);
+
+  // Undone to the detected cuts: the run's own downloads; redone.
+  for (let i = 0; i < edits; i++) await page.keyboard.press('Control+z');
+  if (!await settled(0, 'undo didn\'t go back to the detected cuts')) return;
+  if (!await page.isDisabled('#cut-undo')) fail(`${what}: undone to the detected cuts, Undo is still offered`);
+  await compare(page, `${what}, undone`, basename(file), run);
+  // The chapters' comparison leaves the focus in its field, where the page takes the keys as typing.
+  await page.evaluate(() => document.activeElement?.blur());
+  for (let i = 0; i < edits; i++) await page.keyboard.press('Control+Shift+z');
+  if (!await settled(removed.length + added.length, 'redo didn\'t come back to the corrected list')) return;
+  await downloadsCorrected(page, `${what}, redone`, file, run);
+  if (!reload) return;
+
+  // Kept in this browser: shown again with its corrections when the file is picked again.
+  settlings.get(page)(true);
+  await page.reload();
+  await isolated(page);
+  settlings.get(page)(false);
+  await page.setInputFiles('#file', file);
+  const status = await finished(page, `${what}, shown again`);
+  if (status === null) return;
+  if (!status.includes('corrected cuts kept in this browser') || await page.isVisible('#resume') || !await page.isVisible('#forget'))
+    fail(`${what}: after the reload, not the corrected run kept, Forget without Resume: ${status}`);
+  if (!await settled(removed.length + added.length, 'after the reload, the corrections aren\'t shown')) return;
+  await downloadsCorrected(page, `${what}, shown again`, file, run);
+  await page.click('#forget');
+}
+
+// The run card's downloads of a corrected list against the native check's <sample>.corrected.* (its stats CSV against
+// the run's: no correction changes a score).
+async function downloadsCorrected(page, what, file, run) {
+  const files = [['scenes-csv', 'scenes.csv'], ['stats-csv', 'stats.csv', run], ['shots-json', 'shots.json'],
+    ['shots-html', 'shots.html'], ['timeline-edl', 'edl'], ['timeline-fcpxml', 'fcpxml'], ['timeline-fcp7', 'fcp7.xml'],
+    ['timeline-otio', 'otio'], ['timeline-qp', 'qp'], ['timeline-keyframes', 'keyframes.txt'],
+    ['timeline-shotchanges', 'shotchanges']];
+  await page.locator('#scenes-csv').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  const differ = [];
+  for (const [id, ext, of = 'corrected'] of files) {
+    const link = page.locator(`#${id}`);
+    if (!await link.isVisible()) {
+      differ.push(`${ext} (none)`);
+      continue;
+    }
+    const download = await clicked(page, link);
+    const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${ext}`);
+    await download.saveAs(saved);
+    const native = join(nativeDir, `${stem(file)}.${of}.${ext}`);
+    if (!existsSync(native) || !readFileSync(saved).equals(readFileSync(native))) differ.push(ext);
+  }
+  if (differ.length > 0) fail(`${what}: the downloads ${differ.join(', ')} aren't the native check's corrected list's`);
+  else console.log(`${what}: ${files.length} downloads the native check's for the corrected list (the stats CSV the run's)`);
 }
 
 // A WebM picked (VP9 or AV1, decoded by the browser's own VideoDecoder: decision 2026-11-02-webm-browser-decoder.md),

@@ -183,6 +183,7 @@ failures += FieldCheck.Run(samples, libs);
 failures += RangeCheck.Run(samples, outDir);
 failures += ThreadsCheck.Run(samples, outDir);
 failures += ResumeCheck.Run(samples, outDir);
+failures += CorrectionCheck.Run(samples, libs, outDir);
 
 foreach (string reject in rejects)
 {

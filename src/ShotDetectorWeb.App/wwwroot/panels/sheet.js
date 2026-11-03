@@ -78,6 +78,13 @@ on('done', ({ video, result: r, name }) => {
   section.hidden = false;
 });
 
+// The cuts corrected on the page ('corrected', issue #90): the sheet is of the corrected shots, made again if it was.
+on('corrected', ({ result: r }) => {
+  if (!run || r.shots.length === 0) return;
+  run = { ...run, shots: r.shots };
+  if (made) sheet();
+});
+
 make.addEventListener('click', () => sheet());
 for (const field of [stillsField, columnsField, paperField, headerField])
   field.addEventListener('change', () => { if (made) sheet(); });

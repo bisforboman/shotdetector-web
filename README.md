@@ -227,6 +227,26 @@ Nothing leaves the browser, and where storage is off (a private window) a run re
 are about 97 bytes a frame for the adaptive detector (Long videos across workers, below) plus the picture's, so a
 two-hour film stopped half-way keeps about 9 MB.
 
+## Correcting the cuts
+
+Once a run is done or stopped, the cuts can be corrected on the page (issue #90; decision
+[2026-11-02-correcting-cuts.md](docs/decisions/2026-11-02-correcting-cuts.md); `panels/corrections.js`). The Corrections
+card beside the video, or the keys, act on the cut that starts the shot playing: Delete removes it, C adds a cut at
+the playhead's frame, `,` and `.` move the cut a frame earlier or later (the playhead goes with it), Ctrl+Z undoes and
+Ctrl+Shift+Z redoes. The cuts lane draws an added cut in the corrections' colour and a removed detected cut hollow; the
+shots table marks a shot that starts at an added cut. The page keeps the corrections as the detected cuts removed and
+the cuts added, and `Api.Correct` hands the corrected shots' first frames to ShotDetector's `LoadScenes` (3.25.0,
+shotdetector#647; the core's `CorrectedCuts`: a one-column scene list CSV, `Start Frame`, ending where a stopped run
+stopped). Every download then comes from that result: the scenes CSV, the shots as JSON and HTML, the editors' files
+and the chapters. The stats CSV stays the run's, since a correction changes no score. `LoadScenes` makes each file's
+result as scenedetect's `load-scenes` would: NativeCheck holds it to `LoadScenes(path)` on the FFmpeg path for the same
+list, byte for byte. Where `LoadScenes` reads a file otherwise than `Detect`, the corrected list is timed its way: a
+variable rate's cuts at frame / average rate, and the video's length nb_frames (an edit list that ends early, a
+fragmented file). These were sent upstream; the owner chose to ship as ShotDetector is. The corrections are kept with
+the kept run in IndexedDB, and a corrected finished run is kept too (the owner's choice): picking its file again shows
+it with its corrections, Forget drops it. A resumed run, or a run of the same file and options again, gets the kept
+corrections applied to its own detected cuts.
+
 ## Long videos across workers
 
 A video longer than 2 minutes is split across several Web Workers, each with a .NET runtime of its own, and their
@@ -753,6 +773,12 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   byte for byte, the shots told across the parts the whole run's and the picture measures joined the whole run's; and
   split into 4 ranges each stopped past 60%, the rest split into 4 again from the continuation's first frame, merged
   with the earlier ranges, against the whole run's too (`ResumeCheck.cs`);
+  the default run's cuts corrected as a viewer would (the first removed, the last moved a frame later, two added a
+  frame apart), made into a result by the core (`CorrectedCuts.Load`: `LoadScenes` for a `YuvVideo`) and by
+  `LoadScenes(path)` on the FFmpeg path from the same scene list, whole and stopped half-way: the scenes CSV, the shots
+  as JSON and HTML, the timeline files and the chapters byte for byte, the list made the list given up to where
+  `LoadScenes`' video ends (where that is before the run's end, the table says so: nb_frames, ShotDetector's), the
+  starts and the whole run's files to `out/native/<sample>.corrected.*` (`CorrectionCheck.cs`);
   each sample's and each `samples/no-aac/` file's `VideoInput.Audio` against FrameReader's probe of its first audio
   stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`); and the page's
   defaults, read from its `app.js` (the thresholds, the adaptive window and minimum content_val), each typed in giving
@@ -806,7 +832,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   then opened again and resumed to the end give the whole run's CSVs, shots, JSON, HTML and picture measures, the shots
   told after the stopped part's the whole run's, and stopped in their second range split, the rest split again from
   the kept bytes' first frame and merged with them, the whole run's too, that kept bytes of other options fail to
-  resume with "The stopped run didn't resume: " in front (the page then detects from the start), that `samples/reject/` is refused through
+  resume with "The stopped run didn't resume: " in front (the page then detects from the start), that the default run
+  corrected with the native check's list (`Correct`, from `<sample>.corrected.starts.json`) gives its downloads but the
+  stats CSV, which stays the run's, and `Correct(null)` the run's own again, that `samples/reject/` is refused through
   `Open` (or its `Detect`'s promise rejected with the core's message: a size that changes midway), that `Open`'s `audio` is the track `Audio()` measures (none
 where it says the file has none; for `samples/no-aac/`, the codec in the file's name), that `Audio()` (the
   sound, as the page asks for it after a run) gives its JSON in the names the panels read on every sample, the core's
@@ -835,7 +863,12 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   reload of a first visit): `with-audio-320x240-25.mp4` set on the file input and detected with the options as
   the page prefills them, on threads ("on N threads" in the status); the same on the page's worker (`?threads=0`, as
   where the page isn't isolated); the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers"
-  in the status); `mjpeg-320x240-25.avi` picked, which no browser plays: its downloads the native run's, the player an
+  in the status); on threads and on the page's worker, the run's cuts then corrected with the keys, the playhead put
+  on each frame, to the native check's corrected list (Correcting the cuts): every download but the stats CSV the
+  native check's `<sample>.corrected.*`, the stats CSV the run's, the cuts lane's added and removed ticks and the
+  shots table's marked rows there; undone to the run's own downloads, redone; on threads, the page then reloaded and
+  the file picked again, the corrected run shown again from IndexedDB with its corrections (Forget, no Resume);
+  `mjpeg-320x240-25.avi` picked, which no browser plays: its downloads the native run's, the player an
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
   every shot; then what those don't have, each picked on threads and on two workers: `rotated-90-320x240-25.mp4`
@@ -1054,7 +1087,10 @@ rules for changing them (adding to the page among them).
   result given `VideoPath` `/<file name>` as the browser knows no folder; the page's downloads and NativeCheck's files;
   and `Chapters(result, minimum)`, the YouTube chapters, `Timeline.YouTubeChapters` and `ChapterStarts`, Timeline's
   rule (shotdetector#648: a format built from a cut list lives on `Timeline`), 30 s by default, 10 at least, as JSON
-  `{ minimum, starts, text, notMade }`, `notMade` Timeline's reason when fewer than three).
+  `{ minimum, starts, text, notMade }`, `notMade` Timeline's reason when fewer than three); `CorrectedCuts` (issue #90,
+  decision `2026-11-02-correcting-cuts.md`: the cuts a viewer corrected, the shots' first frames as a one-column scene
+  list, `Start Frame`, made into a result by ShotDetector's `LoadScenes(YuvVideo, TextReader, ...)` with the run's
+  options, `EndTime` where a stopped run stopped).
 - `src/ShotDetectorWeb.App` (browser-wasm Exe, outside any solution: needs the wasm-tools workload): the page's .NET
   side, `Api`, a partial class in one file per feature: `Api.cs` has the `[JSExport]`s `Open(JSObject)` (a `Blob`, the
   picked `File`, read through `BlobStream`; the `YuvVideo` as JSON, with `frames` (`VideoInput.ShownFrames`, the page's
@@ -1077,7 +1113,9 @@ rules for changing them (adding to the page among them).
   `Api.Timeline.cs` has `TimelineFile(format, fileName)` (the last run's `TimelineFiles.Write` for the picked file's
   name, the run card's "For editors" downloads, which `run.js` asks for after those); `Api.Chapters.cs`
   `YouTubeChapters(minimum)` (the last run's `TimelineFiles.Chapters` JSON, the run card's chapters row),
-  `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
+  `Api.Corrections.cs` `Correct(startsJson)` (the last run's cuts corrected: the shots' first frames, or `null` for the
+  run's own; `CorrectedCuts.Load`, `Detect`'s JSON of it; the scenes CSV, shots JSON and HTML, timeline files and
+  chapters then the corrected list's, the stats CSV the run's), `Api.Assemblies.cs` `LoadedAssemblies()`; `Api.Versions.cs` `Versions()` (`{ runtime, packages: { id: version } }`,
   each package's NuGet version from its assembly, for the footer and app-check.mjs's check against the pins); `Api.Audio.cs` `Audio()`: `Mp4Audio.Measure` over the opened file (a
   `BlobStream` of its own), called by `app.js` in a worker of its own alongside the file's first run and told to the
   panels as the `audio` event, its JSON camelCase with times in seconds: `notMeasured` (why not, the core's words: no audio, which the page
@@ -1168,7 +1206,11 @@ rules for changing them (adding to the page among them).
   and a PDF written by hand, the JPEGs embedded, A4 or Letter), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
   `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
-  derives saying so in its tooltip), `bitrate.js` (on `opened`: a lane of
+  derives saying so in its tooltip), `corrections.js` (a card beside the video, marked page: the cut that starts
+  the shot playing removed, one added at the playhead, moved a frame (`,` `.`), undo and redo, by buttons or keys,
+  through `app.js`'s `correct(cuts)`, which keeps the corrections as the detected cuts removed and the cuts added, calls
+  `Correct`, tells the `corrected` event (cuts, shots, stats, run and bitrate follow it) and keeps them with the kept
+  run in IndexedDB, a corrected finished run kept too, `from` -1), `bitrate.js` (on `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
   the page's own reading), `frametypes.js` (after a run: a lane under the bitrate's of each frame's type from
   `FrameTypes()`, a bar a frame on a `<canvas>`, I tall, P shorter, B shortest, and a card of the counts, marked core),
@@ -1181,7 +1223,10 @@ rules for changing them (adding to the page among them).
 
 - `tools/NativeCheck`: core vs FFmpeg path, every sample and detector (the CSVs, the shots as JSON and HTML and the
   timeline files, `TimelineFiles` given the sample's name on both; the YouTube chapters at 10 and 30 s, and
-  `ChaptersCheck.cs`: YouTube's rules on them, each start a cut's second), and `PacketCheck.cs`: `VideoInput.Packets` vs
+  `ChaptersCheck.cs`: YouTube's rules on them, each start a cut's second), `CorrectionCheck.cs` (the default run's cuts
+  corrected, the core's `CorrectedCuts.Load` vs `LoadScenes(path)` on the same list, whole, stopped and under every
+  detector deinterlaced: every download but the stats CSV; `out/native/<sample>.corrected.*`, which app-check.mjs's
+  `Correct` and the page check compare with), and `PacketCheck.cs`: `VideoInput.Packets` vs
   `ffprobe -show_packets` (its lines written to `out/native/<sample>.packets.txt`); `FrameTypeCheck.cs`: the frames'
   types a run keeps vs ffprobe's `frame=pict_type` (its first field only: its csv adds x264's SEI to the first
   frame; no `-show_frames`, whose side data a rotated file prints over lines), whole, on four threads and in ranges joined (ffprobe's written to `out/native/<sample>.frametypes.txt`, which
@@ -1261,6 +1306,7 @@ rules for changing them (adding to the page among them).
   `2026-10-30-interlaced.md`: interlaced H.264, MBAFF woven as decoded, deinterlacing upstream first;
   `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
   `2026-11-01-freeze-spans.md`: still pictures only in a run that reads every frame in order, the owner's A;
+  `2026-11-02-correcting-cuts.md`: correcting the cuts on the page, a corrected finished run kept, `LoadScenes` as it is;
   `2026-11-02-browser-decoder.md`: the files the page refuses, a refusal that says what to do, then VP9 and AV1
   through the browser's decoder, checked in Chromium;
   `2026-11-02-npm-package.md`: the npm package, its API over `worker.js`, AOT and interpreted bundles, opt-in threads,

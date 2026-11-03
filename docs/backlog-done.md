@@ -1565,3 +1565,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `FreezeSpans`; Sintel's 48.458 to 50.8 s, the variable-rate samples' still to their end; interpreted and AOT the
     native run's; the page's card the native check's, "not looked for" when split; FreezeDetector about 0.15 ms a
     frame on Sintel)
+
+- Correcting the cuts on the page (issue #90)
+  - Why: ShotDetector 3.25.0's `LoadScenes(YuvVideo, TextReader, column, options)` (shotdetector#647) reads a scenes
+    CSV back over a `YuvVideo`, which a page that lets a viewer add and drop cuts before exporting needs: the edited
+    cuts become a result the downloads (CSVs, timeline files, chapters) are made from by ShotDetector, not the page.
+  - Status: Done (2026-11-02, decision 2026-11-02-correcting-cuts.md: the Corrections card and keys, remove, add at the
+    playhead, move a frame, undo and redo; the corrections kept as the detected cuts removed and the cuts added, with
+    the kept run in IndexedDB, a corrected finished run kept too (the owner's choice); `Api.Correct` through the core's
+    `CorrectedCuts` (`LoadScenes` of a one-column scene list), every download but the stats CSV the corrected list's;
+    NativeCheck's `CorrectionCheck.cs` holds it to `LoadScenes(path)` on every sample, whole and stopped, the wasm check
+    and the page check to NativeCheck's files. `LoadScenes` times and lengths that differ from `Detect`'s are upstream's:
+    row "A corrected list timed as its run (upstream)", under Waiting)

@@ -1,7 +1,8 @@
 // The shots' statistics, a card beside the shots table (backlog "Shot statistics and a timeline"): from the shots as
 // Detect returns them, how many, their average and median length, the shortest and the longest (a click plays it), cuts
 // per minute and how long the run took against the length it read. They are the page's own figures, worked out here
-// from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run. The shot playing is
+// from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run, and follow the cuts
+// as they are corrected on the page ('corrected'). The shot playing is
 // app.js's caption under the video, and the shots table marks its row.
 import { card, frameSeconds, on } from '../app.js';
 import { secondsOf, seek } from '../timeline.js';
@@ -36,17 +37,25 @@ function add(shot) {
   ends.push(secondsOf(shot.endTimecode));
 }
 
-on('chose', clear);
-on('run', clear);
+let ran = null; // the run done's figures that no correction changes: { seconds, read, stopped }
+on('chose', () => { ran = null; clear(); });
+on('run', () => { ran = null; clear(); });
 on('done', ({ video, result, seconds, from, restored }) => {
-  clear();
-  for (const shot of result.shots) add(shot);
-  if (shots.length === 0) return;
   // A stopped run shown again ran in an earlier visit; a resumed one read the video from its rest's first frame (the
   // status line's times real time is of the same frames).
-  fill(restored ? null : seconds, frameSeconds(video, result.frameCount) - frameSeconds(video, from), result.stopped);
-  section.hidden = false;
+  ran = { seconds: restored ? null : seconds, read: frameSeconds(video, result.frameCount) - frameSeconds(video, from),
+    stopped: result.stopped };
+  shown(result.shots);
 });
+on('corrected', ({ result }) => { if (ran) shown(result.shots); });
+
+function shown(list) {
+  clear();
+  for (const shot of list) add(shot);
+  if (shots.length === 0) return;
+  fill(ran.seconds, ran.read, ran.stopped);
+  section.hidden = false;
+}
 
 // seconds: the run's, null for none; read: the video it read in that time; stopped: the last shot is cut short where
 // the run stopped, so the lengths are the shots before it, and the figures say they are of the part read.
