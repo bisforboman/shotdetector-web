@@ -1051,13 +1051,19 @@ cached; Tears of Steel's takes the longest, about three hours. What it finds goe
 ## WebCodecs
 
 Are the frames the browser's own H.264 decoder (WebCodecs' `VideoDecoder`) gives the frames ManagedCodecs gives? A
-measurement, not a check: three tools, none of them in `tools/check.sh` or CI (backlog "WebCodecs: are its frames
+measurement, not a check: three tools, none of them in `tools/check.sh` or CI (backlog-done "WebCodecs: are its frames
 ManagedCodecs' frames?", [#15](https://github.com/bisforboman/shotdetector-web/issues/15)). The numbers and the verdict
 are in the decision's "Not doing" ([docs/decisions/2026-10-24-the-page.md](docs/decisions/2026-10-24-the-page.md)).
 Measured 2026-10-26, headless on a VM without a GPU: Chromium 153's frames are ManagedCodecs' frames, every plane of
 every frame of every sample and of a two-hour film, decoded and copied out 7 to 10 times faster than ManagedCodecs on
 wasm AOT; Firefox 136 hands its frames to the page in RGB (BGRX), so it has no Y, U and V planes to compare. Not
-identical in both browsers: the page keeps ManagedCodecs.
+identical in both browsers: H.264 and MJPEG stay ManagedCodecs'.
+
+That verdict stands for H.264 (speed). The browser's decoder came in for another reason, files the page refused:
+issue #89's decision ([docs/decisions/2026-11-02-browser-decoder.md](docs/decisions/2026-11-02-browser-decoder.md))
+dropped the backlog row "WebCodecs as a decoder" and took `VideoDecoder` for VP9 and AV1 in WebM only, where
+Chromium's software decoders give FFmpeg's frames, held to the FFmpeg path byte for byte in page-check (Status; the
+App's `JsDecoder`, Code layout). A browser that gives RGB refuses such a run.
 
 ```
 dotnet build tools/WebCodecsCheck -c Release
