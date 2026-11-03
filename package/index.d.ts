@@ -19,6 +19,8 @@ export interface DetectOptions {
   onProgress?: (progress: { done: number; expected: number }) => void;
   /** Each shot as soon as ShotDetector knows it. */
   onShot?: (shot: Shot) => void;
+  /** A paused run has come to be held: the frames read, where a stop now ends it. */
+  onPaused?: (paused: { frames: number }) => void;
   /** Cancels the run: its promise rejects with an AbortError. */
   signal?: AbortSignal;
 }

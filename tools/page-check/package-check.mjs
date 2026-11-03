@@ -5,9 +5,10 @@
 //      HTML the native check's run byte for byte (the sample's run named after it), a still per shot (a JPEG);
 //   2. threads: on a cross-origin isolated origin (COOP/COEP) the run on two threads (result.threads 2), the same files;
 //      on one that isn't, asked for all the same, the worker's (result.threads 1);
-//   3. a ShotDetector stopped half-way (stopped, its stats CSV the native run's rows up to there), one paused (no progress
-//      while paused) and resumed (the native run's files), one cancelled through an AbortSignal (an AbortError) and then
-//      used again;
+//   3. a ShotDetector paused before its first frame and, once held (onPaused), stopped (stopped, its stats CSV the native
+//      run's rows up to there), resumed after half a second (no progress past the frame it was held at; the native
+//      run's files) or cancelled through an AbortSignal (an AbortError) and then used again: none of it timed against
+//      the run's speed;
 //   4. nothing left in the host page's document, no error on the page or in its workers.
 // With --replaced: the tarball was packed with a FastYuv built to throw MARK (tools/check.sh replace), and every bundle
 // must fail with it: the package's replaceability (LGPL-2.1).
@@ -224,22 +225,34 @@ if (replaced) {
       const out = {};
       const d = new window.sd.ShotDetector();
       const video = await d.open(file);
-      // Stopped half-way.
+      // Each of the three is told once the run is held (pause() before its first frame, onPaused when the worker holds
+      // it at its first pause), not from a progress, which a short run can outrun: a run held waits there, whatever the
+      // machine's speed.
+      // Stopped while held: the result for the frames read by then.
       let stopRun;
-      stopRun = d.detect({ onProgress: ({ done }) => { if (done >= video.frames / 2) stopRun.stop(); } });
+      stopRun = d.detect({ onPaused: () => stopRun.stop() });
+      stopRun.pause();
       const stopped = await stopRun;
       out.stopped = { stopped: stopped.stopped, frames: stopped.frames, stats: await (await d.statsCsv()).text() };
-      // Paused at a quarter, no progress while paused, resumed to the end.
-      let pausedAt = -1, during = 0, pauseRun;
-      pauseRun = d.detect({ onProgress: ({ done }) => {
-        if (pausedAt < 0 && done >= video.frames / 4) { pausedAt = done; pauseRun.pause(); setTimeout(() => { during = -1; pauseRun.resume(); }, 1000); } else if (pausedAt >= 0 && during >= 0 && done > pausedAt + 8) during++;
-      } });
+      // Held for half a second (no frame read past the one it is held at), then resumed to the end.
+      let heldAt = -1, holding = false, during = 0, pauseRun;
+      pauseRun = d.detect({
+        onProgress: ({ done }) => { if (holding && done > heldAt) during++; },
+        onPaused: ({ frames }) => {
+          heldAt = frames;
+          holding = true;
+          setTimeout(() => { holding = false; pauseRun.resume(); }, 500);
+        },
+      });
+      pauseRun.pause();
       const resumed = await pauseRun;
-      out.paused = { during, pausedAt, stopped: resumed.stopped, scenes: await d.scenesCsv(), stats: await (await d.statsCsv()).text() };
-      // Cancelled through an AbortSignal, then used again.
+      out.paused = { during, pausedAt: heldAt, stopped: resumed.stopped, scenes: await d.scenesCsv(), stats: await (await d.statsCsv()).text() };
+      // Cancelled through an AbortSignal while held, then used again.
       const controller = new AbortController();
       try {
-        await d.detect({ signal: controller.signal, onProgress: ({ done }) => { if (done >= 8) controller.abort(); } });
+        const cancelRun = d.detect({ signal: controller.signal, onPaused: () => controller.abort() });
+        cancelRun.pause();
+        await cancelRun;
         out.cancelled = 'not cancelled';
       } catch (e) {
         out.cancelled = e.name;
@@ -256,14 +269,15 @@ if (replaced) {
       const stoppedRows = r.stopped.stats.trimEnd().split('\n');
       if (!r.stopped.stopped || r.stopped.frames >= nativeStats.length - 2) fail(`stop: not stopped (${JSON.stringify(r.stopped.frames)} frames)`);
       else if (!stoppedStats(stoppedRows, nativeStats)) fail('stop: the stats CSV isn\'t the native run\'s rows up to the stop');
-      else pass(`stopped at frame ${r.stopped.frames}: the native run's ${stoppedRows.length - 1} stats rows`);
-      if (r.paused.pausedAt < 0 || r.paused.during > 0) fail(`pause: progress went on while paused (${JSON.stringify(r.paused)})`);
+      else pass(`stopped while held, at frame ${r.stopped.frames}: the native run's ${stoppedRows.length - 1} stats rows`);
+      if (r.paused.pausedAt < 0) fail('pause: the run was never held');
+      else if (r.paused.during > 0) fail(`pause: progress went on while held (${r.paused.during} past frame ${r.paused.pausedAt})`);
       else if (r.paused.stopped) fail('pause: the resumed run ended stopped');
       else if (same('paused and resumed, scenes CSV', r.paused.scenes, native(file, run, 'scenes.csv'))
-        && same('paused and resumed, stats CSV', r.paused.stats, native(file, run, 'stats.csv'))) pass(`paused at frame ${r.paused.pausedAt} and resumed: the native run's CSVs`);
+        && same('paused and resumed, stats CSV', r.paused.stats, native(file, run, 'stats.csv'))) pass(`held at frame ${r.paused.pausedAt}, no progress past it, resumed: the native run's CSVs`);
       if (r.cancelled !== 'AbortError') fail(`cancel: ${r.cancelled}, not an AbortError`);
       else if (r.again.stopped || !same('detected after a cancel, scenes CSV', r.again.scenes, native(file, run, 'scenes.csv'))) fail('detected after a cancel: not the whole run');
-      else pass('cancelled with an AbortSignal (AbortError), then detected again: the native run\'s scenes CSV');
+      else pass('cancelled with an AbortSignal while held (AbortError), then detected again: the native run\'s scenes CSV');
     }
     noErrors('stop, pause, cancel', errors);
     await page.close();
