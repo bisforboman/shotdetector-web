@@ -55,7 +55,9 @@ it there, don't work around it).
 
 ### Before pushing
 
-Prerequisites (tools/check.sh's header; README, "Checks"):
+Prerequisites (tools/check.sh's header; README, "Checks"). In a cloud session `.claude/hooks/session-start.sh` sets up
+all but the samples: the wasm-tools workload, BtbN's pinned FFmpeg 8.1 (`SHOTDETECTOR_FFMPEG_LIBS`, `LD_LIBRARY_PATH`,
+its ffmpeg with libx264 on `PATH`), and the container's Playwright with `PAGE_CHECK_FIREFOX=skip` (it has no Firefox).
 
 - `samples/` from `tools/make-samples.sh` (once; `FFMPEG=<an ffmpeg with libx264>`, `SINTEL=<Sintel's 1080p trailer
   MP4>`).
