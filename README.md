@@ -38,7 +38,7 @@ conversion interpolates from; its picture is measured in 10-bit code values, as 
 picture"). **And 4:2:0 or 4:2:2 MJPEG
 in an AVI** (yuvj420p, yuvj422p: a JPEG is full range; its audio described, not measured; decision
 `docs/decisions/2026-10-30-mjpeg-avi.md`), under any FourCC FFmpeg reads as MJPEG (`MJPG`, `dmb1`, `AVI1`, `AVRn`'s
-kin: ManagedCodecs 0.6.0's list; `samples/mjpeg-dmb1-320x240-25.avi`). A damaged JPEG, whose scan ends before its
+kin: ManagedCodecs' list since 0.6.0; `samples/mjpeg-dmb1-320x240-25.avi`). A damaged JPEG, whose scan ends before its
 picture does, is decoded with the part it doesn't reach black, where FFmpeg leaves an earlier frame's picture, which
 one depending on its threads: the run's warnings name it, and the checks hold everything else to FFmpeg's, the stats
 rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`, the owner's choice;
@@ -1280,7 +1280,7 @@ a rotation, a variable frame rate and deinterlacing there, 3.24.0 the first refu
 video's, shotdetector#625, 3.25.0 the first with ranges that deinterlace, shotdetector#628, 3.26.0 the first saying where a range's final scores
 end, `RangeScores.EndFrame`, 3.27.0 the first whose hash detector gives x64's bits on browser-wasm, shotdetector#701),
 FrameReader (2.21.0),
-ManagedCodecs (0.6.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.7.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
 under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
@@ -1289,7 +1289,7 @@ holds"; 0.5.0 gives each frame's colour tags and sample aspect ratio, the stream
 duration, and seeking, which the core doesn't use yet: `Mp4Header`, `SpsInfo` and `AviHeader` still read what FFmpeg says; 0.6.0 takes the
 other AVI FourCCs FFmpeg reads as MJPEG, decodes a JPEG whose scan runs past its data (the rest 0, `IsDamaged`; FFmpeg's
 picture there is undefined, Status), and decodes 4:1:1 and 4:4:0 JPEG, which ShotDetector's frame source doesn't take
-yet)
+yet; 0.7.0 adds JPEG thumbnails, which the page doesn't use)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core

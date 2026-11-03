@@ -59,11 +59,12 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
     (on nuget.org since 2026-11-02); the bump to it is this row's work
 
-### ManagedCodecs 0.6.0, FrameReader 2.21.0 and ShotDetector 3.27.0
+### ManagedCodecs 0.7.0, FrameReader 2.21.0 and ShotDetector 3.27.0
 
-- ManagedCodecs 0.6.0 and FrameReader 2.21.0, with the AVI scope widened; ShotDetector and FastYuv 3.27.0
+- ManagedCodecs 0.7.0 and FrameReader 2.21.0, with the AVI scope widened; ShotDetector and FastYuv 3.27.0
   - Why: the coordinator's row of 2026-11-02, the owner adding ShotDetector 3.27.0 (its hash fix, shotdetector#701,
-    the row above). ManagedCodecs 0.6.0 reads the other AVI FourCCs FFmpeg takes as MJPEG, decodes 4:1:1 and 4:4:0
+    the row above; ManagedCodecs 0.7.0 rather than 0.6.0, the owner's choice of 2026-11-03: its only addition, JPEG
+    thumbnails, the page doesn't use). ManagedCodecs 0.6.0 reads the other AVI FourCCs FFmpeg takes as MJPEG, decodes 4:1:1 and 4:4:0
     JPEG and a JPEG whose scan runs past its data (`VideoFrame.IsDamaged`) instead of throwing.
   - Where: `Directory.Packages.props`; `AviInput` (4:1:1 and 4:4:0 refused by name: ShotDetector 3.27.0's frame source
     takes neither, reported to the shotdetector coordinator); `VideoInput.Damaged.cs` and `Api` (decision
@@ -74,7 +75,8 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Done when: `tools/check.sh native wasm aot page` passes: the dmb1 sample byte for byte; the damaged one with the
     core's damaged frames FFmpeg's and everything else byte for byte but the stats rows that read the frame; 4:1:1 and
     4:4:0 refused with their names. After the merge, realworld.yml's tears and clips jobs green on main (the row above).
-  - Not: converting 4:1:1 or 4:4:0 here (ShotDetector's); ManagedCodecs 0.7.0.
+  - Not: converting 4:1:1 or 4:4:0 here (ShotDetector's: a Maybe row there); ShotDetector 3.28.0's features (rows of
+    their own).
   - Status: In progress (2026-11-03)
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
