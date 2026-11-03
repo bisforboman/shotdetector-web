@@ -1521,6 +1521,30 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     untagged, BT.709 at 29.97, full range, 10-bit, 4:2:2; AV1 with Opus, 10-bit) to `Detect(path)` in every check,
     page-check's `--browser` holds Chromium's decoder to the same files, app-check opens them and is refused under Node
 
+- The npm package
+  - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
+    trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner
+    2026-11-02, design in decision [2026-11-02-npm-package.md](decisions/2026-11-02-npm-package.md)).
+  - Where: `package/` (`index.js`, `index.d.ts`, `package.json`, README): `detectShots(file, options)` and
+    `ShotDetector` over `worker.js`' call-by-name (and `threads.js`' runner for threads), stills from the browser's
+    decode; `tools/package.sh` (the App's AOT, interpreted and threaded AOT publishes copied into `aot/`,
+    `interpreted/`, `threads/`, FastYuv's licence, `-p:FastYuvAssembly` passed on); `tools/check.sh package` and a test
+    page under `tools/page-check/`; `tools/ci-scope.sh`; `.github/workflows/npm.yml` (on a tag `package-v<version>`,
+    the checks, then `npm publish --provenance` by trusted publishing); README and CLAUDE.md.
+  - Done when: the packed tarball, installed into a test page in Chromium, gives each sample's shots, scenes and stats
+    CSVs byte for byte the native run's on each bundle (threads on an isolated page; asked for on one that isn't, the
+    worker); a run stopped, one paused and resumed, one cancelled; a still per shot; a changed FastYuv rebuilt through
+    `tools/package.sh` runs; CI green. Publishing itself waits for the owner to create `shotdetector-web` on npmjs.com
+    with this workflow as its trusted publisher.
+  - Not: a `<shot-detector>` element or split runs across workers (the owner, 2026-11-02: later rows if asked); a
+    change to `worker.js`' messages or the page.
+  - Status: Done (2026-11-02, #132: `package/`, `tools/package.sh`, `tools/check.sh package` and
+    `tools/page-check/package-check.mjs` passing locally on the three samples, each bundle and threads, stop, pause and
+    cancel; 0.1.0 packs to 13.2 MB, 40.4 MB unpacked, 107 files. `threads.js` and its imports sit at the package's
+    root, where they find `threads/_framework/` unchanged. Found: a host must serve `.mjs` as JavaScript or the
+    threaded runtime's workers don't start; the package's README says so. The publish waits: Waiting, "The npm
+    package's first publish")
+
 - Freeze spans on the page
   - Why: 3.26.0's `DetectionOptions.FreezeDetect` and FrameReader 2.20.0's `FreezeDetector` find still pictures as
     FFmpeg's `freezedetect` does, a delivery check beside the black spans. Ranges refuse `FreezeDetect` (and

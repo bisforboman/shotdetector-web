@@ -99,7 +99,9 @@ shotdetector-web/
   aot/                    worker.js, blob-read.js, blob-write.js, pause.js (the App's own files, copied from its
                           publish) and _framework/ (the AOT bundle: dotnet.js, dotnet.native.wasm, the assemblies)
   interpreted/            the same files, _framework/ the interpreted bundle
-  threads/                threads.js' runner, blob-read.js etc. and _framework/ the threaded AOT bundle
+  threads.js, pause.js, blob-write.js   the page's threaded runner and its imports, as they are (built: at the root,
+                          where threads.js finds ./threads/_framework/ and its imports without a change)
+  threads/_framework/     the threaded AOT bundle
   licenses/               FastYuv's COPYING.LGPL, THIRD-PARTY-NOTICES.md, LICENSE
   README.md               use, serving the files, the size, the licence and FastYuv's rebuild recipe
 ```
