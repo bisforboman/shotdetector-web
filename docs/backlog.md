@@ -57,16 +57,16 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Done when: realworld.yml's tears and clips jobs pass on the release.
   - Not: a workaround here.
   - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
-    (on nuget.org since 2026-11-02); the bump to it is this row's work
+    (on nuget.org since 2026-11-02); the bump to 3.28.0 below is this row's work
 
-### ManagedCodecs 0.7.0, FrameReader 2.21.0 and ShotDetector 3.27.0
+### ManagedCodecs 0.7.0, FrameReader 2.22.0 and ShotDetector 3.28.0
 
-- ManagedCodecs 0.7.0 and FrameReader 2.21.0, with the AVI scope widened; ShotDetector and FastYuv 3.27.0
+- ManagedCodecs 0.7.0 and FrameReader 2.22.0, with the AVI scope widened; ShotDetector and FastYuv 3.28.0
   - Why: the coordinator's row of 2026-11-02, the owner adding ShotDetector 3.27.0 (its hash fix, shotdetector#701,
-    the row above; ManagedCodecs 0.7.0 rather than 0.6.0, the owner's choice of 2026-11-03: its only addition, JPEG
+    the row above), then 3.28.0 and FrameReader 2.22.0 once on nuget.org (the owner's choice, 2026-11-03; ManagedCodecs 0.7.0 rather than 0.6.0, the owner's choice of 2026-11-03: its only addition, JPEG
     thumbnails, the page doesn't use). ManagedCodecs 0.6.0 reads the other AVI FourCCs FFmpeg takes as MJPEG, decodes 4:1:1 and 4:4:0
     JPEG and a JPEG whose scan runs past its data (`VideoFrame.IsDamaged`) instead of throwing.
-  - Where: `Directory.Packages.props`; `AviInput` (4:1:1 and 4:4:0 refused by name: ShotDetector 3.27.0's frame source
+  - Where: `Directory.Packages.props`; `AviInput` (4:1:1 and 4:4:0 refused by name: ShotDetector 3.28.0's frame source
     takes neither, reported to the shotdetector coordinator); `VideoInput.Damaged.cs` and `Api` (decision
     [2026-11-02-damaged-jpeg.md](decisions/2026-11-02-damaged-jpeg.md), the owner's A: the damaged frames decoded as
     ManagedCodecs does and named in the run's warnings, carried by a range's bytes and the kept run); NativeCheck's
