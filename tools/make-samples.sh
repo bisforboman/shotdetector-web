@@ -175,7 +175,8 @@ want="mjpeg,yuvj420p,25/1,114,114,K__,4.560000 mjpeg,yuvj420p,30000/1001,135,135
   || { echo "mjpeg-pcm: the audio isn't PCM without a duration." >&2; exit 1; }
 # Another of the AVI FourCCs FFmpeg reads as MJPEG ('dmb1', a capture card's; ManagedCodecs reads them since 0.6.0),
 # and a damaged JPEG (decision 2026-11-02-damaged-jpeg.md): the 40th frame's scan cut halfway, an EOI there and the rest
-# of its chunk zeros, which FFmpeg's decoder logs as an overread and ManagedCodecs decodes with the rest 0
+# of its chunk zeros, which FFmpeg's decoder logs as an overread (and drops with -err_detect explode) and ManagedCodecs
+# decodes with the rest 0
 # (VideoFrame.IsDamaged); FFmpeg fills it from its buffer pool, so the rows around it are left out of the comparison.
 enc -filter_complex "$(three 320x240 25 1.5),format=yuvj420p" -c:v mjpeg -q:v 3 -vtag dmb1 "$out/mjpeg-dmb1-320x240-25.avi"
 python3 -I - "$out/mjpeg-320x240-25.avi" "$out/mjpeg-damaged-320x240-25.avi" <<'PY'
@@ -193,9 +194,10 @@ d[cut + 2:data + size] = bytes(data + size - cut - 2)
 open(sys.argv[2], "wb").write(d)
 PY
 got=$("$fp" -v error -show_entries stream=codec_tag_string,pix_fmt,nb_frames -of csv=p=0 "$out/mjpeg-dmb1-320x240-25.avi")
-got+=" $("$ff" -hide_banner -nostats -threads 1 -i "$out/mjpeg-damaged-320x240-25.avi" -vf showinfo -f null - 2>&1 |
-  grep -A1 overread | grep -o ' n: *[0-9]*' | head -1 | tr -d ' ')"
-[[ $got == 'dmb1,yuvj420p,114 n:39' ]] || { echo "mjpeg-dmb1, mjpeg-damaged: tag, pix_fmt, frames and the damaged frame are $got" >&2; exit 1; }
+# The damaged frame: the one ffprobe drops when it explodes on errors (its pts, 0-based at 25 fps from 0).
+got+=" $(diff <("$fp" -v quiet -show_entries frame=pts -of csv=p=0 "$out/mjpeg-damaged-320x240-25.avi") \
+  <("$fp" -v quiet -err_detect explode -show_entries frame=pts -of csv=p=0 "$out/mjpeg-damaged-320x240-25.avi") | grep '^<' || true)"
+[[ $got == 'dmb1,yuvj420p,114 < 39' ]] || { echo "mjpeg-dmb1, mjpeg-damaged: tag, pix_fmt, frames and the damaged frame are $got" >&2; exit 1; }
 
 # 10-bit 4:2:0 and 8-bit 4:2:2 H.264 (libx264's High 10 and High 4:2:2; backlog "10-bit 4:2:0 and 8-bit 4:2:2"), which
 # ShotDetector's frame source takes since 3.24.0, and 4:2:2 MJPEG (yuvj422p, most cameras'). 10-bit's conversion

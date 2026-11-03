@@ -805,7 +805,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   be equal (and Subtitle Edit's shot changes, `TimelineFiles`' `shotchanges`), and the YouTube chapters at 10 and 30 s
   (`<sample>.<run>.chapters-<minimum>.json`, ShotDetector's `Timeline.YouTubeChapters` and `ChapterStarts`) too, within
   YouTube's rules (`ChaptersCheck.cs`). A damaged JPEG (`DamagedCheck.cs`): the core's damaged frames must be
-  those FFmpeg's decoder logs an overread for (one thread, paired with `showinfo`'s frame numbers), and the stats CSV
+  those ffprobe drops with `-err_detect explode` (the same frames every time, as ffmpeg's interleaved log lines
+  aren't), and the stats CSV
   the FFmpeg path's but for the rows that read one (its own and the next, the adaptive window on each side, one more
   each side deinterlaced); the picture check leaves the damaged frames themselves out. It also
   checks that `samples/reject/` is refused, each file with its own message (when opened, or by its run: a size that

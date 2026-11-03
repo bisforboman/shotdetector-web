@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.RegularExpressions;
 
 namespace ShotDetectorWeb.Checks;
 
@@ -8,49 +7,51 @@ namespace ShotDetectorWeb.Checks;
 /// The damaged frames (decision 2026-11-02-damaged-jpeg.md, the owner's A): a JPEG whose scan runs past its data, which
 /// ManagedCodecs decodes with the part it doesn't reach 0 and FFmpeg with a frame from its buffer pool there, which one
 /// depending on its threads. The core's damaged frames (<see cref="VideoInput.DamagedFrames"/>) must be FFmpeg's: those
-/// its MJPEG decoder logs <c>overread</c> for, one thread, paired with <c>showinfo</c>'s frame number; the stats CSV must
+/// ffprobe drops with <c>-err_detect explode</c> (<see cref="Ffmpeg"/>); the stats CSV must
 /// equal the FFmpeg path's but for the rows that read a damaged frame (<see cref="Outside"/>); the picture's measures but
 /// for the damaged frames themselves (PictureCheck).
 /// </summary>
-static partial class DamagedCheck
+static class DamagedCheck
 {
-    /// <summary>The frames (0-based, display order) FFmpeg's decoder found a scan short in, one thread.</summary>
+    /// <summary>
+    /// The frames (0-based, display order) FFmpeg's decoder finds damaged: those ffprobe drops with <c>-err_detect
+    /// explode</c> (a JPEG whose scan runs past its data fails then, where FFmpeg otherwise logs an overread and gives
+    /// the frame), against its frames without it, by pts. ffprobe decodes and prints on one thread, so the answer is the
+    /// same every time (ffmpeg's log lines, from its decoder's and its filters' threads, interleave as they come).
+    /// </summary>
     public static IReadOnlyList<int> Ffmpeg(string libs, string sample)
     {
-        string ffmpeg = Path.Combine(libs, "ffmpeg");
-        if (!File.Exists(ffmpeg))
-            ffmpeg = "ffmpeg";
-        var start = new ProcessStartInfo(ffmpeg) { RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (string a in new[] { "-hide_banner", "-nostats", "-nostdin", "-threads", "1", "-i", sample, "-map", "0:v:0",
-                     "-vf", "showinfo", "-f", "null", "-" })
-            start.ArgumentList.Add(a);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("ffmpeg didn't start.");
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        string log = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        _ = stdout.Result;
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"ffmpeg failed ({process.ExitCode}): {log}");
-
-        // The decoder logs while it decodes a frame, which showinfo then prints: one thread, so in that order.
+        var all = Pts(libs, sample, explode: false);
+        var kept = Pts(libs, sample, explode: true).ToHashSet();
         var frames = new List<int>();
-        bool overread = false;
-        foreach (string line in log.Split('\n'))
+        for (int i = 0; i < all.Count; i++)
         {
-            if (line.Contains("overread", StringComparison.Ordinal))
-                overread = true;
-            else if (overread && ShowInfo().Match(line) is { Success: true } m)
-            {
-                frames.Add(int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture));
-                overread = false;
-            }
+            if (!kept.Contains(all[i]))
+                frames.Add(i);
         }
 
         return frames;
     }
 
-    [GeneratedRegex(@"Parsed_showinfo.*\bn:\s*(\d+)")]
-    private static partial Regex ShowInfo();
+    /// <summary>Each frame's pts as ffprobe decodes them, in display order.</summary>
+    static List<string> Pts(string libs, string sample, bool explode)
+    {
+        string ffprobe = Path.Combine(libs, "ffprobe");
+        if (!File.Exists(ffprobe))
+            ffprobe = "ffprobe";
+        var start = new ProcessStartInfo(ffprobe) { RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (string a in (string[])["-v", "quiet", .. explode ? ["-err_detect", "explode"] : Array.Empty<string>(),
+                     "-select_streams", "v:0", "-show_entries", "frame=pts", "-of", "csv=p=0", sample])
+            start.ArgumentList.Add(a);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("ffprobe didn't start.");
+        var stderr = process.StandardError.ReadToEndAsync();
+        string output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        _ = stderr.Result;
+        var pts = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        pts.Sort((a, b) => long.Parse(a, CultureInfo.InvariantCulture).CompareTo(long.Parse(b, CultureInfo.InvariantCulture)));
+        return pts;
+    }
 
     /// <summary>
     /// The frame numbers (1-based, the stats CSV's) of the rows that read damaged frame <paramref name="damaged"/>
