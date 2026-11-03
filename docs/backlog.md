@@ -68,7 +68,8 @@ correcting the cuts on the page.
 
 ### ShotDetector 3.26.0 and FrameReader 2.20.0
 
-The owner's queue of 2026-11-01: the bump first (done, #124: backlog-done), then freeze spans on the page.
+The owner's queue of 2026-11-01: the bump first (done, #124), then freeze spans on the page (done): both in
+[backlog-done.md](backlog-done.md).
 
 ### The files the page refuses (issue #89)
 

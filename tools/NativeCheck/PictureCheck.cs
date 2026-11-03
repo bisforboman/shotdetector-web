@@ -12,7 +12,10 @@
 //   (make-samples.sh's three(), the interlaced ones woven, the rotated ones upright, the
 //   variable-rate ones at their own timestamps, the 10-bit ones in 10-bit levels), one span, the last shot's frames (from the default run's last cut; decoded frame 100 on for
 //   the variable-rate ones, whose cuts are numbered by time at the average rate); on the fades sample
-//   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none.
+//   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none;
+// - freezedetect with its defaults (decision 2026-11-01-freeze-spans.md): the same still pictures, their freeze_start and
+//   freeze_end to the digits FFmpeg prints (one still at the end has no freeze_end), and the same frames as
+//   ShotDetector's own FreezeSpans (DetectionOptions.FreezeDetect) on the run.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
 // joined, their measures must be the whole run's, byte for byte. Each sample's summary (the App's Picture() JSON) goes
 // to the output folder as <sample>.picture.json, which the wasm check compares its own with.
@@ -33,8 +36,8 @@ static class PictureCheck
     {
         int failures = 0;
         Console.WriteLine();
-        Console.WriteLine("| Sample | Frames | signalstats (per frame) | cropdetect (per frame; whole) | blackdetect (d=0; 2 s) | Colour bars | Ranges | Core time |");
-        Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- |");
+        Console.WriteLine("| Sample | Frames | signalstats (per frame) | cropdetect (per frame; whole) | blackdetect (d=0; 2 s) | Colour bars | freezedetect | Ranges | Core time |");
+        Console.WriteLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
         foreach (string sample in samples)
         {
             var problems = new List<string>();
@@ -50,7 +53,7 @@ static class PictureCheck
 
             if (problems.Count > 0)
                 failures++;
-            while (cells.Count < 7)
+            while (cells.Count < 8)
                 cells.Add("");
             if (problems.Count > 0)
                 cells[0] += " **DIFFERS: " + string.Join("; ", problems.Take(5)) + (problems.Count > 5 ? $"; {problems.Count - 5} more" : "") + "**";
@@ -63,9 +66,9 @@ static class PictureCheck
     static void Check(string sample, string libs, string outDir, List<string> problems, List<string> cells)
     {
         var input = FfmpegDecoder.Open(sample);
-        var meter = new PictureMeter(input.Video);
+        var meter = new PictureMeter(input.Video, freeze: true);
         var watch = Stopwatch.StartNew();
-        var result = input.Detect(new DetectionOptions(), picture: meter);
+        var result = input.Detect(new DetectionOptions { FreezeDetect = new FreezeDetectOptions() }, picture: meter);
         var time = watch.Elapsed;
         var ours = meter.Measures;
         if (ours.Count != result.FrameCount)
@@ -128,11 +131,33 @@ static class PictureCheck
 
         cells.Add(string.Join("; ", blackCells));
         cells.Add(Bars(sample, ours, result, problems));
+        var freeze = PictureFreeze.Found(meter.FreezeSpans(result.FrameCount)!, ours.TimeBase);
+        cells.Add(Freeze(freeze, theirs.Freeze, result, problems));
         cells.Add(Ranges(input, ours, problems));
         cells.Add($"{time.TotalSeconds:F2} s");
 
         File.WriteAllText(Path.Combine(outDir, Path.GetFileNameWithoutExtension(sample) + ".picture.json"),
-            JsonSerializer.Serialize(PictureSummary.Of(ours), PictureJson.Default.PictureSummary));
+            JsonSerializer.Serialize(PictureSummary.Of(ours, freeze), PictureJson.Default.PictureSummary));
+    }
+
+    /// <summary>The still pictures against freezedetect's and against ShotDetector's own (<see cref="DetectionResult.FreezeSpans"/>).</summary>
+    static string Freeze(PictureFreeze ours, List<FreezeLine> theirs, DetectionResult result, List<string> problems)
+    {
+        var spans = ours.Spans!;
+        bool same = spans.Count == theirs.Count && spans.Zip(theirs).All(p => Printed(p.Second.Start, p.First.Start) &&
+            (p.First.End is { } end ? p.Second.End is { } e && Printed(e, end) : p.Second.End is null));
+        string Shown(PictureStill s) => $"{s.Start:0.######}-{(s.End is { } e ? e.ToString("0.######", CultureInfo.InvariantCulture) : "end")}";
+        if (!same)
+            problems.Add($"freezedetect: {string.Join(", ", spans.Select(Shown))}, FFmpeg's {string.Join(", ", theirs.Select(t => $"{t.Start}-{t.End ?? "end"}"))}");
+        var sd = result.FreezeSpans ?? [];
+        if (sd.Count != spans.Count || sd.Zip(spans).Any(p => p.First.StartFrame != p.Second.FirstFrame || p.First.EndFrame != p.Second.EndFrame))
+        {
+            problems.Add($"still pictures {string.Join(", ", spans.Select(s => $"{s.FirstFrame}-{s.EndFrame?.ToString(CultureInfo.InvariantCulture) ?? "end"}"))}, " +
+                $"ShotDetector's FreezeSpans {string.Join(", ", sd.Select(s => $"{s.StartFrame}-{s.EndFrame?.ToString(CultureInfo.InvariantCulture) ?? "end"}"))}");
+        }
+
+        return spans.Count == 0 ? "none" : string.Join(", ", spans.Select(s =>
+            $"{s.Start:0.###}-{(s.End is { } e ? e.ToString("0.###", CultureInfo.InvariantCulture) : "end")} s"));
     }
 
     /// <summary>The colour bars against what make-samples.sh put in the sample (above).</summary>
@@ -213,7 +238,10 @@ static class PictureCheck
 
     sealed record Span(string Start, string End);
 
-    sealed record FfmpegPicture(List<Dictionary<string, string>> Frames, string? Crop, List<Span> Black0, List<Span> Black2);
+    sealed record FreezeLine(string Start, string? End);
+
+    sealed record FfmpegPicture(List<Dictionary<string, string>> Frames, string? Crop, List<Span> Black0, List<Span> Black2,
+        List<FreezeLine> Freeze);
 
     /// <summary>
     /// One pass of FFmpeg 8.1 (the ffmpeg beside the libraries) over the video with every filter: signalstats and the
@@ -228,7 +256,7 @@ static class PictureCheck
         try
         {
             string graph = $"signalstats=stat=brng,cropdetect=reset=1:skip=0,metadata=mode=print:file={metadata}," +
-                "blackdetect=d=0,blackdetect,cropdetect";
+                "blackdetect=d=0,blackdetect,cropdetect,freezedetect";
             string log = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-copyts", "-reinit_filter", "0", "-i", sample,
                 "-map", "0:v:0", "-vf", graph, "-f", "null", "-");
 
@@ -243,8 +271,23 @@ static class PictureCheck
 
             string? crop = null;
             var black = new Dictionary<string, List<Span>>();
+            var freeze = new List<FreezeLine>();
             foreach (string line in log.Split('\n'))
             {
+                // [Parsed_freezedetect_6 @ 0x...] lavfi.freezedetect.freeze_start: 48.4583
+                // [Parsed_freezedetect_6 @ 0x...] lavfi.freezedetect.freeze_end: 50.8333
+                foreach (var (key, isEnd) in new[] { ("lavfi.freezedetect.freeze_start: ", false), ("lavfi.freezedetect.freeze_end: ", true) })
+                {
+                    int k = line.IndexOf(key, StringComparison.Ordinal);
+                    if (k < 0)
+                        continue;
+                    string value = line[(k + key.Length)..].Trim();
+                    if (!isEnd)
+                        freeze.Add(new FreezeLine(value, null));
+                    else if (freeze.Count > 0)
+                        freeze[^1] = freeze[^1] with { End = value };
+                }
+
                 // [Parsed_blackdetect_3 @ 0x...] black_start:1.96 black_end:2.52 black_duration:0.56
                 // [Parsed_cropdetect_5 @ 0x...] x1:0 x2:351 ... crop=352:288:0:0
                 if (line.Contains("[Parsed_cropdetect_5 ", StringComparison.Ordinal))
@@ -261,7 +304,7 @@ static class PictureCheck
             }
 
             return new FfmpegPicture(frames, crop, black.GetValueOrDefault("Parsed_blackdetect_3") ?? [],
-                black.GetValueOrDefault("Parsed_blackdetect_4") ?? []);
+                black.GetValueOrDefault("Parsed_blackdetect_4") ?? [], freeze);
         }
         finally
         {

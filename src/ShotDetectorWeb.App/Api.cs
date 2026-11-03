@@ -40,6 +40,7 @@ public static partial class Api
         _input = null;
         _result = null;
         _picture = null;
+        _freeze = null;
         _toldInFirstRange = null;
         _file?.Dispose();
         _file = file;
@@ -84,6 +85,7 @@ public static partial class Api
     {
         _result = null;
         _picture = null;
+        _freeze = null;
         _kept = null;
         _toldInFirstRange = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
@@ -92,7 +94,11 @@ public static partial class Api
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
         var go = input.Continue(earlier.Scores, request.ToOptions());
-        var picture = go.Rest is { } planned ? new PictureMeter(input.Video, planned) : null;
+        // A run from frame 0, not resumed, reads every frame in order: it looks for the still pictures too (decision
+        // 2026-11-01-freeze-spans.md).
+        var picture = go.Rest is { } planned
+            ? new PictureMeter(input.Video, planned, freeze: go.Earlier.Count == 0 && planned.FirstFrame == 0)
+            : null;
         var options = request.ToOptions(new JsProgress(go.Rest?.FirstFrame ?? 0, input.ShownFrames), new JsShots());
 
         DetectionResult result;
@@ -131,8 +137,11 @@ public static partial class Api
         }
 
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
+        var freeze = picture?.FreezeSpans(result.FrameCount) is { } still
+            ? PictureFreeze.Found(still, picture.Measures.TimeBase)
+            : PictureFreeze.Resumed;
         return Answered(input, options, result, ranges,
-            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()));
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), freeze);
     }
 
     /// <summary>
@@ -140,11 +149,12 @@ public static partial class Api
     /// <see cref="Kept"/> its ranges), and its answer as JSON (<see cref="DetectResponse"/>).
     /// </summary>
     static string Answered(VideoInput input, DetectionOptions options, DetectionResult result, IReadOnlyList<RangeScores> ranges,
-        PictureMeasures? picture)
+        PictureMeasures? picture, PictureFreeze freeze)
     {
         _result = result;
         _corrected = null;
         _picture = picture?.Take(result.FrameCount);
+        _freeze = freeze;
         _kept = new KeptRun(ranges, _picture);
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
