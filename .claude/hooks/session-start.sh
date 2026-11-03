@@ -36,12 +36,16 @@ fi
 dotnet restore src/ShotDetectorWeb.Core -v q || note "src/ShotDetectorWeb.Core didn't restore"
 dotnet restore tools/NativeCheck -v q || note "tools/NativeCheck didn't restore"
 
-# BtbN's gpl-shared FFmpeg 8.1 for linux64, the archive and SHA-256 .github/actions/btbn-ffmpeg pins (keep them the same).
-release=autobuild-2026-09-30-13-08
-name=ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-shared-8.1
-sum=76649c19a7a4615b367251ba4a8adc643f65831278a00e7a0c38398f7f06484b
+# BtbN's gpl-shared FFmpeg 8.1 for linux64: the pin is read from the action, so it moves with CI's.
+action=.github/actions/btbn-ffmpeg/action.yml
+release=$(sed -n 's/^ *release=\([^ ]*\)$/\1/p' "$action")
+tag=$(sed -n 's/^ *8\.1) tag=\([^ ]*\) ;;$/\1/p' "$action")
+name="ffmpeg-$tag-linux64-gpl-shared-8.1"
+sum=$(sed -n "s/^ *$name) sum=\([0-9a-f]*\) ;;\$/\1/p" "$action")
 dir="$HOME/.cache/btbn/$name"
-if [ ! -x "$dir/bin/ffmpeg" ] && [ "$(uname -m)" = x86_64 ]; then
+if [ -z "$release" ] || [ -z "$tag" ] || [ -z "$sum" ]; then
+  note "no FFmpeg 8.1 pin found in $action: set SHOTDETECTOR_FFMPEG_LIBS by hand (CLAUDE.md)"
+elif [ ! -x "$dir/bin/ffmpeg" ] && [ "$(uname -m)" = x86_64 ]; then
   tmp=$(mktemp -d)
   if curl -fsSL --retry 3 --connect-timeout 30 -o "$tmp/a.tar.xz" \
       "https://github.com/BtbN/FFmpeg-Builds/releases/download/$release/$name.tar.xz" \
