@@ -126,12 +126,19 @@ in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 
     [2026-11-02-correcting-cuts.md](decisions/2026-11-02-correcting-cuts.md)), times cuts at frame / average rate on a
     variable-rate file and takes the video's length as nb_frames. `Detect` uses the frames' pts and the frames played.
     The first correction on such a file retimes every cut or moves the last shot's end (`fragmented-moov`: 38 of 114
-    frames). This is the same on the FFmpeg path, so it is ShotDetector's to decide: sent to the shotdetector
-    coordinator on 2026-11-02.
-  - Where: the ShotDetector pin, and `CorrectedCuts` if upstream adds an overload (the run's frame count, or a
-    `DetectionResult` and a cut list); `CorrectionCheck.cs`'s note on the length then becomes a failure.
+    frames). This is the same on the FFmpeg path, and scenedetect 0.7.2's own load-scenes gives the same numbers, so
+    `LoadScenes` stays as it is. Upstream adds an overload that takes a `DetectionResult` and the edited cuts and keeps
+    that run's frame times and length ([shotdetector#707](https://github.com/bisforboman/shotdetector/issues/707), the
+    owner's choice, 2026-11-02).
+  - Where: the ShotDetector pin to the release with shotdetector#711 (merged 2026-11-02, not yet released):
+    `LoadScenes(DetectionResult run, IEnumerable<int> cutFrames, DetectionOptions? options)` in `CorrectedCuts`. Its
+    cut frames are frames counted as decoded (`run.CutFrames`, `run.FrameOf(position)`), not the scene list's Start
+    Frame − 1, which is time × average rate and differs at a variable rate: the page's `detectedCuts()`, `correct()`
+    and the kept corrections move to decoded frames. It takes the run's MinSceneLength, DropShortScenes and
+    MergeLastScene; StartTime, EndTime and RangeDuration throw (a stopped run's range is the run's). The checks then
+    compare against `Detect`'s own exports for the uncorrected list, and `CorrectionCheck.cs`'s note becomes a failure.
   - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
-  - Status: Waiting (on upstream's answer, 2026-11-02)
+  - Status: Waiting (on the ShotDetector release with shotdetector#711, 2026-11-02)
 
 ## Maybe
 
@@ -203,3 +210,12 @@ file out of `samples/reject/`, and passes the native check.
     set from it in `Api`, an option on the page; NativeCheck's run with `TrimReferenceTone` on the tone sample.
   - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
   - Status: Maybe (found adopting ShotDetector 3.25.0, 2026-11-01)
+
+- A Cinemetrics file
+  - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's
+    `.cmsx` has no published format, and the classic `.cms` is described only by third-party code (README, "Shot
+    lengths for film studies"). The page offers a plain shot-lengths CSV instead.
+  - Where: a file saved by Cinemetrics' tool, from the owner or a scholar, to check against; then a writer, in
+    ShotDetector's `Shots` if the CLI should share it (issue #91's comment), or the shot-lengths card.
+  - Done when: a file the page writes opens in Cinemetrics' tool with the run's shots.
+  - Status: Maybe (2026-11-02; cinemetrics.uchicago.edu wasn't reachable from the cloud session)

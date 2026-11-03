@@ -1577,3 +1577,12 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     NativeCheck's `CorrectionCheck.cs` holds it to `LoadScenes(path)` on every sample, whole and stopped, the wasm check
     and the page check to NativeCheck's files. `LoadScenes` times and lengths that differ from `Detect`'s are upstream's:
     row "A corrected list timed as its run (upstream)", under Waiting)
+
+- Film studies: shot lengths (issue #91)
+  - Why: the shot-length (Cinemetrics) community needs the standard deviation, a shot-length graph and the lengths to
+    export, on the corrected shots (#90).
+  - Status: Done (2026-11-02; the owner's choice: cards, not a mode. The shot statistics' standard deviation (n − 1);
+    the Shot lengths card, a bar a shot along the film with a degree-6 least-squares trend line, and its shot-lengths
+    CSV, all marked the page's and following the corrected cuts; the page check holds the bars, the CSV and the
+    deviation to the native run's shots, and to the corrected ones. A Cinemetrics file waits on a sample of one: row
+    "A Cinemetrics file")

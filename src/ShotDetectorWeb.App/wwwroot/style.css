@@ -174,6 +174,8 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
 #below > .card { flex: 1 1 30rem; min-width: 0; }
 #below > #stats { flex: 0 1 18rem; position: sticky; top: 1rem; }
 @media (max-width: 48rem) { #below > #stats { flex: 1 1 100%; position: static; } }
+/* The shot lengths' graph, as wide as the film's timeline: a row of its own under the shots and their statistics. */
+#below > #shot-lengths { flex: 1 1 100%; }
 /* The details as two columns the browser balances, each card whole in one (a grid's rows left holes beside a short
    card); one column at phone width. In index.html's order, down the first column, then the second. */
 #details { grid-area: details; columns: 2 22rem; column-gap: 1rem; }
@@ -426,3 +428,16 @@ footer .chip { font-size: 0.7rem; }
 .edit-buttons button { padding: 0.2rem 0.5rem; font-size: 0.85rem; }
 #corrections-summary { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
 #shots tr.corrected td:first-child { box-shadow: inset 3px 0 0 var(--corrected); }
+
+/* Shot lengths (panels/shotlengths.js): a bar a shot along the film, its height its length, the trend line over them;
+   under it the axis's ends and the scale. */
+#shot-lengths svg { display: block; width: 100%; height: 9rem; border-bottom: 1px solid var(--line); }
+#shot-lengths .bars rect {
+  fill: color-mix(in srgb, var(--accent) 55%, transparent); stroke: var(--panel); stroke-width: 1;
+  vector-effect: non-scaling-stroke; cursor: pointer;
+}
+#shot-lengths .bars rect:hover { fill: var(--accent); }
+#shot-lengths .trend { stroke: var(--fg); stroke-width: 2; }
+#shot-lengths .ends { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.25rem 0 0; color: var(--muted);
+  font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+#shot-lengths .note { color: var(--muted); font-size: 0.85rem; }

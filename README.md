@@ -247,6 +247,29 @@ the kept run in IndexedDB, and a corrected finished run is kept too (the owner's
 it with its corrections, Forget drops it. A resumed run, or a run of the same file and options again, gets the kept
 corrections applied to its own detected cuts.
 
+
+## Shot lengths for film studies
+
+For the shot-length (Cinemetrics) community (issue #91; the owner's choice, 2026-11-02: cards, not a mode), all of it
+the page's own reading of the shots, marked so, and following the cuts as corrected (Correcting the cuts):
+
+- The shot statistics card adds the standard deviation of the shot lengths, the sample's (n − 1), to the count,
+  average, median, shortest and longest (a stopped run's last shot, cut short, left out as for the others).
+- The Shot lengths card (`panels/shotlengths.js`), a row of its own under the shots table and the statistics, draws a
+  bar a shot along the film, as Cinemetrics draws them: each bar where its shot starts, as wide as the shot is long, its
+  height the shot's length, with a trend line, a least-squares polynomial of degree 6 (fewer for fewer than 18 shots)
+  over the shots' middles. A bar plays its shot.
+- Its download, `<file>.shot-lengths.csv`: a row a shot, `Shot,Start Frame,Start Time (seconds),Length
+  (frames),Length (seconds)`, frames 1-based as in the scenes CSV, times to the millisecond.
+
+The format Cinemetrics takes (looked up 2026-11-02): its current measurement tool saves and submits a `.cmsx` file whose
+format isn't published, and the site (cinemetrics.uchicago.edu, which this cloud session couldn't reach) said in 2023
+that submissions were only partly working. The older classic tool's `.cms` is described only by third-party code
+(FilmEditDetection's writer: a header, then a line a shot of its number, length and cut time in tenths of a second),
+which couldn't be checked against a file of Cinemetrics' own. Scholars' own analyses (Nick Redfern's, for one) start
+from a list of shot lengths in a spreadsheet, which the CSV is. A `.cms` or `.cmsx` export waits on a file from
+Cinemetrics to check against (backlog, "A Cinemetrics file").
+
 ## Long videos across workers
 
 A video longer than 2 minutes is split across several Web Workers, each with a .NET runtime of its own, and their
@@ -863,9 +886,10 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   reload of a first visit): `with-audio-320x240-25.mp4` set on the file input and detected with the options as
   the page prefills them, on threads ("on N threads" in the status); the same on the page's worker (`?threads=0`, as
   where the page isn't isolated); the same on two workers (`?workers=2`: the ranges lane's two bands, "with 2 workers"
-  in the status); on threads and on the page's worker, the run's cuts then corrected with the keys, the playhead put
+  in the status); on threads and on the page's worker, the Shot lengths card's bars and CSV the native run's shots
+  and the statistics' standard deviation theirs, the run's cuts then corrected with the keys, the playhead put
   on each frame, to the native check's corrected list (Correcting the cuts): every download but the stats CSV the
-  native check's `<sample>.corrected.*`, the stats CSV the run's, the cuts lane's added and removed ticks and the
+  native check's `<sample>.corrected.*`, the shot lengths the corrected shots', the stats CSV the run's, the cuts lane's added and removed ticks and the
   shots table's marked rows there; undone to the run's own downloads, redone; on threads, the page then reloaded and
   the file picked again, the corrected run shown again from IndexedDB with its corrections (Forget, no Resume);
   `mjpeg-320x240-25.avi` picked, which no browser plays: its downloads the native run's, the player an
@@ -1204,13 +1228,15 @@ rules for changing them (adding to the page among them).
   seek at a time with the table's), `sheet.js` (a card under the run's, marked page: the contact sheet, issue #93, 1
   or 3 stills a shot from `shots.js`' grabber, its number, start and length, columns, a header; a PNG from a canvas
   and a PDF written by hand, the JPEGs embedded, A4 or Letter), `warnings.js` (a card, only when a run's `warnings` has any: ShotDetector's sentences as they are),
-  `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots), `sound.js` (on the `audio`
+  `stats.js` (a card: the shots' statistics, the page's own figures from `Detect`'s shots, the standard deviation among them), `sound.js` (on the `audio`
   event: a lane of the tone's spans and the silences, a card of the sound's measures, marked measured, what the page
   derives saying so in its tooltip), `corrections.js` (a card beside the video, marked page: the cut that starts
   the shot playing removed, one added at the playhead, moved a frame (`,` `.`), undo and redo, by buttons or keys,
   through `app.js`'s `correct(cuts)`, which keeps the corrections as the detected cuts removed and the cuts added, calls
   `Correct`, tells the `corrected` event (cuts, shots, stats, run and bitrate follow it) and keeps them with the kept
-  run in IndexedDB, a corrected finished run kept too, `from` -1), `bitrate.js` (on `opened`: a lane of
+  run in IndexedDB, a corrected finished run kept too, `from` -1), `shotlengths.js` (a card under the timeline, its own row, marked page: a bar a
+  shot along the film, a trend line of degree 6, the shot-lengths CSV; on `done` and `corrected`), `bitrate.js` (on
+  `opened`: a lane of
   the bitrate per second and the keyframes from `Packets()`, a card with how many cuts fall on a keyframe after a run,
   the page's own reading), `frametypes.js` (after a run: a lane under the bitrate's of each frame's type from
   `FrameTypes()`, a bar a frame on a `<canvas>`, I tall, P shorter, B shortest, and a card of the counts, marked core),

@@ -75,3 +75,7 @@ The owner, 2026-11-02:
 
 - **A finished run's corrections:** 1, keep a corrected run, finished or stopped.
 - **Where `LoadScenes` differs:** 1, ship as ShotDetector is.
+
+Upstream, the same day: scenedetect 0.7.2's own load-scenes gives `LoadScenes`' numbers on both samples, so it stays
+as it is; ShotDetector adds an overload that takes a `DetectionResult` and the edited cuts and keeps that run's frame
+times and length (shotdetector#707). The page moves to it once it ships (backlog, "A corrected list timed as its run").
