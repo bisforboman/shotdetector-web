@@ -96,13 +96,12 @@ function show(p) {
   section.hidden = false;
 }
 
-// How many cuts fall on a keyframe: a cut does when its shot's first frame is a keyframe (the frames in display order;
-// a shot's startFrame counts them from 1, as scenedetect's CSV does). A stopped run's are of the frames it read (frames:
-// its frame count), the keyframes after them left out.
-function showCuts(shots, frames, stopped) {
+// How many cuts fall on a keyframe: a cut does when its shot's first frame is a keyframe (the frames in display order,
+// counted from 0 as decoded: the result's cutFrames, not a shot's startFrame − 1, a time × the average rate). A stopped
+// run's are of the frames it read (frames: its frame count), the keyframes after them left out.
+function showCuts(starts, frames, stopped) {
   if (!packets) return;
   const keys = packets.keys.filter(k => k.frame < frames), keyFrames = new Set(keys.map(k => k.frame));
-  const starts = shots.filter(s => s.shot > 1).map(s => s.startFrame - 1);
   const at = new Set(starts), on = starts.filter(f => keyFrames.has(f)).length;
   const elsewhere = keys.filter(k => k.frame !== 0 && !at.has(k.frame)).length;
   const part = stopped ? `In the ${frames.toLocaleString('en')} frames read: ` : '';
@@ -143,11 +142,11 @@ on('opened', async ({ video }) => {
 });
 on('run', () => cuts.replaceChildren());
 on('done', ({ video, result }) => {
-  if (video === opened) showCuts(result.shots, result.frameCount, result.stopped);
+  if (video === opened) showCuts(result.cutFrames, result.frameCount, result.stopped);
 });
 // The cuts corrected on the page ('corrected'): the count follows them.
 on('corrected', ({ video, result }) => {
-  if (video === opened) showCuts(result.shots, result.frameCount, result.stopped);
+  if (video === opened) showCuts(result.cutFrames, result.frameCount, result.stopped);
 });
 
 function own(text, title) {

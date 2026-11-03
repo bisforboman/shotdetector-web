@@ -245,14 +245,16 @@ card beside the video, or the keys, act on the cut that starts the shot playing:
 the playhead's frame, `,` and `.` move the cut a frame earlier or later (the playhead goes with it), Ctrl+Z undoes and
 Ctrl+Shift+Z redoes. The cuts lane draws an added cut in the corrections' colour and a removed detected cut hollow; the
 shots table marks a shot that starts at an added cut. The page keeps the corrections as the detected cuts removed and
-the cuts added, and `Api.Correct` hands the corrected shots' first frames to ShotDetector's `LoadScenes` (3.25.0,
-shotdetector#647; the core's `CorrectedCuts`: a one-column scene list CSV, `Start Frame`, ending where a stopped run
-stopped). Every download then comes from that result: the scenes CSV, the shots as JSON and HTML, the editors' files
-and the chapters. The stats CSV stays the run's, since a correction changes no score. `LoadScenes` makes each file's
-result as scenedetect's `load-scenes` would: NativeCheck holds it to `LoadScenes(path)` on the FFmpeg path for the same
-list, byte for byte. Where `LoadScenes` reads a file otherwise than `Detect`, the corrected list is timed its way: a
-variable rate's cuts at frame / average rate, and the video's length nb_frames (an edit list that ends early, a
-fragmented file). These were sent upstream; the owner chose to ship as ShotDetector is. The corrections are kept with
+the cuts added, each a frame counted from 0 as decoded (`Detect`'s `cutFrames`, not a shot's `startFrame` − 1, which
+is its time × the average rate and another frame at a variable rate), and `Api.Correct` hands the corrected shots'
+first frames, with the run's result, to ShotDetector's `LoadScenes(DetectionResult, cutFrames, options)` (3.28.0,
+shotdetector#707; the core's `CorrectedCuts`). Every download then comes from that result: the scenes CSV, the shots as
+JSON and HTML, the editors' files and the chapters. The stats CSV stays the run's, since a correction changes no score.
+The result keeps the run's frame times and length: moving one cut moves no other, at a variable rate, after an edit
+list that ends early or on a fragmented file too, and a stopped run's ends where it stopped; the run's own cuts give its
+own downloads back. NativeCheck holds it to the same `LoadScenes` of the FFmpeg path's run, byte for byte. (Before
+3.28.0 the page made a one-column scene list for `LoadScenes`, scenedetect's `load-scenes`, which timed a cut at frame /
+average rate and ended at nb_frames.) The corrections are kept with
 the kept run in IndexedDB, and a corrected finished run is kept too (the owner's choice): picking its file again shows
 it with its corrections, Forget drops it. A resumed run, or a run of the same file and options again, gets the kept
 corrections applied to its own detected cuts.
@@ -832,11 +834,13 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   split into 4 ranges each stopped past 60%, the rest split into 4 again from the continuation's first frame, merged
   with the earlier ranges, against the whole run's too (`ResumeCheck.cs`);
   the default run's cuts corrected as a viewer would (the first removed, the last moved a frame later, two added a
-  frame apart), made into a result by the core (`CorrectedCuts.Load`: `LoadScenes` for a `YuvVideo`) and by
-  `LoadScenes(path)` on the FFmpeg path from the same scene list, whole, stopped half-way, and whole under the run with
-  every detector, deinterlaced: the scenes CSV, the shots
-  as JSON and HTML, the timeline files and the chapters byte for byte, the list made the list given up to where
-  `LoadScenes`' video ends (where that is before the run's end, the table says so: nb_frames, ShotDetector's), the
+  frame apart, frames as decoded), made into a result by the core (`CorrectedCuts.Load`: `LoadScenes` of the run) and
+  by the same `LoadScenes` of the FFmpeg path's run (`Detect(path)`), whole, stopped half-way (the core's frames ended
+  there as Stop ends them, the FFmpeg path's `End` at that frame's time: at a constant rate only, since at a variable
+  one the FFmpeg path has no stop at a frame), and whole under the run with every detector, deinterlaced: the scenes
+  CSV, the shots as JSON and HTML, the timeline files and the chapters byte for byte, the shots starting at the frames
+  given and the last one ending where the run's did, and the run's own `CutFrames` given back giving the run's own
+  downloads; the run's cuts, the corrected
   starts and the whole run's files to `out/native/<sample>.corrected.*` (`CorrectionCheck.cs`);
   each sample's and each `samples/no-aac/` file's `VideoInput.Audio` against FrameReader's probe of its first audio
   stream, codec name, sample rate and channels, or no audio on both sides (`AudioStreamCheck.cs`); and the page's
@@ -1162,14 +1166,15 @@ exception's type doesn't reach JavaScript).
   null when fragmented), `frameTimestamps` (a variable rate's frames' own pts), `audio` (`{ codec, sampleRate, channels
   }` or null) and `decodedBy` (`managedcodecs`, or `browser` for a WebM). `Detect`'s options are `{ detector, threshold,
   minSceneLength, frameWindow, minContentVal, deinterlace }`, each null for the library's default, or `detectors`; it
-  answers a promise of the shots, frame count, rate, duration, `stopped` and `warnings`.
+  answers a promise of the shots, `cutFrames` (the frames the shots after the first start on, counted from 0 as decoded:
+  `DetectionResult.CutFrames`), frame count, rate, duration, `stopped` and `warnings`.
 - `Api.Csv.cs`: `ScenesCsv()` (a string) and `StatsCsv()` (a `Blob` written through `BlobWriter`, its parts out through
   the `[JSImport]`s `parts`, `append` and `blob`: What the heap holds).
 - `Api.Shots.cs` `ShotsJson()` and `ShotsHtml()`, `Api.Timeline.cs` `TimelineFile(format, fileName)`, `Api.Chapters.cs`
   `YouTubeChapters(minimum)` (`{ minimum, starts, text, notMade }`, `notMade` Timeline's reason when fewer than three; a
   minimum of 10 at least): the run card's other downloads (Running the page).
-- `Api.Corrections.cs`: `Correct(startsJson)`, the shots' first frames, or `null` for the run's own (Correcting the
-  cuts).
+- `Api.Corrections.cs`: `Correct(startsJson)`, the shots' first frames as decoded, or `null` for the run's own,
+  answering as `Detect` does (Correcting the cuts).
 - `Api.Audio.cs` `Audio()` (The sound), `Api.Packets.cs` `Packets()` (Using the library), `Api.Picture.cs` `Picture()`
   (The picture) and `Api.FrameTypes.cs` `FrameTypes()`: the last run's frames' types, one character a frame in display
   order (`I`, `P`, `B`; `S`, `i`, `p`, `b`, `?` as FFmpeg's `av_get_picture_type_char`), not JSON.

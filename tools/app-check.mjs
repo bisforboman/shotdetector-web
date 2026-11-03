@@ -24,7 +24,8 @@
 // with them: the whole run's too (checkResume). Kept bytes of other options fail with NOT_RESUMED (checkNotResumed).
 // Corrected cuts (Api's Correct, issue #90): the default run's cuts corrected as NativeCheck corrects them (its
 // <sample>.corrected.starts.json), every download but the stats CSV NativeCheck's for the same list, which it holds to
-// the FFmpeg path's LoadScenes; the stats CSV the run's; Correct(null) the run's own downloads again (checkCorrections).
+// the FFmpeg path's LoadScenes; the stats CSV the run's; Correct(null) the run's own downloads again, and so the run's
+// own cutFrames (the native run's) given to Correct (checkCorrections).
 // A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
 // the default run, the run with every detector and that run deinterlaced (SPLIT_RUNS) split into ranges at keyframes
 // (at most RANGES; Ranges for the run's options, which say how far past a keyframe a range starts), each
@@ -292,6 +293,13 @@ async function checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles) 
   if (await statsText() !== statsCsv) fail(`${name}: the stats CSV isn't the run's`);
   Correct('null');
   if (ScenesCsv() !== scenesCsv || !sameShotFiles(shotFiles)) fail(`${name}: Correct(null) doesn't give the run's downloads back`);
+  // The run's cuts (frames as decoded) are the native run's, and given back they give the run's own downloads.
+  const cuts = JSON.parse(readFileSync(`${native}.cuts.json`, 'utf8'));
+  if (JSON.stringify(result.cutFrames) !== JSON.stringify(cuts)) fail(`${name}: the run's cutFrames ${result.cutFrames} aren't the native run's ${cuts}`);
+  const back = JSON.parse(Correct(JSON.stringify([0, ...result.cutFrames])));
+  if (JSON.stringify(back.cutFrames) !== JSON.stringify(result.cutFrames) || ScenesCsv() !== scenesCsv || !sameShotFiles(shotFiles))
+    fail(`${name}: the run's own cuts given to Correct don't give the run's downloads`);
+  Correct('null');
   console.error(`${name}: ${corrected.shots.length} shots, ${files.length} downloads the native check's${differ.length ? ' but for some' : ''}`);
 }
 

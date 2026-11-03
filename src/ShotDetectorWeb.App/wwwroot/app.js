@@ -1067,11 +1067,13 @@ function resumedFrom() {
 
 // The cuts corrected on the page (issue #90, decision 2026-11-02-correcting-cuts.md). The page keeps the corrections as
 // the frames of the detected cuts removed and of the cuts added, so they apply again to a resumed run's longer list;
-// Api's Correct makes the result the downloads come from (ShotDetector's LoadScenes of the corrected list), and
-// 'corrected' tells the panels. Corrections are kept with the kept run (keep, KEPT): a corrected finished run is kept
+// Api's Correct makes the result the downloads come from (ShotDetector's LoadScenes of the run with the corrected
+// cuts, keeping its frame times and length), and 'corrected' tells the panels. A cut is the frame its shot starts on,
+// counted from 0 as decoded (the run's cutFrames), not a shot's startFrame − 1, which is its time × the average rate
+// and another frame at a variable rate. Corrections are kept with the kept run (keep, KEPT): a corrected finished run is kept
 // too.
 export function detectedCuts() {
-  return detected ? detected.result.shots.slice(1).map(s => s.startFrame - 1) : [];
+  return detected ? [...detected.result.cutFrames] : [];
 }
 
 export function correctedCuts() {

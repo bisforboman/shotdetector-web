@@ -153,7 +153,7 @@ in shotdetector's docs/decisions/): their rows are in Next, under "ShotDetector 
     MergeLastScene; StartTime, EndTime and RangeDuration throw (a stopped run's range is the run's). The checks then
     compare against `Detect`'s own exports for the uncorrected list, and `CorrectionCheck.cs`'s note becomes a failure.
   - Done when: a corrected list's downloads keep the run's times and length on every sample, and NativeCheck holds it.
-  - Status: Waiting (on the ShotDetector release with shotdetector#711, 2026-11-02)
+  - Status: In progress (2026-11-03): released in ShotDetector 3.28.0, pinned since #143
 
 ## Maybe
 
