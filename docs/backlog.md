@@ -108,7 +108,7 @@ publish").
   - Done when: a split and a resumed run's still pictures and black spans are the whole run's on every sample, and
     `freezedetect`'s and `blackdetect`'s natively; `tools/check.sh native wasm aot page` passes.
   - Not: building it before the release.
-  - Status: Waiting (2026-11-03): the ShotDetector release with shotdetector#712 (3.28.0, not on nuget.org yet)
+  - Status: In progress (2026-11-03): released in ShotDetector 3.28.0, pinned since #143
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
