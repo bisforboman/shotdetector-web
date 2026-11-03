@@ -1607,3 +1607,20 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     interpreted too; the damaged sample's stats the FFmpeg path's but rows 38-43 around frame 40, its damaged frame
     ffprobe's with `-err_detect explode`; 4:1:1 and 4:4:0 refused by name. The realworld runs on main: row "Tears of
     Steel's hash_dist under AOT: ShotDetector's fix")
+- An AV1 WebM's last frame type on four decoder threads
+  - Why: the native check's frame-type check failed once on `av1-yuv420p10-320x240-25.webm`, "same **DIFFERS: frame
+    113: ? vs one thread's P**": on four decoder threads the last frame's type came out `?` (unknown) where one
+    thread gives `P` ([run 41600891725](https://github.com/bisforboman/shotdetector-web/actions/runs/41600891725),
+    attempt 1, on #141, a PR that changes no code). The re-run passed, so it depends on timing: a check that passes
+    or fails by chance stops proving anything, and a PR that runs the full tier hits it at random.
+  - Where: `tools/NativeCheck/FrameTypeCheck.cs` (`Types(input, threads)`), and the WebM path's frames on threads:
+    `WebmInput` with `FfmpegDecoder` standing in for the browser's decoder (`IHostDecoder`). A guess, not checked: the
+    last frame's type depends on whether it comes out before or after the decoder is flushed.
+  - Done when: the frame types of every WebM sample on four threads equal one thread's on repeated native checks (run
+    `FrameTypeCheck` on the AV1 samples in a loop, say 50 times, before and after), and the cause is named in the PR.
+  - Not: loosening the check, skipping WebM in it, or re-running CI until green.
+  - Status: Done (2026-11-03: not the decoder's threads nor the flush, a race in `WebmInput`: `Read` queued each
+    block's type on `FfmpegDecoder`'s writer task while the frames took them on the caller's thread, from a plain
+    `Queue`; a lost `_size++` left the last frame without a type (`?`), a lost item shifted later types (seen once on
+    one thread too). Now a `ConcurrentQueue`. Under load, 3 of 800 AV1 runs differed before, none of 2000 after (and
+    none of 400 VP9). The page's `JsDecoder` reads the packets on its own async flow, so it never raced)
