@@ -20,8 +20,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    # The daily run of everything publishes each bundle twice since the threaded one (decision 2026-10-30-threads.md).
-    timeout-minutes: 90
+    # The daily run of everything publishes each bundle twice since the threaded one (decision 2026-10-30-threads.md),
+    # and the npm package an interpreted bundle more (twice with FastYuv replaced).
+    timeout-minutes: 120
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       # Sintel's trailer, the original's SHA-256 (the step "Download Sintel's trailer"); quoted, so YAML never reads a
@@ -145,21 +146,30 @@ jobs:
           SAMPLES: ${{ github.event_name == 'pull_request' && 'samples/with-audio-320x240-25.mp4 samples/mjpeg-mp3-320x240-25.avi' || '' }}
         run: tools/check.sh wasm $SAMPLES
 
-      # The page in Chromium (tools/page-check) on the bundle this step publishes, the one Pages deploys.
-      - name: WebAssembly check and the page, AOT
+      # The page in Chromium (tools/page-check) on the bundle this step publishes, the one Pages deploys; then the npm
+      # package from the same AOT bundles and an interpreted one, packed and installed into a test site in Chromium
+      # (tools/page-check/package-check.mjs; decision 2026-11-02-npm-package.md).
+      - name: WebAssembly check, the page and the npm package, AOT
         if: steps.scope.outputs.wasm == 'true'
-        run: tools/check.sh wasm page aot
+        run: tools/check.sh wasm page package aot
+
+      # What npm publish would send, without sending it: the real publish is npm.yml's, on a tag.
+      - name: The npm package, a dry run of npm publish
+        if: steps.scope.outputs.wasm == 'true'
+        working-directory: out/package
+        run: npm publish --dry-run --provenance=false 2>&1 | tail -n 25 | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Only the page's own files changed: the page in Chromium on an interpreted publish, which builds faster.
       - name: The page in Chromium, interpreted
         if: steps.scope.outputs.page == 'true' && steps.scope.outputs.wasm != 'true'
         run: tools/check.sh page
 
-      # LGPL-2.1: a FastYuv built from its source replaces the package's in a rebuilt bundle, and runs (README, Licensing).
-      # Not on a pull request: pages.yml runs it before every deploy.
-      - name: FastYuv replaced from its source, AOT
+      # LGPL-2.1: a FastYuv built from its source replaces the package's in a rebuilt bundle, and runs (README, Licensing);
+      # and in the npm package rebuilt with it, every bundle. Not on a pull request: pages.yml runs the bundle's before
+      # every deploy, npm.yml the package's before every publish.
+      - name: FastYuv replaced from its source, AOT, the page's and the npm package's
         if: steps.scope.outputs.wasm == 'true' && github.event_name != 'pull_request'
-        run: tools/check.sh replace aot
+        run: tools/check.sh replace package aot
 
       - name: Results
         if: always() && steps.scope.outputs.checks == 'true'

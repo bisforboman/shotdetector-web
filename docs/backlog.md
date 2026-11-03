@@ -49,11 +49,15 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Why: realworld.yml's tears job fails on 8 rows of `tears_of_steel_720p.all.stats.csv` whose `hash_dist` is 2/64
     off under AOT (backlog-done, "Tears of Steel's every-detector stats under AOT"). The shotdetector coordinator found
     it ShotDetector's (the hash's float path: the cosine table, the median on near-flat frames); the owner chose to fix
-    it there (2026-11-01).
+    it there (2026-11-01). The clips job fails on it too, once the stop check no longer ended it first (run 41525295922,
+    2026-11-03): 10 rows of `elephantsdream-480-h264-st-aac.all.stats.csv`, each 2/64 off, either way (frame 12:
+    native 0.46875, wasm 0.5; frame 3723: 0.59375, 0.5625), and there it moves a hash cut (13786 natively, 13797 under
+    AOT), so the scenes CSV and the shots JSON and HTML differ too.
   - Where: `Directory.Packages.props`, once ShotDetector releases the fix.
-  - Done when: realworld.yml's tears job passes on the release.
+  - Done when: realworld.yml's tears and clips jobs pass on the release.
   - Not: a workaround here.
-  - Status: Waiting (2026-11-01): ShotDetector's fix and release
+  - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
+    (on nuget.org since 2026-11-02); the bump to it is this row's work
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
@@ -75,26 +79,19 @@ threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4",
 
 ### The npm package (issue #92)
 
-- The npm package
-  - Why: a site detects shots in its visitor's browser before an upload (storyboards, chapters, a thumbnail chooser,
-    trim to shot), with this repository's exact results and no server-side FFmpeg (issue #92; chosen by the owner
-    2026-11-02, design in decision [2026-11-02-npm-package.md](decisions/2026-11-02-npm-package.md)).
-  - Where: `package/` (`index.js`, `index.d.ts`, `package.json`, README): `detectShots(file, options)` and
-    `ShotDetector` over `worker.js`' call-by-name (and `threads.js`' runner for threads), stills from the browser's
-    decode; `tools/package.sh` (the App's AOT, interpreted and threaded AOT publishes copied into `aot/`,
-    `interpreted/`, `threads/`, FastYuv's licence, `-p:FastYuvAssembly` passed on); `tools/check.sh package` and a test
-    page under `tools/page-check/`; `tools/ci-scope.sh`; `.github/workflows/npm.yml` (on a tag `package-v<version>`,
-    the checks, then `npm publish --provenance` by trusted publishing); README and CLAUDE.md.
-  - Done when: the packed tarball, installed into a test page in Chromium, gives each sample's shots, scenes and stats
-    CSVs byte for byte the native run's on each bundle (threads on an isolated page; asked for on one that isn't, the
-    worker); a run stopped, one paused and resumed, one cancelled; a still per shot; a changed FastYuv rebuilt through
-    `tools/package.sh` runs; CI green. Publishing itself waits for the owner to create `shotdetector-web` on npmjs.com
-    with this workflow as its trusted publisher.
-  - Not: a `<shot-detector>` element or split runs across workers (the owner, 2026-11-02: later rows if asked); a
-    change to `worker.js`' messages or the page.
-  - Status: Open (2026-11-02)
+Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
+publish").
 
 ## Waiting
+
+- The npm package's first publish
+  - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
+    npm's trusted publishing needs the package to exist on npmjs.com with this repository's `npm.yml` as its trusted
+    publisher, which only the owner can set up.
+  - Where: npmjs.com (the owner); then a tag `package-v0.1.0` on `main`, which `npm.yml` checks and publishes; issue #92
+    closed after.
+  - Done when: `npm view shotdetector-web` shows 0.1.0 with provenance.
+  - Status: Waiting (2026-11-02): the owner's npm setup
 
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
