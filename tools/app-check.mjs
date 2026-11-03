@@ -22,6 +22,9 @@
 // HTML and picture measures, the shots told after the stopped part's (up to the first told again) the whole run's;
 // stopped in its second range split, the rest split again from the kept bytes' first frame (Ranges from it), merged
 // with them: the whole run's too (checkResume). Kept bytes of other options fail with NOT_RESUMED (checkNotResumed).
+// Corrected cuts (Api's Correct, issue #90): the default run's cuts corrected as NativeCheck corrects them (its
+// <sample>.corrected.starts.json), every download but the stats CSV NativeCheck's for the same list, which it holds to
+// the FFmpeg path's LoadScenes; the stats CSV the run's; Correct(null) the run's own downloads again (checkCorrections).
 // A long video across several workers (Api's Ranges, ScoreRange, RangeBytes and Merge, as the page's workers call them):
 // the default run, the run with every detector and that run deinterlaced (SPLIT_RUNS) split into ranges at keyframes
 // (at most RANGES; Ranges for the run's options, which say how far past a keyframe a range starts), each
@@ -34,7 +37,10 @@
 // check wrote (--native: <sample>.packets.txt), exactly.
 // The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
 // <sample>.picture.json, FFmpeg's figures there), exactly, a 10-bit sample's in 10-bit values; a split run's merge the
-// whole run's; a stopped run's (one worker or split) for the frames its result read.
+// whole run's; a stopped run's (one worker or split) for the frames its result read. The still pictures (freezedetect,
+// decision 2026-11-01-freeze-spans.md) only where the run read every frame in order from the first: the whole run's the
+// native check's, a stopped one-worker run's the whole run's up to its stop (one still there without an end), and a
+// split or resumed run says why it didn't look.
 // The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
 // check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
 // whole run's; a stopped run's the whole run's first frames, as many as its result read.
@@ -127,7 +133,7 @@ setModuleImports('host', {
     if (cancelAt !== null && framesRead >= cancelAt) Cancel();
   },
 });
-const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, TimelineFile, YouTubeChapters, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
+const { Open, Detect, Stop, Cancel, ScenesCsv, StatsCsv, ShotsJson, ShotsHtml, TimelineFile, YouTubeChapters, Audio, Packets, Picture, FrameTypes, LoadedAssemblies, Ranges, ScoreRange, RangeBytes, Merge, Resume, Kept, Correct, Versions } = (await getAssemblyExports(getConfig().mainAssemblyName)).ShotDetectorWeb.App.Api;
 await runMain();
 
 // What the core says of a file without audio, which the page's panels show nothing for (panels/waveform.js).
@@ -188,6 +194,22 @@ for (const [i, sample] of samples.entries()) {
   const video = JSON.parse(Open(fileBlob(sample)));
   fileName = basename(sample);
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frames} frames, ${video.duration} s`);
+  // A WebM's VP9 or AV1 (decision 2026-11-02-webm-browser-decoder.md): opened and described by the core as natively,
+  // its frames the browser's decoder's, which Node hasn't: the run is refused in the page's words. The runs themselves
+  // are NativeCheck's (FFmpeg standing in for the browser) and page-check's (Chromium's decoder).
+  if (extname(sample) === '.webm') {
+    if (video.decodedBy !== 'browser' || !['vp9', 'av1'].includes(video.codec))
+      fail(`${basename(sample)}: opened as ${video.codec} decoded by ${video.decodedBy}, not the browser's VP9 or AV1`);
+    try {
+      await Detect(JSON.stringify({}));
+      fail(`${basename(sample)}: detected under Node, which has no VideoDecoder`);
+    } catch (e) {
+      console.error(`${basename(sample)}: refused under Node: ${e.message}`);
+      if (!/can't decode the video .*it has no WebCodecs VideoDecoder/.test(e.message))
+        fail(`${basename(sample)}: refused, but not for want of the browser's decoder: ${e.message}`);
+    }
+    continue;
+  }
   // Once: a run cancelled half-way fails as cancelled, keeps no result, and the next run goes on as if it hadn't been.
   if (i === 0 && !light) await checkCancel(sample, video);
   for (const [run, options] of Object.entries(RUNS).filter(([run]) => !light || LIGHT_RUNS.includes(run))) {
@@ -232,6 +254,7 @@ for (const [i, sample] of samples.entries()) {
     if (run === Object.keys(RUNS)[0]) {
       wholePicture = checkPicture(sample, result);
       wholeTypes = checkFrameTypes(sample, result);
+      await checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles);
     }
     if (!light) await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive' && !light) await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
@@ -244,6 +267,26 @@ for (const [i, sample] of samples.entries()) {
   }
   checkAudio(sample, video);
   checkPackets(sample);
+}
+
+async function checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles) {
+  const base = basename(sample, extname(sample)), name = `${basename(sample)} corrected`;
+  const native = join(nativeDir ?? '', `${base}.corrected`);
+  if (!nativeDir || !existsSync(`${native}.starts.json`)) return fail(`${name}: no native ${native}.starts.json to compare with`);
+  const corrected = JSON.parse(Correct(readFileSync(`${native}.starts.json`, 'utf8')));
+  if (corrected.frameCount !== result.frameCount || corrected.stopped !== false)
+    fail(`${name}: ${corrected.frameCount} frames, stopped ${corrected.stopped}, not the run's ${result.frameCount}`);
+  if (JSON.stringify(JSON.parse(ShotsJson())) !== JSON.stringify(corrected.shots)) fail(`${name}: ShotsJson's shots aren't Correct's`);
+  const files = [['scenes.csv', ScenesCsv()], ['shots.json', ShotsJson()], ['shots.html', ShotsHtml()],
+    ...TIMELINES.map(([format, extension]) => [extension, TimelineFile(format, fileName)]),
+    ...CHAPTERS.map(minimum => [`chapters-${minimum}.json`, YouTubeChapters(minimum)])];
+  for (const [extension, text] of files) writeFileSync(join(outDir, `${base}.corrected.${extension}`), text);
+  const differ = files.filter(([extension, text]) => text !== readFileSync(`${native}.${extension}`, 'utf8')).map(([e]) => e);
+  if (differ.length > 0) fail(`${name}: not the native check's ${differ.join(', ')}`);
+  if (await statsText() !== statsCsv) fail(`${name}: the stats CSV isn't the run's`);
+  Correct('null');
+  if (ScenesCsv() !== scenesCsv || !sameShotFiles(shotFiles)) fail(`${name}: Correct(null) doesn't give the run's downloads back`);
+  console.error(`${name}: ${corrected.shots.length} shots, ${files.length} downloads the native check's${differ.length ? ' but for some' : ''}`);
 }
 
 // Detect's pauses against the runs' time: the pauses must cost under 1% of it (Api's PauseEvery).
@@ -264,7 +307,12 @@ for (const file of noAac) {
 }
 
 // Refused when opened, or, for what only the frames tell (a size that changes midway, shotdetector#625), by the run,
-// the promise rejected with the core's message, which the page shows.
+// the promise rejected with the core's message, which the page shows. A codec or container the core doesn't read is
+// named as FFmpeg names it (NativeCheck's RefusalNames, kept the same; backlog "A refusal that says what to do").
+const REFUSAL_NAMES = {
+  'hevc.mp4': "FFmpeg's hevc", 'vp8.webm': "FFmpeg's vp8", 'h264.mkv': 'H.264 in Matroska', 'av1.mp4': "FFmpeg's av1", 'mpeg4.mp4': "FFmpeg's mpeg4",
+  'h264.avi': "FFmpeg's h264",
+};
 for (const file of rejects) {
   let opened = false;
   try {
@@ -274,6 +322,8 @@ for (const file of rejects) {
     fail(`${basename(file)}: detected, but it should have been refused.`);
   } catch (e) {
     console.error(`${basename(file)}: refused ${opened ? 'by its run' : 'when opened'}: ${e.message}`);
+    const named = REFUSAL_NAMES[basename(file)];
+    if (named && !e.message.includes(named)) fail(`${basename(file)}: its refusal doesn't name ${named}: ${e.message}`);
     if (opened && !/not supported/.test(e.message))
       fail(`${basename(file)}: its run failed, not with the core's refusal: ${e.message}`);
   }
@@ -654,7 +704,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
     fail(`${name}: the shots told (${rangeTold.length} by the first range, ${told.length} by the merge) aren't its result's`);
   const live = told.length > 0 ? told[0].shot - 1 : rangeTold.length;
   console.error(`${name}: ${rangeTold.length} shots told by the first range as it scored, the merge's from shot ${live + 1}`);
-  if (Picture() !== wholePicture) fail(`${name}: the merged picture measures aren't the whole run's`);
+  if (!samePicture(Picture(), wholePicture, 'split')) fail(`${name}: the merged picture measures aren't the whole run's, or its still pictures were looked for`);
   if (FrameTypes() !== wholeTypes) fail(`${name}: the merged frame types aren't the whole run's`);
   console.error(`${name}: ${plan.ranges.map(r => `${r.firstFrame}-${r.endFrame - 1}`).join(', ')}, ` +
     `${bytes.map(b => b.length).join(' + ')} bytes, ${seconds.toFixed(2)} s: ${same ? 'the whole run\'s CSVs' : 'DIFFERENT CSVs'}`);
@@ -670,7 +720,7 @@ async function checkRanges(sample, video, run, options, whole, wholeScenes, whol
       `${n} frames, stopped ${partial.stopped}`);
     return;
   }
-  checkPictureStopped(`${name} stopped in range ${stopFrom}`, partial);
+  checkPictureStopped(`${name} stopped in range ${stopFrom}`, partial, 'split');
   checkStopped(`${name} stopped in range ${stopFrom}`, video, partial, await statsText(), whole, wholeStats,
     DEINTERLACED.includes(run));
 }
@@ -694,10 +744,35 @@ function checkPicture(sample, result) {
   return json;
 }
 
-// A stopped run's picture measures and frame types: the frames its result read, the types the whole run's first.
-function checkPictureStopped(name, result) {
+// Picture() JSON the whole run's but for the still pictures, which a split or resumed run doesn't look for (its
+// freeze.notMeasured says why, starting "Not looked for in a <how> run").
+function samePicture(json, whole, how) {
+  const picture = JSON.parse(json), { freeze } = picture;
+  delete picture.freeze;
+  const wholeOne = JSON.parse(whole);
+  delete wholeOne.freeze;
+  return JSON.stringify(picture) === JSON.stringify(wholeOne) && freeze.spans === null &&
+    freeze.notMeasured?.startsWith(`Not looked for in a ${how} run`) === true;
+}
+
+// A stopped run's picture measures and frame types: the frames its result read, the types the whole run's first. Its
+// still pictures, read in one pass (how null): the whole run's that end by its stop, then the one going on there (if
+// any) without an end; a split run's (how 'split') not looked for.
+function checkPictureStopped(name, result, how = null) {
   const picture = JSON.parse(Picture());
   if (picture.frames !== result.frameCount) fail(`${name}: picture measures of ${picture.frames} frames, the result read ${result.frameCount}`);
+  const { spans, notMeasured } = picture.freeze;
+  if (how !== null) {
+    if (spans !== null || !notMeasured?.startsWith(`Not looked for in a ${how} run`))
+      fail(`${name}: still pictures ${JSON.stringify(picture.freeze)}, not "not looked for"`);
+  } else if (wholePicture !== null) {
+    // The whole run's that ended by the stop; then the one going on there, if it had lasted freezedetect's 2 s by then.
+    const n = result.frameCount, whole = JSON.parse(wholePicture).freeze.spans;
+    const ended = whole.filter(s => s.endFrame !== null && s.endFrame < n), next = whole[ended.length];
+    const going = next && next.firstFrame < n ? [{ ...next, endFrame: null, end: null }] : [];
+    if (spans === null || (JSON.stringify(spans) !== JSON.stringify(ended) && JSON.stringify(spans) !== JSON.stringify([...ended, ...going])))
+      fail(`${name}: still pictures ${JSON.stringify(spans)}, the whole run's to frame ${n} ${JSON.stringify([...ended, ...going])}`);
+  }
   const types = FrameTypes();
   if (types !== wholeTypes?.slice(0, result.frameCount))
     fail(`${name}: frame types of ${types.length} frames, not the whole run's first ${result.frameCount}`);
@@ -758,7 +833,7 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
     if (scenes !== wholeScenes || stats !== wholeStats) tellCsvs(sample, run, what, [wholeScenes, wholeStats], [scenes, stats]);
     return scenes === wholeScenes && stats === wholeStats && sameShotFiles(wholeShotFiles) &&
       JSON.stringify(r.shots) === JSON.stringify(whole.shots) && r.frameCount === whole.frameCount && r.stopped === false &&
-      Picture() === wholePicture && FrameTypes() === wholeTypes;
+      samePicture(Picture(), wholePicture, 'resumed') && FrameTypes() === wholeTypes;
   };
 
   // Stopped at a third, opened again (a later visit) and shown from the kept bytes, resumed and stopped at two thirds.

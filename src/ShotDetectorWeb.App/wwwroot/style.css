@@ -12,6 +12,7 @@
   --tone: #059669;
   --keyframe: #7c3aed;
   --exact: #047857;
+  --corrected: #b45309;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
 }
@@ -30,6 +31,7 @@
     --tone: #34d399;
     --keyframe: #c4b5fd;
     --exact: #34d399;
+    --corrected: #fbbf24;
   }
 }
 
@@ -74,6 +76,7 @@ select, input { font: inherit; padding: 0.3rem 0.4rem; }
 }
 h2 .chip { cursor: help; }
 .chip.exact { border-color: var(--exact); color: var(--exact); }
+.chip.browser { border-color: var(--keyframe); color: var(--keyframe); }
 
 /* The landing (no file picked): the pitch, the drop zone with the demo in it, the options and Detect under it. */
 h1 { margin: 0.5rem 0 0.25rem; font-size: 1.6rem; }
@@ -144,6 +147,8 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
   color: var(--error-fg);
   overflow-wrap: anywhere;
 }
+#refused { margin-top: 0.4rem; padding: 0 1rem; font-size: 0.9rem; color: var(--muted); }
+#refused p { margin: 0.3rem 0; }
 
 /* The result, four rows (decision 2026-10-26-new-ui.md, B): the video with the shot playing under it beside the run's
    cards; the timeline across the width; the cards below it (the shots, their statistics beside them); the details in
@@ -169,6 +174,8 @@ progress { width: 100%; height: 0.4rem; accent-color: var(--accent); }
 #below > .card { flex: 1 1 30rem; min-width: 0; }
 #below > #stats { flex: 0 1 18rem; position: sticky; top: 1rem; }
 @media (max-width: 48rem) { #below > #stats { flex: 1 1 100%; position: static; } }
+/* The shot lengths' graph, as wide as the film's timeline: a row of its own under the shots and their statistics. */
+#below > #shot-lengths { flex: 1 1 100%; }
 /* The details as two columns the browser balances, each card whole in one (a grid's rows left holes beside a short
    card); one column at phone width. In index.html's order, down the first column, then the second. */
 #details { grid-area: details; columns: 2 22rem; column-gap: 1rem; }
@@ -209,6 +216,12 @@ video, .frame {
 #run .chapter-titles li { display: flex; gap: 0.5rem; align-items: baseline; margin: 0.15rem 0; }
 #run .chapter-titles li span { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 4em; text-align: right; }
 #run .chapter-titles input { flex: 1; min-width: 0; }
+/* The contact sheet (panels/sheet.js): its options on a line, then Make and the two downloads. */
+#sheet .sheet-options { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; font-size: 0.9rem; }
+#sheet .sheet-options input[type=number] { width: 3.5em; }
+#sheet .downloads { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; }
+#sheet .downloads a { font-weight: 600; }
+#sheet #sheet-status { color: var(--muted); font-size: 0.9rem; }
 
 /* The timeline: lane labels on the left, the tracks on one time axis, the playhead across all of them. */
 #timeline { display: flex; font-size: 0.8rem; user-select: none; }
@@ -241,6 +254,9 @@ video, .frame {
 .track .shot:hover { background: color-mix(in srgb, var(--fg) 8%, transparent); }
 .track .shot.current { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--fg); font-weight: 600; }
 .tick { position: absolute; top: 15%; bottom: 15%; width: 2px; margin-left: -1px; background: var(--fg); }
+/* Corrected on the page (panels/corrections.js): a cut added in the corrections' colour, a detected cut removed hollow. */
+.tick.added { background: var(--corrected); width: 3px; margin-left: -1.5px; }
+.tick.removed { background: none; border: 1px dashed var(--muted); top: 25%; bottom: 25%; }
 
 /* The waveform lane: taller than the others, the sound's envelope across it (an SVG stretched over the points' span). */
 .track.waveform, .lane-label.waveform { height: 3.5rem; }
@@ -317,7 +333,7 @@ video, .frame {
 
 /* The picture: each frame's luma as a band (YMIN to YMAX) and a line (YAVG), the out-of-range ticks along the bottom as
    tall as the share out of range (an SVG stretched over the frames read), the black spans hatched and the colour bars
-   (as their luma steps) as marks over it; the measures' card. */
+   (as their luma steps) and the still pictures (freezedetect) as marks over it; the measures' card. */
 .track.picture, .lane-label.picture { height: 3.5rem; }
 .lane-label.picture { line-height: 3.5rem; }
 .track.picture svg { position: absolute; top: 0; height: 100%; }
@@ -332,6 +348,10 @@ video, .frame {
   bottom: auto; height: 0.4rem;
   background: linear-gradient(90deg, #c0c0c0 0 14.3%, #adadad 0 28.6%, #8f8f8f 0 42.9%, #7c7c7c 0 57.1%, #5a5a5a 0 71.4%,
     #474747 0 85.7%, #2a2a2a 0);
+}
+.mark.freeze {
+  top: 0.5rem; bottom: auto; height: 0.35rem;
+  background: color-mix(in srgb, var(--accent) 35%, transparent); border-inline: 1px solid var(--accent);
 }
 #picture h3 { margin: 0.75rem 0 0.25rem; font-size: 0.85rem; }
 #picture p { margin: 0.25rem 0 0; font-variant-numeric: tabular-nums; }
@@ -401,3 +421,23 @@ tbody tr.unfinished td { border-bottom-style: dashed; }
 
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
 footer .chip { font-size: 0.7rem; }
+
+/* The corrections card (panels/corrections.js): small buttons in a row that wraps; a corrected row of the shots table
+   marked in the corrections' colour. */
+.edit-buttons { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.25rem 0; }
+.edit-buttons button { padding: 0.2rem 0.5rem; font-size: 0.85rem; }
+#corrections-summary { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.85rem; }
+#shots tr.corrected td:first-child { box-shadow: inset 3px 0 0 var(--corrected); }
+
+/* Shot lengths (panels/shotlengths.js): a bar a shot along the film, its height its length, the trend line over them;
+   under it the axis's ends and the scale. */
+#shot-lengths svg { display: block; width: 100%; height: 9rem; border-bottom: 1px solid var(--line); }
+#shot-lengths .bars rect {
+  fill: color-mix(in srgb, var(--accent) 55%, transparent); stroke: var(--panel); stroke-width: 1;
+  vector-effect: non-scaling-stroke; cursor: pointer;
+}
+#shot-lengths .bars rect:hover { fill: var(--accent); }
+#shot-lengths .trend { stroke: var(--fg); stroke-width: 2; }
+#shot-lengths .ends { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.25rem 0 0; color: var(--muted);
+  font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+#shot-lengths .note { color: var(--muted); font-size: 0.85rem; }

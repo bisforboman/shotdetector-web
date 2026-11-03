@@ -8,7 +8,8 @@
 //      stats CSVs, its shots as JSON and HTML and the editors' timeline files (EDL, FCPXML, FCP7 XML, OTIO, QP, keyframes)
 //      downloaded from the run's card and compared with the native check's run of that detector byte for byte (the
 //      timeline files but for the file's name: the page gives the picked file's), its YouTube chapters at 30 s and 10 s
-//      the native run's, the shots table one row per shot of the CSV;
+//      the native run's, the shots table one row per shot of the CSV; the contact sheet (contactSheet) made and
+//      downloaded as a PNG, an A4 PDF of a still a shot and a Letter PDF of three, each valid with a still per shot;
 //   2. the same sample on the page's worker (?threads=0, as where the page isn't isolated), and split across two
 //      workers (?workers=2): the ranges lane; the same downloads each time;
 //   3. "Try the demo": the clip fetched and run as picked, on threads, paused a quarter of the way in (the bar and the
@@ -25,8 +26,8 @@
 //      again, merged with the kept scores to the whole run's downloads;
 //   8. an AVI (MJPEG, which no browser plays) picked on threads: the player the file's own JPEG at the playhead (an
 //      <img> in the video's place), the frame the playhead is in after a click on the timeline and on a shot's row,
-//      decoded; a still per shot from the same JPEGs; the downloads the native run's (backlog "The picture of an AVI on
-//      the page");
+//      decoded; a still per shot from the same JPEGs, and the contact sheet's from them as in 1; the downloads the native
+//      run's (backlog "The picture of an AVI on the page");
 //   9. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
@@ -41,6 +42,11 @@
 //      sample opened with it (PWA.launchFilesInApp: the file through launchQueue, to the page already open, as the
 //      manifest's launch_handler says), on threads and on ?threads=0; and the sample shared to the page (the share
 //      target's multipart POST, which sw.js answers) on both: each to the same downloads as 1.
+//  12. each --refused file (HEVC in MP4, VP8 in WebM) picked: the core's refusal naming the codec, what reads the file
+//      instead under it, the iPhone's line for HEVC alone (backlog "A refusal that says what to do").
+//  13. each --browser file (VP9 and AV1 in WebM) picked on an isolated page: decoded by Chromium's VideoDecoder on the
+//      page's worker, its chip the browser's decoder's, its downloads, picture and frame types the native check's (FFmpeg
+//      standing in for the browser) byte for byte.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -49,7 +55,8 @@
 // as the native check wrote them, and its lane is there.
 // Any error on the page, in its workers or a failed request fails the check.
 //
-// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> [<more.mp4>...]
+// Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
+//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -62,15 +69,22 @@ const args = process.argv.slice(2);
 const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
 if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
   console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
-    '[--deinterlace <interlaced.mp4>] [<more.mp4>...]');
+    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
 const interlaced = di >= 0 ? resolve(args[di + 1]) : null;
-const [root, outDir, sample, demo, avi, ...more] = args.filter((_, i) => ![at, at + 1, di, di + 1].includes(i)).map(a => resolve(a));
+// --refused <file>, any number of times: a file the page refuses, with what reads it instead under the message.
+const refusedAt = args.flatMap((a, i) => a === '--refused' ? [i, i + 1] : []);
+const refusedFiles = refusedAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
+// --browser <file>, any number of times: a WebM the browser's own decoder decodes (decision 2026-11-02-webm-browser-decoder.md).
+const browserAt = args.flatMap((a, i) => a === '--browser' ? [i, i + 1] : []);
+const browserFiles = browserAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
+const [root, outDir, sample, demo, avi, ...more] = args
+  .filter((_, i) => ![at, at + 1, ...(di >= 0 ? [di, di + 1] : []), ...refusedAt, ...browserAt].includes(i)).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
 const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
-  ...Object.fromEntries([...more, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
+  ...Object.fromEntries([...more, ...browserFiles, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
 const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
@@ -368,7 +382,7 @@ async function compare(page, what, name, run, stoppedAt = null) {
       fail(`${what}: no ${label} to download`);
       continue;
     }
-    const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    const download = await clicked(page, link);
     const expectedName = `${stem(name)}.${kind}.${ext}`;
     if (download.suggestedFilename() !== expectedName) {
       fail(`${what}: the ${label} downloads as ${download.suggestedFilename()}, not ${expectedName}`);
@@ -569,10 +583,11 @@ async function paused(page, what, from) {
   return frame;
 }
 
-// The picture's card after a whole run: its cropdetect line and its colour bars the native check's
+// The picture's card after a whole run: its cropdetect line, its colour bars and its still pictures the native check's
 // (<sample>.picture.json, checked there against FFmpeg's filters), and the lane shown; a 10-bit video's levels said to
-// be 10-bit code values.
-async function picture(page, what, file) {
+// be 10-bit code values. A split run (split) doesn't look for still pictures and says so (decision
+// 2026-11-01-freeze-spans.md).
+async function picture(page, what, file, split = false) {
   const native = join(nativeDir, `${stem(file)}.picture.json`);
   if (!existsSync(native)) {
     fail(`${what}: no native ${native} (tools/check.sh native first)`);
@@ -591,10 +606,15 @@ async function picture(page, what, file) {
   // A 10-bit video's card says its levels are 10-bit code values (backlog-done "Picture measures at 10 bits").
   if (p.bitDepth === 10 && !text.includes('In 10-bit code values (0 to 1023)'))
     fail(`${what}: a 10-bit video's picture card doesn't say its levels are 10-bit: "${text.slice(0, 300)}"`);
-  if (!text.includes(crop) || bars !== p.bars.length || lane !== 1)
-    fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${lane} lane), not ${crop} and ${p.bars.length} colour bars`);
+  const stills = (text.match(/Still picture: \d/g) ?? []).length, freezeMarks = await page.locator('.track.picture .mark.freeze').count();
+  const freezeOk = split
+    ? text.includes('Not looked for in a split run') && stills === 0 && freezeMarks === 0
+    : stills === p.freeze.spans.length && freezeMarks === stills && (stills > 0 || text.includes('Still pictures: none'));
+  if (!text.includes(crop) || bars !== p.bars.length || lane !== 1 || !freezeOk)
+    fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${stills} still pictures, ${lane} lane), ` +
+      `not ${crop}, ${p.bars.length} colour bars and ${split ? 'still pictures not looked for' : `${p.freeze.spans.length} still pictures`}`);
   else
-    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, as the native check's`);
+    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${split ? 'still pictures not looked for (split)' : `${stills} still pictures`}, as the native check's`);
 }
 
 // The frame types' card after a whole run: the counts of ffprobe's types (<sample>.frametypes.txt, which the native
@@ -645,6 +665,108 @@ function report(what, errors) {
   if (errors.length > 0) fail(`${what}: errors on the page:\n  ${errors.join('\n  ')}`);
 }
 
+// The contact sheet (panels/sheet.js, issue #93): made with one still a shot and downloaded as a PNG and an A4 PDF,
+// then with three stills a shot, two columns and no header as a Letter PDF. Each a valid file (the PNG's chunks to
+// IEND, the size its link says; the PDF's cross-reference table pointing at its objects, every image a whole JPEG, its
+// pages of the paper chosen) with a still per shot drawn: the links' data-stills, the PDF's images placed.
+async function contactSheet(page, what, file) {
+  const shots = await page.locator('#shots tbody tr').count(), name = stem(file);
+  const made = (stills, paper) => page.waitForFunction(([want, pdf]) => {
+    const a = document.getElementById('sheet-pdf'), b = document.getElementById('sheet-png');
+    return !a.hidden && !b.hidden && a.download === pdf && Number(a.dataset.stills) === want &&
+      !document.getElementById('sheet-make').disabled;
+  }, [shots * stills, `${name}.sheet.${paper}.pdf`], { timeout: 120000 }).then(() => true, () => false);
+  const get = async (id, expectedName) => {
+    const link = page.locator(`#${id}`);
+    const download = await clicked(page, link);
+    if (download.suggestedFilename() !== expectedName)
+      fail(`${what}: the contact sheet downloads as ${download.suggestedFilename()}, not ${expectedName}`);
+    const saved = join(outDir, `page.${expectedName}`);
+    await download.saveAs(saved);
+    return { bytes: readFileSync(saved), saved, title: await link.getAttribute('title') };
+  };
+  await page.locator('#sheet-make').click();
+  if (!await made(1, 'a4')) {
+    const status = await page.textContent('#sheet-status').catch(() => '');
+    const stills = await page.getAttribute('#sheet-pdf', 'data-stills').catch(() => null);
+    fail(`${what}: no contact sheet with a still for each of the ${shots} shots (stills: ${stills}; ${status})`);
+    return;
+  }
+  const png = await get('sheet-png', `${name}.sheet.png`);
+  const size = pngSize(png.bytes), said = /(\d+)×(\d+)/.exec(png.title);
+  if (typeof size === 'string') fail(`${what}: the contact sheet's PNG (${png.saved}) isn't valid: ${size}`);
+  else if (!said || Number(said[1]) !== size.width || Number(said[2]) !== size.height)
+    fail(`${what}: the contact sheet's PNG is ${size.width}×${size.height}, its link says ${png.title}`);
+  else console.log(`${what}: the contact sheet as a PNG, ${size.width}×${size.height}, a still for each of the ${shots} shots`);
+  const pdfOf = async (paper, stills, box) => {
+    const pdf = await get('sheet-pdf', `${name}.sheet.${paper}.pdf`);
+    const r = pdfRead(pdf.bytes);
+    if (typeof r === 'string') fail(`${what}: the contact sheet's ${paper} PDF (${pdf.saved}) isn't valid: ${r}`);
+    else if (r.placed !== shots * stills || r.boxes.some(b => b !== box))
+      fail(`${what}: the contact sheet's ${paper} PDF (${pdf.saved}) places ${r.placed} stills, not ${shots * stills}, ` +
+        `on pages of ${[...new Set(r.boxes)].join(', ')}, not ${box}`);
+    else console.log(`${what}: the contact sheet as ${paper === 'a4' ? 'an A4' : 'a Letter'} PDF, ${r.pages} pages, ${r.placed} stills of ${r.images} ` +
+      `JPEGs for the ${shots} shots`);
+  };
+  await pdfOf('a4', 1, '0 0 595.28 841.89');
+  await page.selectOption('#sheet-stills', '3');
+  await page.fill('#sheet-columns', '2');
+  await page.locator('#sheet-columns').dispatchEvent('change');
+  await page.uncheck('#sheet-header');
+  await page.selectOption('#sheet-paper', 'letter');
+  if (!await made(3, 'letter')) fail(`${what}: no contact sheet of three stills a shot on Letter`);
+  else await pdfOf('letter', 3, '0 0 612 792');
+}
+
+// A PNG's size, read from its IHDR, once its chunks are whole up to IEND; else what's wrong.
+function pngSize(b) {
+  if (b.length < 33 || b.readUInt32BE(0) !== 0x89504e47 || b.readUInt32BE(4) !== 0x0d0a1a0a) return 'no PNG signature';
+  if (b.toString('latin1', 12, 16) !== 'IHDR') return 'no IHDR first';
+  let at = 8;
+  for (;;) {
+    if (at + 12 > b.length) return 'no IEND';
+    const length = b.readUInt32BE(at), type = b.toString('latin1', at + 4, at + 8);
+    at += 12 + length;
+    if (type === 'IEND') break;
+  }
+  if (at !== b.length) return `${b.length - at} bytes after IEND`;
+  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+}
+
+// A PDF as sheet.js writes it (uncompressed, one cross-reference table): its pages, their MediaBoxes, its images (each
+// stream its /Length long, a JPEG from SOI to EOI) and the images placed (Do); else what's wrong.
+function pdfRead(b) {
+  const s = b.toString('latin1');
+  if (!s.startsWith('%PDF-1.')) return 'no %PDF header';
+  if (!/%%EOF\s*$/.test(s)) return 'no %%EOF at the end';
+  const start = /startxref\s+(\d+)\s+%%EOF\s*$/.exec(s);
+  if (!start) return 'no startxref';
+  const xref = Number(start[1]);
+  if (s.slice(xref, xref + 4) !== 'xref') return `startxref ${xref} isn't the xref table`;
+  const head = /^xref\s+0 (\d+)\s+/.exec(s.slice(xref));
+  if (!head) return 'no xref subsection from 0';
+  const count = Number(head[1]), table = xref + head[0].length;
+  for (let id = 1; id < count; id++) {
+    const entry = s.slice(table + 20 * id, table + 20 * id + 20);
+    const offset = Number(entry.slice(0, 10));
+    if (!/^\d{10} 00000 n/.test(entry)) return `xref entry ${id} is ${JSON.stringify(entry)}`;
+    if (!s.startsWith(`${id} 0 obj`, offset)) return `object ${id} isn't at ${offset}`;
+  }
+  const trailer = /trailer\s*<<[^]*?\/Size (\d+)[^]*?\/Root (\d+) 0 R/.exec(s.slice(xref));
+  if (!trailer || Number(trailer[1]) !== count) return 'the trailer\'s /Size isn\'t the xref\'s';
+  let images = 0;
+  for (const m of s.matchAll(/\/Subtype \/Image [^]*?\/Length (\d+) >>\nstream\n/g)) {
+    const from = m.index + m[0].length, length = Number(m[1]);
+    if (b[from] !== 0xff || b[from + 1] !== 0xd8 || b[from + length - 2] !== 0xff || b[from + length - 1] !== 0xd9 ||
+      s.slice(from + length, from + length + 10) !== '\nendstream') return `image ${images + 1} isn't a whole JPEG`;
+    images++;
+  }
+  const boxes = [...s.matchAll(/\/Type \/Page \/Parent \d+ 0 R \/MediaBox \[([^\]]*)\]/g)].map(m => m[1]);
+  const pages = Number(/\/Type \/Pages \/Count (\d+)/.exec(s)?.[1]);
+  if (boxes.length !== pages || pages < 1) return `${boxes.length} pages, the page tree counts ${pages}`;
+  return { pages, boxes, images, placed: [...s.matchAll(/\/Im\d+ Do/g)].length };
+}
+
 // deinterlace: the Deinterlace option picked ('auto', 'on'), compared with the native check's deinterlace-<it> run.
 async function picked(query, what, file = sample, deinterlace = null) {
   const { context, page, errors } = await open(query);
@@ -662,6 +784,200 @@ async function picked(query, what, file = sample, deinterlace = null) {
       if (bands !== 2) fail(`${what}: the ranges lane has ${bands} bands, not 2`);
       else await rangesAtTheirTimes(page, what, file);
     }
+    await compare(page, what, basename(file), run);
+    await picture(page, what, file, split);
+    await frameTypes(page, what, file);
+    if (query === '' && !deinterlace) await contactSheet(page, what, file);
+    if (file === sample && !split) {
+      await shotLengths(page, what, file, run);
+      await corrections(page, what, file, run, query === '');
+    }
+  }
+  report(what, errors);
+  await context.close();
+}
+
+// A file the page refuses (a codec or container the core doesn't read: tools/make-samples.sh's samples/reject/), picked
+// on threads: the page ends in error with the core's message naming the codec as FFmpeg does, and under it what reads
+// the file instead (the shotdetect command, linked), and for HEVC what an iPhone records (backlog "A refusal that says
+// what to do").
+async function pickedRefused(file) {
+  const what = `${basename(file)}, refused`;
+  const { context, page, errors } = await open();
+  await page.setInputFiles('#file', file);
+  await page.click('#detect');
+  const status = await finished(page, what, 'error');
+  if (status !== null) {
+    const shown = await page.evaluate(() => ({
+      message: document.getElementById('error').textContent,
+      refused: !document.getElementById('refused').hidden,
+      link: document.querySelector('#refused a')?.href ?? '',
+      hevc: !document.getElementById('refused-hevc').hidden,
+    }));
+    const hevc = /FFmpeg's hevc/.test(shown.message);
+    console.log(`${what}: ${shown.message}`);
+    if (!/this page reads H\.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM so far/.test(shown.message))
+      fail(`${what}: the message isn't the core's refusal: ${shown.message}`);
+    if (!shown.refused || !shown.link.startsWith('https://github.com/bisforboman/shotdetector'))
+      fail(`${what}: no line under the message pointing to the shotdetect command (${JSON.stringify(shown)})`);
+    if (shown.hevc !== hevc)
+      fail(`${what}: the iPhone's line ${shown.hevc ? 'shown' : 'not shown'} for ${hevc ? 'HEVC' : 'another codec'}`);
+  }
+  report(what, errors);
+  await context.close();
+}
+
+// Correcting the cuts (issue #90, panels/corrections.js), on the default run: the native check's corrected list
+// (<sample>.corrected.starts.json: CorrectionCheck.Edit's first cut removed, last moved a frame later, two added a frame
+// apart) made with the keys as a viewer would, the playhead on each frame (Delete, '.', C): every download but the stats
+// CSV then the native check's for that list (LoadScenes, held to the FFmpeg path's), the stats CSV the run's, the cuts
+// lane with its added and removed ticks; undone to the detected cuts, the run's downloads again; redone. With reload:
+// the page reloaded and the file picked again, the corrected run shown again from the browser (a finished run kept for
+// its corrections), its downloads the corrected list's; then Forget.
+async function corrections(page, what, file, run, reload) {
+  what = `${what}, corrected`;
+  const native = join(nativeDir, stem(file));
+  if (!existsSync(`${native}.corrected.starts.json`)) return fail(`${what}: no ${native}.corrected.starts.json (tools/check.sh native first)`);
+  const wanted = JSON.parse(readFileSync(`${native}.corrected.starts.json`, 'utf8')).slice(1);
+  const detected = JSON.parse(readFileSync(`${native}.${run}.shots.json`, 'utf8')).slice(1).map(s => s.startFrame - 1);
+  const { num, den } = JSON.parse(await page.textContent('#about pre')).frameRate;
+  const at = async frame => {
+    await page.evaluate(t => new Promise(ok => {
+      const v = document.getElementById('video');
+      v.addEventListener('seeked', ok, { once: true });
+      v.currentTime = t;
+    }), (frame + 0.5) * den / num);
+  };
+  // Keys go to the page, not to a field that has the focus (the file input, after a pick).
+  await page.evaluate(() => document.activeElement?.blur());
+  const press = async (frame, key) => {
+    await at(frame);
+    await page.keyboard.press(key);
+  };
+  // A move first (a detected cut removed with the frame after it added: '.'), then the removals, then the additions.
+  const removed = detected.filter(c => !wanted.includes(c)), added = wanted.filter(c => !detected.includes(c));
+  const moved = removed.filter(c => added.includes(c + 1));
+  for (const c of moved) await press(c, '.');
+  for (const c of removed.filter(c => !moved.includes(c))) await press(c, 'Delete');
+  for (const c of added.filter(c => !moved.includes(c - 1))) await press(c, 'c');
+  const edits = removed.length + added.length - moved.length;
+  // Settled: no correction on its way, and the run card showing the downloads of as many removed and added cuts.
+  const settled = (n, why) => page.waitForFunction(n => document.getElementById('corrections')?.dataset.pending === '0' &&
+    document.getElementById('run')?.dataset.edits === String(n), n, { timeout: 30000 }).then(() => true, () => {
+    fail(`${what}: ${why}`);
+    return false;
+  });
+  if (!await settled(removed.length + added.length, 'the run card didn\'t show the corrected list')) return;
+  await downloadsCorrected(page, what, file, run);
+  await shotLengths(page, what, file, 'corrected');
+  const lane = await page.evaluate(() => [document.querySelectorAll('.tick.added').length,
+    document.querySelectorAll('.tick.removed').length]);
+  if (lane[0] !== added.length || lane[1] !== removed.length)
+    fail(`${what}: the cuts lane has ${lane[0]} added and ${lane[1]} removed ticks, not ${added.length} and ${removed.length}`);
+  const rows = await page.locator('#shots tbody tr.corrected').count();
+  if (rows !== added.length) fail(`${what}: ${rows} rows of the shots table marked corrected, not ${added.length}`);
+
+  // Undone to the detected cuts: the run's own downloads; redone.
+  for (let i = 0; i < edits; i++) await page.keyboard.press('Control+z');
+  if (!await settled(0, 'undo didn\'t go back to the detected cuts')) return;
+  if (!await page.isDisabled('#cut-undo')) fail(`${what}: undone to the detected cuts, Undo is still offered`);
+  await compare(page, `${what}, undone`, basename(file), run);
+  // The chapters' comparison leaves the focus in its field, where the page takes the keys as typing.
+  await page.evaluate(() => document.activeElement?.blur());
+  for (let i = 0; i < edits; i++) await page.keyboard.press('Control+Shift+z');
+  if (!await settled(removed.length + added.length, 'redo didn\'t come back to the corrected list')) return;
+  await downloadsCorrected(page, `${what}, redone`, file, run);
+  if (!reload) return;
+
+  // Kept in this browser: shown again with its corrections when the file is picked again.
+  settlings.get(page)(true);
+  await page.reload();
+  await isolated(page);
+  settlings.get(page)(false);
+  await page.setInputFiles('#file', file);
+  const status = await finished(page, `${what}, shown again`);
+  if (status === null) return;
+  if (!status.includes('corrected cuts kept in this browser') || await page.isVisible('#resume') || !await page.isVisible('#forget'))
+    fail(`${what}: after the reload, not the corrected run kept, Forget without Resume: ${status}`);
+  if (!await settled(removed.length + added.length, 'after the reload, the corrections aren\'t shown')) return;
+  await downloadsCorrected(page, `${what}, shown again`, file, run);
+  await page.click('#forget');
+}
+
+// Film studies (issue #91, panels/shotlengths.js and stats.js): the shot lengths card's bars, a bar a shot of the native
+// run's (<sample>.<run>.shots.json), its CSV those shots' numbers, first frames, starts and lengths, and the shot
+// statistics' standard deviation the sample's (n - 1) of their lengths, to the hundredth shown.
+async function shotLengths(page, what, file, run) {
+  what = `${what}, shot lengths`;
+  const native = join(nativeDir, `${stem(file)}.${run}.shots.json`);
+  if (!existsSync(native)) return fail(`${what}: no ${native}`);
+  const shots = JSON.parse(readFileSync(native, 'utf8'));
+  await page.locator('#shot-lengths-csv').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  const bars = await page.locator('#shot-lengths .bars rect').count();
+  if (bars !== shots.length) fail(`${what}: ${bars} bars for ${shots.length} shots`);
+  const download = await clicked(page, page.locator('#shot-lengths-csv'));
+  const saved = join(outDir, `${what.replace(/\W+/g, '-')}.csv`);
+  await download.saveAs(saved);
+  const expected = ['Shot,Start Frame,Start Time (seconds),Length (frames),Length (seconds)', ...shots.map(s =>
+    `${s.shot},${s.startFrame},${secondsOf(s.startTimecode).toFixed(3)},${s.durationFrames},${s.durationSeconds.toFixed(3)}`)];
+  if (readFileSync(saved, 'utf8') !== `${expected.join('\n')}\n`) fail(`${what}: the CSV (${saved}) isn't the native shots'`);
+  const lengths = shots.map(s => s.durationSeconds), mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+  const sd = lengths.length > 1 ? `${Math.sqrt(lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / (lengths.length - 1)).toFixed(2)} s` : '–';
+  const stats = await page.textContent('#stats dl') ?? '';
+  if (!stats.includes(`Standard deviation${sd}`)) fail(`${what}: the statistics don't say a standard deviation of ${sd}: ${stats}`);
+  else console.log(`${what}: ${bars} bars, the CSV the native shots', standard deviation ${sd}`);
+}
+
+// A timecode's seconds (HH:MM:SS.mmm), as the page's timeline.js reads them.
+function secondsOf(tc) {
+  const [h, m, sec] = tc.split(':').map(Number);
+  return h * 3600 + m * 60 + sec;
+}
+
+// The run card's downloads of a corrected list against the native check's <sample>.corrected.* (its stats CSV against
+// the run's: no correction changes a score).
+async function downloadsCorrected(page, what, file, run) {
+  const files = [['scenes-csv', 'scenes.csv'], ['stats-csv', 'stats.csv', run], ['shots-json', 'shots.json'],
+    ['shots-html', 'shots.html'], ['timeline-edl', 'edl'], ['timeline-fcpxml', 'fcpxml'], ['timeline-fcp7', 'fcp7.xml'],
+    ['timeline-otio', 'otio'], ['timeline-qp', 'qp'], ['timeline-keyframes', 'keyframes.txt'],
+    ['timeline-shotchanges', 'shotchanges']];
+  await page.locator('#scenes-csv').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  const differ = [];
+  for (const [id, ext, of = 'corrected'] of files) {
+    const link = page.locator(`#${id}`);
+    if (!await link.isVisible()) {
+      differ.push(`${ext} (none)`);
+      continue;
+    }
+    const download = await clicked(page, link);
+    const saved = join(outDir, `${what.replace(/\W+/g, '-')}.${ext}`);
+    await download.saveAs(saved);
+    const native = join(nativeDir, `${stem(file)}.${of}.${ext}`);
+    if (!existsSync(native) || !readFileSync(saved).equals(readFileSync(native))) differ.push(ext);
+  }
+  if (differ.length > 0) fail(`${what}: the downloads ${differ.join(', ')} aren't the native check's corrected list's`);
+  else console.log(`${what}: ${files.length} downloads the native check's for the corrected list (the stats CSV the run's)`);
+}
+
+// A WebM picked (VP9 or AV1, decoded by the browser's own VideoDecoder: decision 2026-11-02-webm-browser-decoder.md),
+// on an isolated page: the run goes on the page's worker (not threads, not split, whatever the page's options), says the
+// browser decoded it, its card's chip is the browser's decoder's, and its downloads, picture and frame types are the
+// native check's (FFmpeg's decoder standing in for the browser), byte for byte: Chromium's decoder held to FFmpeg's path.
+async function pickedBrowser(file) {
+  const what = `${basename(file)}, decoded by the browser`;
+  const { context, page, errors } = await open();
+  await page.setInputFiles('#file', file);
+  await page.click('#detect');
+  const run = await page.inputValue('#detector');
+  const status = await finished(page, what);
+  if (status !== null) {
+    if (THREADED.test(status) || /workers/.test(status)) fail(`${what}: not on the page's worker alone: ${status}`);
+    const chip = await page.evaluate(() => {
+      const c = document.querySelector('#run h2 .chip');
+      return { text: c?.textContent, browser: c?.classList.contains('browser') };
+    });
+    if (!chip.browser || chip.text !== 'your browser\'s decoder')
+      fail(`${what}: the run card's chip is ${JSON.stringify(chip)}, not the browser's decoder's`);
     await compare(page, what, basename(file), run);
     await picture(page, what, file);
     await frameTypes(page, what, file);
@@ -738,6 +1054,7 @@ async function pickedAvi() {
     const missing = stills.flatMap((s, i) => s === 'drawn' ? [] : [`shot ${i + 1}: ${s}`]);
     if (stills.length !== rows || missing.length > 0) fail(`${what}: ${rows} shots, stills: ${missing.join('; ')}`);
     else console.log(`${what}: a still for each of the ${rows} shots, from the file's JPEGs`);
+    await contactSheet(page, what, avi);
     await looks(page, what, 'the-avi.done');
   }
   report(what, errors);
@@ -778,7 +1095,7 @@ async function manifestValid(page, cdp) {
     m.display !== 'standalone' && `display ${m.display}`,
     !['192x192', '512x512'].every(size => m.icons?.some(i => i.sizes === size && i.type === 'image/png')) &&
       'no 192 and 512 px PNG icons',
-    !['.mp4', '.avi'].every(ext => accepts.includes(ext)) && `file handlers for ${accepts.join(' ') || 'nothing'}`,
+    !['.mp4', '.avi', '.webm'].every(ext => accepts.includes(ext)) && `file handlers for ${accepts.join(' ') || 'nothing'}`,
     !(share?.method === 'POST' && share.enctype === 'multipart/form-data' && share.params?.files?.[0]?.name === 'video') &&
       'no multipart share target with a video',
   ].filter(Boolean);
@@ -850,6 +1167,8 @@ async function sharedTo(query, what) {
 }
 
 try {
+  for (const file of refusedFiles) await pickedRefused(file);
+  for (const file of browserFiles) await pickedBrowser(file);
   await pickedAvi();
   await launched('', `${basename(sample)}, opened with the installed app`);
   await launched('?threads=0', `${basename(sample)}, opened with the installed app, the page's worker`);

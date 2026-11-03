@@ -1,7 +1,9 @@
 // The shots' statistics, a card beside the shots table (backlog "Shot statistics and a timeline"): from the shots as
-// Detect returns them, how many, their average and median length, the shortest and the longest (a click plays it), cuts
+// Detect returns them, how many, their average and median length, their standard deviation (issue #91: the sample's,
+// n − 1, as film scholars' shot-length statistics take it), the shortest and the longest (a click plays it), cuts
 // per minute and how long the run took against the length it read. They are the page's own figures, worked out here
-// from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run. The shot playing is
+// from the shots, not ShotDetector's, and the card's mark says so. They wait for a finished run, and follow the cuts
+// as they are corrected on the page ('corrected'). The shot playing is
 // app.js's caption under the video, and the shots table marks its row.
 import { card, frameSeconds, on } from '../app.js';
 import { secondsOf, seek } from '../timeline.js';
@@ -36,17 +38,25 @@ function add(shot) {
   ends.push(secondsOf(shot.endTimecode));
 }
 
-on('chose', clear);
-on('run', clear);
+let ran = null; // the run done's figures that no correction changes: { seconds, read, stopped }
+on('chose', () => { ran = null; clear(); });
+on('run', () => { ran = null; clear(); });
 on('done', ({ video, result, seconds, from, restored }) => {
-  clear();
-  for (const shot of result.shots) add(shot);
-  if (shots.length === 0) return;
   // A stopped run shown again ran in an earlier visit; a resumed one read the video from its rest's first frame (the
   // status line's times real time is of the same frames).
-  fill(restored ? null : seconds, frameSeconds(video, result.frameCount) - frameSeconds(video, from), result.stopped);
-  section.hidden = false;
+  ran = { seconds: restored ? null : seconds, read: frameSeconds(video, result.frameCount) - frameSeconds(video, from),
+    stopped: result.stopped };
+  shown(result.shots);
 });
+on('corrected', ({ result }) => { if (ran) shown(result.shots); });
+
+function shown(list) {
+  clear();
+  for (const shot of list) add(shot);
+  if (shots.length === 0) return;
+  fill(ran.seconds, ran.read, ran.stopped);
+  section.hidden = false;
+}
 
 // seconds: the run's, null for none; read: the video it read in that time; stopped: the last shot is cut short where
 // the run stopped, so the lengths are the shots before it, and the figures say they are of the part read.
@@ -65,6 +75,9 @@ function fill(seconds, read, stopped) {
     ...n === 0 ? [['Lengths', 'none finished', 'The run stopped inside its first shot: no shot has its whole length yet']] : [
       ['Average length', length(lengths.reduce((a, b) => a + b, 0) / n), `Over ${finished}`],
       ['Median length', length(median), `${median.toFixed(6)} s: half of ${finished} are shorter, half longer`],
+      ['Standard deviation', n > 1 ? length(deviation(lengths)) : '–', n > 1
+        ? `${deviation(lengths).toFixed(6)} s: the sample standard deviation (n − 1) of the lengths of ${finished}`
+        : 'One finished shot has no spread'],
       ...n === 1 ? [['Length', which(0), `${finished}: shot ${whole[0].shot}, ${lengths[0].toFixed(3)} s. Play it`]] : [
         ['Shortest', which(shortest), `Shot ${whole[shortest].shot}, ${lengths[shortest].toFixed(3)} s. Play it`],
         ['Longest', which(longest), `Shot ${whole[longest].shot}, ${lengths[longest].toFixed(3)} s. Play it`]]],
@@ -84,6 +97,12 @@ function fill(seconds, read, stopped) {
 }
 
 const length = s => `${s.toFixed(2)} s`;
+
+// The sample standard deviation (n − 1) of lengths, n > 1.
+function deviation(lengths) {
+  const mean = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+  return Math.sqrt(lengths.reduce((a, b) => a + (b - mean) ** 2, 0) / (lengths.length - 1));
+}
 
 // A shot's length and number, a button that plays it.
 function which(i) {

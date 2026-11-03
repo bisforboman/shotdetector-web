@@ -9,8 +9,11 @@
 // (Titles, folded under the row: the download carries them, a chapter left empty keeps Timeline's "Chapter n"; kept
 // while the run is shown, by the chapter's start, so a new minimum keeps the titles of the starts it keeps). A stopped run's are the result for the part
 // read, and its figures say where it stopped. A run lost with its worker (one that didn't answer a stop) says where it
-// had got to and has no downloads (.NET and the result went with the worker).
-import { call, card, frameSeconds, on } from '../app.js';
+// had got to and has no downloads (.NET and the result went with the worker). Once the cuts are corrected on the page
+// ('corrected', panels/corrections.js), the figures and every download but the stats CSV are the corrected list's,
+// made by ShotDetector (Api's Correct: LoadScenes of the list), still checked byte for byte; the stats CSV, each frame's
+// scores, stays the run's.
+import { browserDecoded, call, card, frameSeconds, on } from '../app.js';
 import { secondsOf, timecode } from '../timeline.js';
 
 const section = card('This run', {
@@ -109,7 +112,7 @@ function ran() {
     'The detector, threshold and minimum shot length the run used; a default is ShotDetector\'s own', 'detector'];
 }
 
-function clear() {
+function clear({ keepTitles = false } = {}) {
   for (const a of [...links, ...TIMELINES.map(t => t.link)]) {
     if (a.href) URL.revokeObjectURL(a.href);
     a.removeAttribute('href');
@@ -121,11 +124,25 @@ function clear() {
   chaptersNone.textContent = '';
   titles.hidden = true;
   titleList.replaceChildren();
-  typed.clear();
+  if (!keepTitles) typed.clear();
   figures.replaceChildren();
   summary.textContent = '';
   shots = [];
 }
+
+// Whose shots these are: scenedetect's, byte for byte, from ManagedCodecs' frames; or, for a WebM's VP9 or AV1, from
+// the browser's own decoder's (decision 2026-11-02-webm-browser-decoder.md), checked in Chromium only.
+const chip = section.querySelector('h2 .chip'), exactChip = { text: chip.textContent, title: chip.title };
+const BROWSER_TITLE = 'Decoded by your browser\'s own decoder (WebCodecs\' VideoDecoder), not ManagedCodecs: the page ' +
+  'can\'t check your browser. Chromium\'s software VP9 and AV1 decoders were checked to give FFmpeg\'s frames, and ' +
+  'its runs the CSVs, JSON, HTML and editors\' files of ShotDetector\'s FFmpeg path byte for byte on the samples.';
+on('opened', ({ video }) => {
+  const browser = browserDecoded(video);
+  chip.classList.toggle('exact', !browser);
+  chip.classList.toggle('browser', browser);
+  chip.textContent = browser ? 'your browser\'s decoder' : exactChip.text;
+  chip.title = browser ? BROWSER_TITLE : exactChip.title;
+});
 
 on('chose', ({ file }) => {
   runs++;
@@ -152,8 +169,18 @@ on('shot', ({ shot }) => {
   shots.push(shot);
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} so far`], ran());
 });
-on('done', async ({ video, result: r, name }) => {
-  clear();
+let done = null; // the run done's { video, name }, which its corrections are shown with
+on('done', ({ video, result, name }) => {
+  done = { video, name };
+  return shown(video, result, name, null);
+});
+on('corrected', ({ video, result, edits }) => {
+  if (done?.video === video) return shown(video, result, done.name, edits);
+});
+
+// The run's figures and downloads: of its result, or of its corrected list (edits: the corrections, else null).
+async function shown(video, r, name, edits) {
+  clear({ keepTitles: edits !== null });
   const rate = r.frameRate.num / r.frameRate.den, n = r.shots.length, cuts = Math.max(n - 1, 0);
   const fps = `${Number(rate.toFixed(3))} fps${video.frameTimestamps ? ' on average' : ''}`;
   if (r.stopped) {
@@ -170,13 +197,26 @@ on('done', async ({ video, result: r, name }) => {
         `${r.duration != null ? `, ${r.duration} s` : ''}`],
       ran());
   }
-  // The shots as JSON and HTML, of the run just done (the worker keeps its result until the next run).
-  const at = runs, json = await call('ShotsJson'), html = await call('ShotsHtml');
+  const changed = edits ? edits.removed.length + edits.added.length : 0;
+  if (changed > 0) {
+    summary.textContent = `${r.stopped ? `${summary.textContent} ` : ''}Corrected on the page: ${edits.removed.length} ` +
+      `detected ${edits.removed.length === 1 ? 'cut' : 'cuts'} removed, ${edits.added.length} added. The downloads but ` +
+      'the stats CSV are ShotDetector\'s for the corrected list (LoadScenes, as scenedetect\'s load-scenes).';
+    summary.title = 'A file whose length ShotDetector\'s LoadScenes reads otherwise than its run (a variable frame rate, ' +
+      'an edit list that ends early, a fragmented file) has its corrected shots timed as LoadScenes times them: ' +
+      'decision 2026-11-02-correcting-cuts.md';
+  } else {
+    summary.title = '';
+  }
+  // The shots as JSON and HTML, of the run just done or its corrected list (the worker keeps its result until the next
+  // run).
+  const at = ++runs, json = await call('ShotsJson'), html = await call('ShotsHtml');
   if (at !== runs) return;
   const [scenes, stats, shotsJson, shotsHtml] = links;
-  const part = r.stopped ? ', for the part read' : '';
+  const part = `${r.stopped ? ', for the part read' : ''}${changed > 0 ? ', of the cuts as corrected on the page' : ''}`;
   link(scenes, r.scenesCsv, `${name}.scenes.csv`, 'text/csv', `The shots, as scenedetect writes them${part}`);
-  link(stats, r.statsCsv, `${name}.stats.csv`, 'text/csv', `Each frame's scores, as scenedetect writes them${part}`);
+  link(stats, r.statsCsv, `${name}.stats.csv`, 'text/csv', `Each frame's scores, as scenedetect writes them` +
+    `${r.stopped ? ', for the part read' : ''}${changed > 0 ? ' (the run\'s: a correction changes no score)' : ''}`);
   link(shotsJson, json, `${name}.shots.json`, 'application/json', `The shots as ShotDetector's JSON${part}`);
   link(shotsHtml, html, `${name}.shots.html`, 'text/html', `The shots as scenedetect's HTML page${part}`);
   downloads.hidden = false;
@@ -193,7 +233,9 @@ on('done', async ({ video, result: r, name }) => {
   editors.hidden = files.every(f => f === null);
   chaptered = { at, name, part };
   await showChapters();
-});
+  // How many cuts the downloads shown have removed and added (the page check waits for it).
+  if (at === runs) section.dataset.edits = changed;
+}
 
 // The chapters of the run done, at the minimum typed (a whole number of seconds, 10 at least), again as it is typed;
 // a minimum already shown is left as it is (typing "15" asks for 10, then 15; deleting back to "1" asks nothing).
