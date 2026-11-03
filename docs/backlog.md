@@ -56,7 +56,8 @@ bump, then "Each frame's own colour tags" (Maybe), then "The first pts of a trac
   - Where: `Directory.Packages.props`, once ShotDetector releases the fix.
   - Done when: realworld.yml's tears and clips jobs pass on the release.
   - Not: a workaround here.
-  - Status: Waiting (2026-11-01): ShotDetector's fix and release
+  - Status: Open (2026-11-03): fixed upstream (shotdetector#701, the cosine table), released in ShotDetector 3.27.0
+    (on nuget.org since 2026-11-02); the bump to it is this row's work
 
 ### ShotDetector 3.25.0 and FrameReader 2.19.0
 
