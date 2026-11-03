@@ -28,7 +28,7 @@ internal static class RangeCheck
             string name = Path.GetFileName(sample), baseName = Path.Combine(outDir, Runs.BaseName(sample, run));
             try
             {
-                var input = VideoInput.Open(sample);
+                var input = FfmpegDecoder.Open(sample);
                 var ranges = input.Ranges(options, MostRanges);
                 var scores = ranges
                     .Select(r => RangeScores.FromBytes(input.ScoreRangeAsync(r, 8, _ => ValueTask.FromResult(true), options)

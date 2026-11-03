@@ -19,7 +19,8 @@
       "action": "./",
       "accept": {
         "video/mp4": [".mp4"],
-        "video/x-msvideo": [".avi"]
+        "video/x-msvideo": [".avi"],
+        "video/webm": [".webm"]
       },
       "launch_type": "single-client"
     }
@@ -31,7 +32,7 @@
     "enctype": "multipart/form-data",
     "params": {
       "files": [
-        { "name": "video", "accept": ["video/mp4", "video/x-msvideo", "video/avi", ".mp4", ".avi"] }
+        { "name": "video", "accept": ["video/mp4", "video/x-msvideo", "video/avi", "video/webm", ".mp4", ".avi", ".webm"] }
       ]
     }
   }

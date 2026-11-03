@@ -38,6 +38,16 @@ public static class Mp4Audio
                 : AudioMeasures.Without("The file has no audio track.");
         }
 
+        // A WebM's audio isn't decoded either (no Matroska demuxer in ManagedCodecs: decision 2026-11-02-webm-browser-decoder.md).
+        if (Refusal.IsMatroska(stream))
+        {
+            var mkv = MatroskaReader.Read(stream);
+            stream.Position = 0;
+            return mkv.Audio is { } track
+                ? AudioMeasures.Without($"The audio is '{track.CodecId}' in a WebM file: only AAC in MP4 is measured.")
+                : AudioMeasures.Without("The file has no audio track.");
+        }
+
         // The audio track alone: the video's samples are neither indexed nor read.
         using var demuxer = new Mp4Demuxer(stream, MediaTypes.Audio, leaveOpen: true);
         if (demuxer.Audio is not { } info)

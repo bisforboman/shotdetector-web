@@ -352,13 +352,39 @@ got=$(for f in mjpeg-444; do "$fp" -v error -show_entries stream=pix_fmt -of csv
 got+=$("$fp" -v error -select_streams v -count_packets -show_entries stream=nb_frames,nb_read_packets -of csv=p=0 "$out/reject/mjpeg-dropped-frame.avi")
 [[ $got == 'yuvj444p 51,50' ]] || { echo "MJPEG rejects: pix_fmt and the dropped frame's nb_frames, packets are $got" >&2; exit 1; }
 # The codecs and containers the core doesn't read, refused with their names (decision 2026-11-02-browser-decoder.md,
-# backlog "A refusal that says what to do"): HEVC in MP4 as a phone writes it ('hvc1'), VP9 in WebM, AV1 in MP4.
+# backlog "A refusal that says what to do"): HEVC in MP4 as a phone writes it ('hvc1'), AV1 in MP4, VP8 in WebM and
+# H.264 in Matroska (WebM's VP9 and AV1 are read, below).
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx265 -x265-params log-level=error -pix_fmt yuv420p -tag:v hvc1 "$out/reject/hevc.mp4"
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libvpx-vp9 -b:v 200k -pix_fmt yuv420p "$out/reject/vp9.webm"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libaom-av1 -cpu-used 8 -b:v 200k -pix_fmt yuv420p "$out/reject/av1.mp4"
-got=$(for f in hevc.mp4 vp9.webm av1.mp4; do "$fp" -v error -show_entries stream=codec_name,codec_tag_string:format=format_name -of default=nw=1:nk=1 "$out/reject/$f"; done | tr '\n' ' ')
-[[ $got == 'hevc hvc1 mov,mp4,m4a,3gp,3g2,mj2 vp9 [0][0][0][0] matroska,webm av1 av01 mov,mp4,m4a,3gp,3g2,mj2 ' ]] ||
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libvpx -b:v 200k -pix_fmt yuv420p "$out/reject/vp8.webm"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/h264.mkv"
+rm -f "$out/reject/vp9.webm"
+got=$(for f in hevc.mp4 av1.mp4 vp8.webm h264.mkv; do "$fp" -v error -show_entries stream=codec_name,codec_tag_string:format=format_name -of default=nw=1:nk=1 "$out/reject/$f"; done | tr '\n' ' ')
+[[ $got == 'hevc hvc1 mov,mp4,m4a,3gp,3g2,mj2 av1 av01 mov,mp4,m4a,3gp,3g2,mj2 vp8 [0][0][0][0] matroska,webm h264 [0][0][0][0] matroska,webm ' ]] ||
   { echo "Codec rejects: codecs, tags and containers are $got" >&2; exit 1; }
+
+# VP9 and AV1 in WebM, decoded by the browser's own decoder on the page (decision 2026-11-02-webm-browser-decoder.md;
+# natively, NativeCheck's FfmpegDecoder stands in for it): three() as libvpx-vp9 untagged, BT.709 tagged at 29.97 fps
+# (FFmpeg's matroska time base, 1/1000, puts its frames off the 30000/1001 grid by under a millisecond), full range (the
+# range bit of VP9's header), profile 2 (10-bit) and profile 1 (4:2:2); libaom AV1 with Opus audio, and 10-bit.
+vp9=(-c:v libvpx-vp9 -b:v 400k -deadline good -cpu-used 4)
+av1=(-c:v libaom-av1 -cpu-used 8 -b:v 400k)
+enc -filter_complex "$(three 320x240 25 1.5),$untagged" "${vp9[@]}" -pix_fmt yuv420p "$out/vp9-320x240-25.webm"
+enc -filter_complex "$(three 640x360 30000/1001 1.5)" "${vp9[@]}" -pix_fmt yuv420p -colorspace bt709 \
+  -color_primaries bt709 -color_trc bt709 "$out/vp9-bt709-640x360-2997.webm"
+enc -filter_complex "$(three 320x240 25 1.5),format=yuvj420p" "${vp9[@]}" -color_range pc "$out/vp9-full-range-320x240-25.webm"
+enc -filter_complex "$(three 320x240 25 1.5)" "${vp9[@]}" -pix_fmt yuv420p10le "$out/vp9-yuv420p10-320x240-25.webm"
+enc -filter_complex "$(three 320x240 25 1.5)" "${vp9[@]}" -pix_fmt yuv422p "$out/vp9-yuv422p-320x240-25.webm"
+enc -filter_complex "$(three 320x240 25 1.5)" -f lavfi -i sine=d=4.5 "${av1[@]}" -pix_fmt yuv420p -c:a libopus \
+  "$out/av1-opus-320x240-25.webm"
+enc -filter_complex "$(three 320x240 25 1.5)" "${av1[@]}" -pix_fmt yuv420p10le "$out/av1-yuv420p10-320x240-25.webm"
+got=$(for f in vp9-320x240-25 vp9-bt709-640x360-2997 vp9-full-range-320x240-25 vp9-yuv420p10-320x240-25 vp9-yuv422p-320x240-25 \
+  av1-opus-320x240-25 av1-yuv420p10-320x240-25; do
+  "$fp" -v error -select_streams v -show_entries stream=codec_name,pix_fmt,color_space,color_range,avg_frame_rate \
+    -of csv=p=0 "$out/$f.webm"; done | tr '\n' ' ')
+want='vp9,yuv420p,tv,unknown,25/1 vp9,yuv420p,tv,bt709,30000/1001 vp9,yuv420p,pc,bt470bg,25/1 vp9,yuv420p10le,tv,bt470bg,25/1 '
+want+='vp9,yuv422p,tv,bt470bg,25/1 av1,yuv420p,tv,bt470bg,25/1 av1,yuv420p10le,tv,bt470bg,25/1 '
+[[ $got == "$want" ]] || { echo "WebM samples: codec, pix_fmt, colour and rate are $got, not $want" >&2; exit 1; }
 # Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
 # and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
 # FFmpeg's encoder writes LC only).
@@ -394,4 +420,4 @@ for f in mp3:mp3 opus:opus aac-main:aac/Main; do
   got=$("$fp" -v error -select_streams a -show_entries stream=codec_name,profile -of csv=p=0 "$out/no-aac/${f%%:*}.mp4" | tr , /)
   [[ $got == "${f#*:}"* ]] || { echo "$out/no-aac/${f%%:*}.mp4: the audio is $got, not ${f#*:}." >&2; exit 1; }
 done
-echo "Samples in $out/: $(ls "$out"/*.mp4 "$out"/*.avi | wc -l) to compare, $(ls "$out"/reject | wc -l) to refuse, $(ls "$out"/no-aac | wc -l) without AAC to measure."
+echo "Samples in $out/: $(ls "$out"/*.mp4 "$out"/*.avi "$out"/*.webm | wc -l) to compare, $(ls "$out"/reject | wc -l) to refuse, $(ls "$out"/no-aac | wc -l) without AAC to measure."

@@ -36,10 +36,14 @@ it there, don't work around it).
   question the row doesn't settle goes to `docs/decisions/` first.
 - **Merging**: `main` requires CI's `build` check, and auto-merge is on. Once the PR is finished, with nothing left to
   push, `gh pr merge <n> --auto --merge --delete-branch`. Not earlier, or a green run merges half a row.
-- **Scope**: README's Status lists the formats; anything else is refused in `Mp4Input`'s or `AviInput`'s constructor
-  with a message saying what (another codec or container, `VideoInput.Open`'s first bytes too, in `Refusal`'s words:
+- **Scope**: README's Status lists the formats; anything else is refused in `Mp4Input`'s, `AviInput`'s or `WebmInput`'s
+  constructor with a message saying what (another codec or container, `VideoInput.Open`'s first bytes too, in `Refusal`'s words:
   FFmpeg's name and `Refusal.Scope`, which the page's `fail()` knows a refusal by). Widening it needs a sample for it in `tools/make-samples.sh`, the checks passing on it,
   and its real-world file in `tools/realworld.sh` moved from "refused" to "same" (Elephants Dream for a variable rate).
+- **The browser's decoder** (WebM's VP9 and AV1, decision 2026-11-02-webm-browser-decoder.md): the core reads and
+  describes the file; only the frames are the browser's (`IHostDecoder`). A WebM sample is checked natively with FFmpeg
+  standing in (`FfmpegDecoder`) and in Chromium by page-check (`--browser`); Node has none (app-check only opens it).
+  Such a run stays on the page's worker: no threads, no split, nothing kept to resume.
 - **Samples**: a new one isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg
   tags its test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - **FastYuv is LGPL-2.1**: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every
