@@ -85,6 +85,16 @@ publish").
 
 ## Waiting
 
+- A stopped run's end at a variable rate (upstream)
+  - Why: with ShotDetector 3.28.0, frames that end early at a variable rate (the page's Stop) end the last shot at the
+    frames read over the average rate (`vfr-320x240.mp4` stopped at frame 75: 4.740 s), where the FFmpeg path ends a
+    run at the last frame's pts + 1 / average rate (3.5832 s). Sent to the shotdetector coordinator 2026-11-03; the
+    owner chose to fix it in ShotDetector (the frame source ends where the file path does).
+  - Where: the ShotDetector pin, once released; `CorrectionCheck.cs` then compares a stopped run with the FFmpeg path's
+    (its `End` at the stopped frame's time) at a variable rate too, not only at a constant one.
+  - Done when: NativeCheck's stopped corrected runs agree with the FFmpeg path on every sample.
+  - Status: Waiting (2026-11-03): on the ShotDetector release with the fix
+
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
     npm's trusted publishing needs the package to exist on npmjs.com with this repository's `npm.yml` as its trusted
