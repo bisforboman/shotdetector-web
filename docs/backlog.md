@@ -131,15 +131,6 @@ a frame of another size refused (#625). What it still lacks is in its `docs/fram
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
 
-- WebM runs split, resumed and on threads
-  - Why: a browser-decoded WebM runs on the page's worker alone, and a stopped one isn't kept (decision
-    `2026-11-02-webm-browser-decoder.md`, the owner's "one worker only"). NativeCheck's ranges, threads and resume
-    checks already pass on the WebM samples with FFmpeg standing in: what is missing is the page's side (a
-    `VideoDecoder` per range's worker from its keyframe, the threaded runtime's imports on the main thread).
-  - Where: `app.js`'s `ranges`, `go` and `keep` (`browserDecoded`), `threads.js` (the decoder imports), page-check.
-  - Done when: page-check splits a WebM across two workers, stops and resumes one, to the native run's files.
-  - Status: In progress (2026-11-04)
-
 - An unaligned atomic in the threaded runtime, once
   - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
     interpreted publish) gave the native run's files, then the threaded runtime ended: "operation does not support
