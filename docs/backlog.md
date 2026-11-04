@@ -140,6 +140,16 @@ file out of `samples/reject/`, and passes the native check.
   - Done when: page-check splits a WebM across two workers, stops and resumes one, to the native run's files.
   - Status: In progress (2026-11-04)
 
+- An unaligned atomic in the threaded runtime, once
+  - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
+    interpreted publish) gave the native run's files, then the threaded runtime ended: "operation does not support
+    unaligned accesses" (WebAssembly's trap for an atomic on an unaligned address) and `RuntimeError: unreachable` in
+    `threads/_framework/dotnet.native.js`. Nineteen such runs, the same file and the 8-bit AV1 one, gave it once. The
+    page's code has no atomics of its own there: .NET's threaded runtime (10.0.14), or the decoder imports it runs on
+    the main thread for a WebM (`JsDecoder`'s `Span` views).
+  - Where: a repro first (page-check's `resumedBrowser` in a loop), then .NET's issue tracker if it is the runtime's.
+  - Status: Maybe (2026-11-04)
+
 - WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
   - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration (FFmpeg's rate then comes from the frames
     it probes) or whose Segment has no Duration (a live recording), and AV1 in MP4 (YouTube's) is refused as another

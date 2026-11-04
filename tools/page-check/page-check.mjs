@@ -614,7 +614,7 @@ async function picture(page, what, file, split = false) {
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${stills} still pictures, ${lane} lane), ` +
       `not ${crop}, ${p.bars.length} colour bars and ${p.freeze.spans.length} still pictures`);
   else
-    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${split ? 'still pictures not looked for (split)' : `${stills} still pictures`}, as the native check's`);
+    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${stills} still pictures, as the native check's`);
 }
 
 // The frame types' card after a whole run: the counts of ffprobe's types (<sample>.frametypes.txt, which the native
