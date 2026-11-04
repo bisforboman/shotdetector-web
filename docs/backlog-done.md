@@ -1741,6 +1741,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     four whose description or measures differ run by hand (phones-differ) under rows of their own ("Found by the real
     phone files"). No openly licensed broadcast capture was found on a host either reaches.
 
+- A WhatsApp file's audio peaks
+  - Why: `phone-whatsapp-2017.mp4` (AAC 48 kHz 2 ch, very quiet: -64.6 LUFS): true and sample peaks -41.494 dB on both
+    channels against FFmpeg's ebur128 -41.938; the loudness and the waveform agree.
+  - Where: `Mp4Audio`'s peaks (FrameReader) or ManagedCodecs' AAC decoder on this stream, with the file: report
+    upstream if either is theirs.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Done (2026-11-04): the check's reference, not the core. FFmpeg's astats gives -41.494 dB, the core's peak;
+    ebur128's frame metadata, which AudioCheck reads, prints a peak's linear amplitude to three decimals (0.00842 as
+    0.008, -41.938 dB). AudioCheck now takes a peak within that precision as dB at its level (here 0.56 dB), or 0.1 dB
+    where wider; the file "All agree" and moves to realworld.yml's phones group
+
 - A 3GP's chroma location
   - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
     (unspecified).

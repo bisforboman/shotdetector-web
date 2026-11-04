@@ -47,8 +47,8 @@ jobs:
             {"group": "interlaced", "files": "caminandes-1080i25.mp4"},
             {"group": "bunny", "files": "BigBuckBunny_320x180.mp4"},
             {"group": "tears", "files": "tears_of_steel_720p.mov"},
-            {"group": "phones", "files": "phone-iphone-2012-portrait.mov phone-iphone-2016-1080p.mov phone-iphone-2017-portrait.mov phone-android-2017-portrait.mp4 phone-android-2011.3gp"},
-            {"group": "phones-differ", "files": "phone-iphone-2018.mov phone-android-2017-1080p.mp4 phone-whatsapp-2017.mp4", "byHand": true}
+            {"group": "phones", "files": "phone-iphone-2012-portrait.mov phone-iphone-2016-1080p.mov phone-iphone-2017-portrait.mov phone-android-2017-portrait.mp4 phone-android-2011.3gp phone-whatsapp-2017.mp4"},
+            {"group": "phones-differ", "files": "phone-iphone-2018.mov phone-android-2017-1080p.mp4", "byHand": true}
           ]'
           # A group byHand (files whose differences have backlog rows) runs only when named.
           matrix=$(jq -c --arg only "$ONLY" '[.[] | select(($only == "all" and (.byHand | not)) or .group == $only)]' <<< "$all")
