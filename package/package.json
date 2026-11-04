@@ -17,6 +17,7 @@
     "threads.js",
     "pause.js",
     "blob-write.js",
+    "video-decode.js",
     "aot/",
     "interpreted/",
     "threads/",
