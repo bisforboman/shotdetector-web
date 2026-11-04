@@ -202,7 +202,7 @@ file out of `samples/reject/`, and passes the native check.
     standard tables before the first SOS when a JPEG has none (bytes copied, no decoding).
   - Done when: the page check shows that sample's picture and stills.
   - Not: decoding in .NET for the picture.
-  - Status: Maybe (found 2026-10-31)
+  - Status: In progress (2026-11-04)
 
 
 - A Cinemetrics file

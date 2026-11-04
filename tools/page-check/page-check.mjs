@@ -27,7 +27,8 @@
 //   8. an AVI (MJPEG, which no browser plays) picked on threads: the player the file's own JPEG at the playhead (an
 //      <img> in the video's place), the frame the playhead is in after a click on the timeline and on a shot's row,
 //      decoded; a still per shot from the same JPEGs, and the contact sheet's from them as in 1; the downloads the native
-//      run's (backlog "The picture of an AVI on the page");
+//      run's (backlog "The picture of an AVI on the page"); then each --avi file the same (one whose JPEGs have no
+//      Huffman tables, which the browser's decoder supplies: decision 2026-11-04-jpegs-without-huffman-tables.md);
 //   9. in Firefox, on the page's worker (?threads=0): the demo stopped, the page reloaded, the demo picked again shown
 //      stopped and resumed to the whole run's downloads (PAGE_CHECK_FIREFOX=skip leaves it out where Playwright has no
 //      Firefox: a cloud session's).
@@ -57,7 +58,7 @@
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
-//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [<more.mp4>...]
+//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [--avi <file.avi>]... [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -70,7 +71,7 @@ const args = process.argv.slice(2);
 const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
 if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
   console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
-    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [<more.mp4>...]');
+    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [--avi <file.avi>]... [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
@@ -81,11 +82,14 @@ const refusedFiles = refusedAt.filter((_, k) => k % 2 === 1).map(i => resolve(ar
 // --browser <file>, any number of times: a WebM the browser's own decoder decodes (decision 2026-11-02-webm-browser-decoder.md).
 const browserAt = args.flatMap((a, i) => a === '--browser' ? [i, i + 1] : []);
 const browserFiles = browserAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
+// --avi <file>, any number of times: another AVI picked as <sample.avi> is, after it (its JPEGs without Huffman tables).
+const aviAt = args.flatMap((a, i) => a === '--avi' ? [i, i + 1] : []);
+const aviFiles = aviAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
 const [root, outDir, sample, demo, avi, ...more] = args
-  .filter((_, i) => ![at, at + 1, ...(di >= 0 ? [di, di + 1] : []), ...refusedAt, ...browserAt].includes(i)).map(a => resolve(a));
+  .filter((_, i) => ![at, at + 1, ...(di >= 0 ? [di, di + 1] : []), ...refusedAt, ...browserAt, ...aviAt].includes(i)).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
 const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
-  ...Object.fromEntries([...more, ...browserFiles, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
+  ...Object.fromEntries([...more, ...browserFiles, ...aviFiles, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
 const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
@@ -1020,7 +1024,8 @@ async function resumedBrowser(file, query) {
 
 // An AVI picked (MJPEG, which no browser plays): the player the file's own JPEG at the playhead, in the <video>'s place,
 // following the timeline and the shots' rows; a still per shot from the same JPEGs; the downloads the native run's.
-async function pickedAvi() {
+// Its screenshots are named after screenshots (the first AVI's the-avi).
+async function pickedAvi(avi, screenshots) {
   const what = `${basename(avi)}, picked`;
   const { context, page, errors } = await open();
   await page.setInputFiles('#file', avi);
@@ -1087,7 +1092,7 @@ async function pickedAvi() {
     if (stills.length !== rows || missing.length > 0) fail(`${what}: ${rows} shots, stills: ${missing.join('; ')}`);
     else console.log(`${what}: a still for each of the ${rows} shots, from the file's JPEGs`);
     await contactSheet(page, what, avi);
-    await looks(page, what, 'the-avi.done');
+    await looks(page, what, `${screenshots}.done`);
   }
   report(what, errors);
   await context.close();
@@ -1207,7 +1212,8 @@ try {
     await resumedBrowser(file, '');
     await resumedBrowser(file, '?workers=2');
   }
-  await pickedAvi();
+  await pickedAvi(avi, 'the-avi');
+  for (const a of aviFiles) await pickedAvi(a, stem(a));
   await launched('', `${basename(sample)}, opened with the installed app`);
   await launched('?threads=0', `${basename(sample)}, opened with the installed app, the page's worker`);
   await sharedTo('', `${basename(sample)}, shared to the page`);
