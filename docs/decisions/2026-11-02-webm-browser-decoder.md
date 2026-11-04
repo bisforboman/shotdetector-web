@@ -56,3 +56,10 @@ but page-check runs a browser, and which of the page's run kinds (threads, split
 
 The owner, 2026-11-02, each as recommended: the core's own WebM reader (1; an upstream issue to replace it later), one
 worker only (4: no threads, split or resume in this row), and FFmpeg standing in for the browser natively (3).
+
+## Later
+
+2026-11-04, the owner's choice through the coordinator (backlog "WebM runs split, resumed and on threads"): point 4
+lifted. A browser-decoded run goes on threads (the threaded runtime's decoder imports on the main thread), split across
+workers (each worker's `VideoDecoder` from its range's keyframe) and kept to resume, as any run; page-check holds the
+AV1 samples split, stopped and resumed to the native run's files.

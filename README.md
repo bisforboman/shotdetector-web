@@ -46,8 +46,9 @@ rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`
 range or not, with a DefaultDuration and a Duration; decisions `docs/decisions/2026-11-02-browser-decoder.md` and
 `2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
 libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
-browser's own `VideoDecoder` (WebCodecs) in the page's worker, on that worker alone (no threads, no split, a stopped
-run not kept), its run card's chip "your browser's decoder". Natively FFmpeg stands in for the browser
+browser's own `VideoDecoder` (WebCodecs), its run card's chip "your browser's decoder". It runs as any file does: on
+threads (the threaded runtime runs its imports on the main thread, where threads.js gives it the decoder's), split
+across workers (each worker's own `VideoDecoder` from its range's keyframe), and a stopped run kept to resume. Natively FFmpeg stands in for the browser
 (`tools/NativeCheck/FfmpegDecoder.cs`: the core's packets as IVF to ffmpeg) and every check holds the result to
 `Detect(path)`'s byte for byte; page-check then holds Chromium's decoder to the same files on every WebM sample. A
 browser whose decoder doesn't take the codec, or whose frames aren't Y, U and V planes (Firefox's BGRX), refuses the run

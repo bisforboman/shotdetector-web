@@ -45,7 +45,8 @@ it there, don't work around it).
 - **The browser's decoder** (WebM's VP9 and AV1, decision 2026-11-02-webm-browser-decoder.md): the core reads and
   describes the file; only the frames are the browser's (`IHostDecoder`). A WebM sample is checked natively with FFmpeg
   standing in (`FfmpegDecoder`) and in Chromium by page-check (`--browser`); Node has none (app-check only opens it).
-  Such a run stays on the page's worker: no threads, no split, nothing kept to resume.
+  Such a run goes as any (on threads, split, kept to resume): each runtime's `VideoDecoder` from its range's keyframe,
+  the threaded runtime's on the main thread (threads.js gives it the decoder imports).
 - **Samples**: a new one isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg
   tags its test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - **FastYuv is LGPL-2.1**: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every

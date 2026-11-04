@@ -44,9 +44,10 @@
 //      target's multipart POST, which sw.js answers) on both: each to the same downloads as 1.
 //  12. each --refused file (HEVC in MP4, VP8 in WebM) picked: the core's refusal naming the codec, what reads the file
 //      instead under it, the iPhone's line for HEVC alone (backlog "A refusal that says what to do").
-//  13. each --browser file (VP9 and AV1 in WebM) picked on an isolated page: decoded by Chromium's VideoDecoder on the
-//      page's worker, its chip the browser's decoder's, its downloads, picture and frame types the native check's (FFmpeg
-//      standing in for the browser) byte for byte.
+//  13. each --browser file (VP9 and AV1 in WebM) picked on an isolated page: decoded by Chromium's VideoDecoder on
+//      threads (its imports on the main thread), its chip the browser's decoder's, its downloads, picture and frame types
+//      the native check's (FFmpeg standing in for the browser) byte for byte; the AV1 ones also on two workers, and held,
+//      stopped and resumed on threads and on two workers, to the native run's files.
 // The demo's whole run, the stopped run shown again after the reload and its resume are each checked for the layout
 // (looks: no hole in the details, the shots unscrolled, no red in a lane but the playhead, the run's figures in the
 // first screen) and shot at 1280 and 390 px, light and dark, into <out>.
@@ -613,7 +614,7 @@ async function picture(page, what, file, split = false) {
     fail(`${what}: the picture's card says "${text.slice(0, 300)}" (${bars} colour bars, ${stills} still pictures, ${lane} lane), ` +
       `not ${crop}, ${p.bars.length} colour bars and ${p.freeze.spans.length} still pictures`);
   else
-    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${split ? 'still pictures not looked for (split)' : `${stills} still pictures`}, as the native check's`);
+    console.log(`${what}: the picture's card: ${crop}, ${bars} colour bars, ${stills} still pictures, as the native check's`);
 }
 
 // The frame types' card after a whole run: the counts of ffprobe's types (<sample>.frametypes.txt, which the native
@@ -959,9 +960,9 @@ async function downloadsCorrected(page, what, file, run) {
 }
 
 // A WebM picked (VP9 or AV1, decoded by the browser's own VideoDecoder: decision 2026-11-02-webm-browser-decoder.md),
-// on an isolated page: the run goes on the page's worker (not threads, not split, whatever the page's options), says the
-// browser decoded it, its card's chip is the browser's decoder's, and its downloads, picture and frame types are the
-// native check's (FFmpeg's decoder standing in for the browser), byte for byte: Chromium's decoder held to FFmpeg's path.
+// on an isolated page: the run goes on threads as any run (the decoder's imports on the main thread), says the browser
+// decoded it, its card's chip is the browser's decoder's, and its downloads, picture and frame types are the native
+// check's (FFmpeg's decoder standing in for the browser), byte for byte: Chromium's decoder held to FFmpeg's path.
 async function pickedBrowser(file) {
   const what = `${basename(file)}, decoded by the browser`;
   const { context, page, errors } = await open();
@@ -970,7 +971,7 @@ async function pickedBrowser(file) {
   const run = await page.inputValue('#detector');
   const status = await finished(page, what);
   if (status !== null) {
-    if (THREADED.test(status) || /workers/.test(status)) fail(`${what}: not on the page's worker alone: ${status}`);
+    if (!THREADED.test(status) || /workers/.test(status)) fail(`${what}: not on threads, as any run: ${status}`);
     const chip = await page.evaluate(() => {
       const c = document.querySelector('#run h2 .chip');
       return { text: c?.textContent, browser: c?.classList.contains('browser') };
@@ -980,6 +981,38 @@ async function pickedBrowser(file) {
     await compare(page, what, basename(file), run);
     await picture(page, what, file);
     await frameTypes(page, what, file);
+  }
+  report(what, errors);
+  await context.close();
+}
+
+// A WebM held past half-way and stopped (each worker's VideoDecoder from its range's keyframe when split), kept, and resumed in the
+// same visit: Resume offered, the resumed status naming the frame it had got to, the whole run's downloads the native
+// check's.
+async function resumedBrowser(file, query) {
+  const what = `${basename(file)}, decoded by the browser, stopped and resumed${query ? `, ${query}` : ''}`;
+  const { context, page, errors } = await open(query);
+  await page.setInputFiles('#file', file);
+  await page.click('#detect');
+  const run = await page.inputValue('#detector');
+  // Held past half-way, then stopped while held: a short file's run would end before a stop clicked as it goes.
+  const held = await paused(page, `${what}, paused`, 0.5);
+  let frames = null;
+  if (held !== null) {
+    await page.click('#stop');
+    const status = await finished(page, what, 'stopped');
+    frames = status === null ? null : Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
+  }
+  if (frames !== null) {
+    if (!await page.isVisible('#resume')) fail(`${what}: stopped at frame ${frames}, Resume isn't offered`);
+    else {
+      await page.click('#resume');
+      const done = await finished(page, `${what}, resumed`);
+      if (done !== null) {
+        if (!resumedAt(done, frames)) fail(`${what}: resumed, the status says ${done}`);
+        await compare(page, `${what}, resumed`, basename(file), run);
+      }
+    }
   }
   report(what, errors);
   await context.close();
@@ -1168,6 +1201,12 @@ async function sharedTo(query, what) {
 try {
   for (const file of refusedFiles) await pickedRefused(file);
   for (const file of browserFiles) await pickedBrowser(file);
+  // Split and resumed (the WebMs with keyframes enough for two ranges: the AV1 ones).
+  for (const file of browserFiles.filter(f => basename(f).startsWith('av1-'))) {
+    await picked('?workers=2', `${basename(file)}, decoded by the browser, two workers`, file);
+    await resumedBrowser(file, '');
+    await resumedBrowser(file, '?workers=2');
+  }
   await pickedAvi();
   await launched('', `${basename(sample)}, opened with the installed app`);
   await launched('?threads=0', `${basename(sample)}, opened with the installed app, the page's worker`);

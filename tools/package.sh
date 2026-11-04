@@ -4,7 +4,8 @@
 #   aot/          the App's worker.js, blob-read.js, blob-write.js, pause.js, video-decode.js and _framework/, compiled
 #                 ahead of time
 #   interpreted/  the same, interpreted
-#   threads.js, pause.js, blob-write.js, threads/_framework/   the threaded runner and the threaded AOT bundle
+#   threads.js, pause.js, blob-write.js, video-decode.js, threads/_framework/   the threaded runner (its WebM decoder
+#                 imports too) and the threaded AOT bundle
 #   licenses/     FastYuv's COPYING.LGPL (LGPL-2.1: it stays its own file), LICENSE, THIRD-PARTY-NOTICES.md
 # package.json's "shotdetector" field gets the packages' versions from Directory.Packages.props.
 #
@@ -60,7 +61,7 @@ for bundle in aot interpreted; do
   cp -r "$root/_framework" "$out/$bundle/_framework"
 done
 www=$work/interpreted/wwwroot
-cp "$www/threads.js" "$www/pause.js" "$www/blob-write.js" "$out/"
+cp "$www/threads.js" "$www/pause.js" "$www/blob-write.js" "$www/video-decode.js" "$out/"
 mkdir -p "$out/threads"
 cp -r "$threadsRoot/_framework" "$out/threads/_framework"
 cp -r "$work/interpreted/licenses/." "$out/licenses/"
