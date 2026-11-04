@@ -193,7 +193,7 @@ file out of `samples/reject/`, and passes the native check.
   - Where: `tools/realworld.sh`'s list: files from Wikimedia Commons (reachable from GitHub's runners), pinned by
     SHA-256 recorded from the workflow's first download, as ci.yml's Sintel trailer was.
   - Done when: realworld.yml runs them, each "same" or "refused" with its row named.
-  - Status: Maybe
+  - Status: In progress (2026-11-04)
 
 
 

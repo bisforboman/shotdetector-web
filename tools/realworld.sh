@@ -23,6 +23,7 @@ cd "$(dirname "$0")/.."
 
 dir=samples/realworld
 blender=https://download.blender.org
+ia=https://archive.org/download
 
 # name|source|SHA-256 of the file kept (a zip's member's)|member of a zip, or the recipe of a made file|expect|light
 # A made file's source is another row's name; its recipe is ffmpeg's arguments, @ standing for the input (-i source).
@@ -48,6 +49,25 @@ FILES=(
   # The first minute of Caminandes as broadcast-like 1080i25: top field first, MBAFF (x264's interlaced coding), 8 Mb/s,
   # AAC 192 kb/s.
   "caminandes-1080i25.mp4|caminandes_gran_dillama.mp4||@ -t 60 -vf fps=50,interlace=scan=tff,setfield=tff -c:v libx264 -preset fast -flags +ildct+ilme -x264-params tff=1 -b:v 8M -r 25 -c:a aac -b:a 192k|same|"
+  # Real phone files as the phones wrote them (backlog "Real phone and broadcast files"): Flickr uploads' originals,
+  # mirrored on archive.org (reachable from GitHub's runners), CC-BY 2.0 or CC-BY-SA 2.0 as each item says, by their
+  # Flickr authors. Their SHA-256 recorded from realworld.yml's first download.
+  # An iPhone, portrait, 2012: IMG_0644.mov (CC-BY 2.0); 15 MB.
+  "phone-iphone-2012-portrait.mov|$ia/Flickr-7390656336/IMG_0644-7390656336.mov|unpinned||same|"
+  # An iPhone, 1080p, 2016: IMG_1623.mov (CC-BY 2.0); 17 MB.
+  "phone-iphone-2016-1080p.mov|$ia/Flickr-30339103076/IMG_1623-30339103076.mov|unpinned||same|"
+  # An iPhone, portrait 1080p, 2017: IMG_2557.mov (CC-BY 2.0); 32 MB.
+  "phone-iphone-2017-portrait.mov|$ia/Flickr-32792624145/IMG_2557-32792624145.mov|unpinned||same|"
+  # An iPhone, 2018: IMG_6572.mov (CC-BY 2.0); 2.2 MB.
+  "phone-iphone-2018.mov|$ia/Flickr-44309131575/IMG_6572-44309131575.mov|unpinned||same|"
+  # An Android phone, 1080p, 2017: VID_20171119_173236.mp4 (CC-BY 2.0); 11 MB.
+  "phone-android-2017-1080p.mp4|$ia/Flickr-26747292089/VID_20171119_173236-26747292089.mp4|unpinned||same|"
+  # An Android phone, portrait, 2017: VID_20171025_115139.mp4 (CC-BY 2.0); 37 MB.
+  "phone-android-2017-portrait.mp4|$ia/Flickr-37923566351/VID_20171025_115139-37923566351.mp4|unpinned||same|"
+  # An Android phone's 3GP, 2011: VID_20110905_143459.3gp (CC-BY 2.0); 5.9 MB.
+  "phone-android-2011.3gp|$ia/Flickr-6126538087/VID_20110905_143459-6126538087.3gp|unpinned||same|"
+  # A phone video as WhatsApp sent it, 2017: VID-20170819-WA0023.mp4 (CC-BY-SA 2.0); 6.4 MB.
+  "phone-whatsapp-2017.mp4|$ia/Flickr-37596263930/VID-20170819-WA0023-37596263930.mp4|unpinned||same|"
 )
 
 field() { local IFS='|'; local -a f; read -r -a f <<< "$1"; echo "${f[$2]:-}"; }
@@ -98,7 +118,12 @@ fetch() {
   # Checked on every run, a cached file too (realworld.yml restores samples/realworld/).
   local got
   got=$(sha256sum < "$path" | cut -d' ' -f1)
-  if [[ $got != "$sha" ]]; then
+  if [[ $sha == unpinned ]]; then
+    # A new file before its first download: its SHA-256 and what it is, to pin from the run's log (the run then fails:
+    # check's "Unpinned").
+    echo "::warning::$name is unpinned: SHA-256 $got, $(stat -c %s "$path") bytes" >&2
+    "$(ffmpeg_bin ffprobe)" -v error -show_entries stream=codec_type,codec_name,codec_tag_string,profile,width,height,pix_fmt,field_order,r_frame_rate,avg_frame_rate,nb_frames:stream_side_data=rotation:format=format_name,duration -of compact=p=0 "$path" >&2 || true
+  elif [[ $got != "$sha" ]]; then
     rm -f "$path"
     echo "::error::$name from $src has SHA-256 $got, not the pinned $sha (deleted; the source changed?)" >&2; exit 1
   fi
@@ -130,10 +155,11 @@ esac
 
 : "${SHOTDETECTOR_FFMPEG_LIBS:?Set SHOTDETECTOR_FFMPEG_LIBS to the folder of an FFmpeg 8.1 shared build}"
 export LD_LIBRARY_PATH=$SHOTDETECTOR_FFMPEG_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-same=() refused=() full=() light=()
+same=() refused=() full=() light=() unpinned=()
 for n in "${names[@]}"; do
   path=$(fetch "$n")
   r=$(row "$n")
+  [[ $(field "$r" 2) == unpinned ]] && unpinned+=("$n")
   if [[ $(field "$r" 4) == refused ]]; then refused+=("$path")
   else
     same+=("$path")
@@ -152,6 +178,7 @@ dotnet tools/NativeCheck/bin/Release/net10.0/NativeCheck.dll --out "$out/native"
   | tee "$out/native-report.md" || status=$?
 if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then { echo "## Real world, native: ManagedCodecs + FastYuv vs FFmpeg"; cat "$out/native-report.md"; } >> "$GITHUB_STEP_SUMMARY"; fi
 if [[ $status != 0 ]]; then summary "Real world, native (${names[*]}): FAILED (above)."; exit 1; fi
+if [[ ${#unpinned[@]} -gt 0 ]]; then summary "Unpinned (pin their SHA-256 from this log): ${unpinned[*]}."; exit 1; fi
 [[ $wasm == true ]] || exit 0
 
 # The page's bundle, AOT, as pages.yml deploys it (tools/check.sh's publish_app, without the threaded bundle, which
