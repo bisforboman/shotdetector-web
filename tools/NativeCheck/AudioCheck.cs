@@ -6,7 +6,8 @@
 //   within 0.1 dB;
 // - silences against FFmpeg's silencedetect, at its default 2 s and at 1 s: the same spans, each end within a packet;
 // - integrated loudness and loudness range against FFmpeg's ebur128 (within 0.1 LU), true and sample peaks per channel
-//   against its peak=true+sample (within 0.1 dB).
+//   against its peak=true+sample (within 0.1 dB, or the three decimals its metadata prints a peak's linear amplitude with,
+//   as dB at that level, where wider: a quiet stream's).
 // On the tone sample both tones must come out at -20 dBFS (within 0.1 dB). Each file in no-aac/ beside the samples
 // (make-samples.sh: audio that isn't AAC, or that ManagedCodecs' decoder refuses) must be answered with the reason it
 // isn't measured, not an exception. A Markdown table on standard output; each sample's waveform to the output folder
@@ -169,11 +170,21 @@ static class AudioCheck
         var loudness = ours.Loudness!;
         cells.Add(Compare("integrated", loudness.Integrated, ffmpeg.Integrated, LoudnessTolerance, "LUFS", problems));
         cells.Add(Compare("range", loudness.Range, ffmpeg.Range, LoudnessTolerance, "LU", problems));
-        cells.Add(string.Join(", ", ours.Peaks.Select((p, c) => Compare($"true peak {c}", p.True, ffmpeg.TruePeaks[c], LevelTolerance, "dBTP", problems))));
-        cells.Add(string.Join(", ", ours.Peaks.Select((p, c) => Compare($"sample peak {c}", p.Sample, ffmpeg.SamplePeaks[c], LevelTolerance, "dBFS", problems)))
+        cells.Add(string.Join(", ", ours.Peaks.Select((p, c) => Compare($"true peak {c}", p.True, ffmpeg.TruePeaks[c], ffmpeg.TruePeakTolerances[c], "dBTP", problems))));
+        cells.Add(string.Join(", ", ours.Peaks.Select((p, c) => Compare($"sample peak {c}", p.Sample, ffmpeg.SamplePeaks[c], ffmpeg.SamplePeakTolerances[c], "dBFS", problems)))
             + $"; full scale {string.Join("/", ours.Peaks.Select(p => p.FullScale))}");
         cells.Add($"{time.TotalSeconds:F2} s");
     }
+
+    /// <summary>
+    /// The tolerance in dB for a peak ebur128's metadata prints as <paramref name="linear"/>: its three decimals (half a
+    /// unit of the last, 0.0005) as dB at that level, or <see cref="LevelTolerance"/> where that is wider. A quiet
+    /// stream's peak loses most of its digits there: 0.00842 (-41.494 dB, astats') prints 0.008 (-41.938 dB), 0.56 dB
+    /// either way (realworld.sh's phone-whatsapp-2017.mp4).
+    /// </summary>
+    static double PeakTolerance(double? linear) => linear is { } p && p > 0.0005
+        ? Math.Max(LevelTolerance, 20 * Math.Log10(p / (p - 0.0005)))
+        : double.PositiveInfinity;
 
     static string Compare(string name, double? ours, double? ffmpeg, double tolerance, string unit, List<string> problems)
     {
@@ -200,7 +211,9 @@ static class AudioCheck
         double? Integrated,
         double Range,
         double?[] TruePeaks,
-        double?[] SamplePeaks);
+        double?[] SamplePeaks,
+        double[] TruePeakTolerances,
+        double[] SamplePeakTolerances);
 
     /// <summary>
     /// FFmpeg's silencedetect (2 s and 1 s) and ebur128=peak=true+sample on the first audio stream, through the ffmpeg
@@ -256,7 +269,9 @@ static class AudioCheck
                 integrated <= -70 ? null : integrated, // ebur128 starts at -70 and stays there with nothing above the gate
                 Value("LRA") ?? 0,
                 [.. Enumerable.Range(0, channels).Select(c => Value($"true_peaks_ch{c}") is { } p ? 20 * Math.Log10(p) : (double?)null)],
-                [.. Enumerable.Range(0, channels).Select(c => Value($"sample_peaks_ch{c}") is { } p ? 20 * Math.Log10(p) : (double?)null)]);
+                [.. Enumerable.Range(0, channels).Select(c => Value($"sample_peaks_ch{c}") is { } p ? 20 * Math.Log10(p) : (double?)null)],
+                [.. Enumerable.Range(0, channels).Select(c => PeakTolerance(Value($"true_peaks_ch{c}")))],
+                [.. Enumerable.Range(0, channels).Select(c => PeakTolerance(Value($"sample_peaks_ch{c}")))]);
         }
         finally
         {
