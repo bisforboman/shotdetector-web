@@ -1068,7 +1068,16 @@ Big Buck Bunny at 320x180 (the whole film, 10 min, Baseline, AAC without an edit
 (2.5 min, 1080p High, AAC), Tears of Steel at 720p (12 min, in a QuickTime file, MP3) and Elephants Dream at 480p (11
 min, a variable rate: refused today). For what no openly licensed real file we reach has, the pinned FFmpeg makes
 variants of them, as it makes the demo clip: Caminandes fragmented (streams copied), Sintel's trailer rotated a quarter
-(copied) and a minute of Caminandes as 1080i25 MBAFF with AAC. A file expected refused
+(copied) and a minute of Caminandes as 1080i25 MBAFF with AAC. And eight real phone files, as the phones wrote them
+(backlog-done "Real phone and broadcast files"): Flickr uploads' originals under CC-BY 2.0 or CC-BY-SA 2.0, mirrored on
+archive.org, whose file servers GitHub's runners reach but the cloud sessions don't: iPhones from 2012 to 2018 and
+Android phones from 2011 to 2017, portrait (turned -90) and turned 180, at variable rates, full range, one a 3GP, one
+as WhatsApp sent it, all H.264. A row whose source a session can't reach may be "unpinned": its download prints its
+SHA-256 and ffprobe's summary, and the check fails ("Unpinned") until the SHA-256 is pinned from that log. All eight
+give the FFmpeg path's CSVs and shots on every run; four differ in their description or measures, each a backlog row
+("Found by the real phone files"), and run by hand (realworld.yml's `phones-differ`, a group `byHand` that `all`
+leaves out) until their rows move them to `phones`. No openly licensed broadcast capture was found on a host either
+reaches (archive.org's are TV recordings without a licence). A file expected refused
 must be refused with an `UnsupportedVideoException`; once its row widens the scope the nightly run says "Not refused",
 and the row moves it to "same". On the files over three minutes (Big Buck Bunny, Tears of Steel) the bundle runs only
 the default and every-detector runs, whole and split (`--light`): stop, pause and resume, which don't depend on the
