@@ -160,14 +160,20 @@ a frame of another size refused (#625). What it still lacks is in its `docs/fram
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
 
-- An unaligned atomic in the threaded runtime, once
+- A threaded WebM run's intermittent failures (an unaligned atomic, a crash, a result that doesn't come)
   - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
     interpreted publish) gave the native run's files, then the threaded runtime ended: "operation does not support
     unaligned accesses" (WebAssembly's trap for an atomic on an unaligned address) and `RuntimeError: unreachable` in
     `threads/_framework/dotnet.native.js`. Nineteen such runs, the same file and the 8-bit AV1 one, gave it once. The
     page's code has no atomics of its own there: .NET's threaded runtime (10.0.14), or the decoder imports it runs on
-    the main thread for a WebM (`JsDecoder`'s `Span` views).
-  - Where: a repro first (page-check's `resumedBrowser` in a loop), then .NET's issue tracker if it is the runtime's.
+    the main thread for a WebM (`JsDecoder`'s `Span` views). Seen since in whole page checks (2026-11-04, a cloud
+    session, the page's files those of main at #158): the same trap once on `vp9-320x240-25.webm` on threads; twice
+    the resumed 10-bit AV1 run on threads done, but none of its downloads within 10 s (`ShotsJson` and `ShotsHtml` from
+    the threaded runner not answering; no error on the page); once Chromium's renderer crashed during
+    `vp9-320x240-25.webm` on threads ("Target crashed"). The step alone, or the WebM steps alone, passed each time
+    (3 and 1 runs), and a whole page check on main passed once: they come with the whole check's run before them.
+  - Where: a repro first (page-check's WebM steps after the rest, in a loop), then .NET's issue tracker if it is the
+    runtime's.
   - Status: Maybe (2026-11-04)
 
 - WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
