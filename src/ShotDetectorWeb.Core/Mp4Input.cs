@@ -171,8 +171,9 @@ public sealed class Mp4Input : VideoInput
     /// latest stream end, video and audio, as the edit lists present them; null without packets. ShotDetector reports it
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
     /// result. Adds each video packet to <paramref name="packets"/> and its duration to <paramref name="samples"/> on the way.
-    /// The video's end is its start plus FFmpeg's stream duration (ManagedCodecs' <see cref="VideoStreamInfo.Duration"/>:
-    /// the edits' summed length, else 'mdhd''s, else the samples', a fragmented file's 'trun' ones), not the last shown
+    /// Each stream's end is its start plus FFmpeg's stream duration (ManagedCodecs' <see cref="VideoStreamInfo.Duration"/>
+    /// and <see cref="AudioStreamInfo.Duration"/>: the edits' summed length, else 'mdhd''s, else the samples', a
+    /// fragmented file's 'trun' ones); the video's not the last shown
     /// packet's end, which can be later (at a variable rate a packet lasts its decode-order delta, not its frame's) or
     /// earlier (an edit list from media_time 0 before a composition offset discards the last packets inside it).
     /// </summary>
@@ -216,9 +217,13 @@ public sealed class Mp4Input : VideoInput
 
         if (spans.Count == 0)
             return null;
-        // The video ends where its stream's duration says, from its first shown frame (above).
+        // Each stream ends where its stream's duration says, from its start (above): the video from its first shown frame,
+        // the audio after the samples skipped. An audio track's 'mdhd' can be shorter than its packets (an Android
+        // phone's: 196605 of 192 frames' 196608), which FFmpeg's end follows.
         if (demuxer.Video is { } shown && spans.TryGetValue(shown.StreamIndex, out var videoSpan) && shown.Duration > 0)
             spans[shown.StreamIndex] = videoSpan with { End = videoSpan.Start + shown.Duration };
+        if (demuxer.Audio is { } heard && spans.TryGetValue(heard.StreamIndex, out var audioSpan) && heard.Duration > 0)
+            spans[heard.StreamIndex] = audioSpan with { End = audioSpan.Start + heard.Duration };
 
         long first = long.MaxValue, last = long.MinValue, longest = long.MinValue;
         foreach (var (start, end, tb) in spans.Values)

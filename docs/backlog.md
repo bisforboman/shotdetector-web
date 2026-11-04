@@ -74,13 +74,16 @@ run's files byte for byte; four differ in their description or measures, run by 
 group until their rows move them to phones.
 
 - An Android file's duration
-  - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch): the core's duration
-    4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs are the same.
-  - Where: `Mp4Input`'s duration (the streams' ends as FFmpeg's mov demuxer takes them: the audio's priming and edit
-    list, `Gotchas`), found with the file (realworld.sh downloads it; the cloud session can't reach archive.org's file
-    servers).
-  - Done when: the file moves to realworld.yml's phones group, "same".
-  - Status: Open (2026-11-04)
+  - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch, no edit list): the
+    core's duration 4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs are the same. Traced
+    (2026-11-04): FFmpeg ends each stream at its start plus its stream duration, the track's 'mdhd' (audio 196605, video
+    359884), where ManagedCodecs 0.7.0's `AudioStreamInfo.Duration` and `VideoStreamInfo.Duration` give the samples'
+    sums (196608, 364801), against their own documentation ("else the track's 'mdhd' duration"). Filed as
+    [ManagedCodecs#317](https://github.com/bisforboman/ManagedCodecs/issues/317). `Mp4Input` now ends the audio at its start plus its stream duration as
+    it did the video (FFmpeg's rule; native agrees on every sample), so the release with ManagedCodecs' fix moves it.
+  - Where: the ManagedCodecs pin, once fixed; the file moves to realworld.yml's phones group.
+  - Done when: the file is "same" in the phones group.
+  - Status: Waiting (2026-11-04): on ManagedCodecs#317 ('mdhd' as the stream duration)
 
 - A 3GP's chroma location
   - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
