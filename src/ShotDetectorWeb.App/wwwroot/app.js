@@ -581,8 +581,9 @@ async function readKept() {
       return s.get(KEPT_KEY);
     }) ?? null;
     if (record && later?.saved === record.saved) record.edits = later.edits;
-    // Kept before every run looked for still pictures: its ranges were scored without, and resume so.
+    // Kept before every run looked for still pictures, or black spans: its ranges were scored without, and resume so.
     if (record?.options && !('freeze' in record.options)) record.options.freeze = false;
+    if (record?.options && !('black' in record.options)) record.options.black = false;
     return record;
   } catch {
     return null;
@@ -963,6 +964,8 @@ function options() {
   // Still pictures looked for (decision 2026-11-03-spans-on-ranges.md): said, so that a stopped run kept before every
   // run looked for them (no freeze in its options) resumes without (readKept).
   run.freeze = true;
+  // Black spans from ShotDetector too (decision 2026-11-04-black-spans-and-times.md), said for the same reason.
+  run.black = true;
   return run;
 }
 

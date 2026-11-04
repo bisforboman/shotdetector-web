@@ -58,6 +58,7 @@ public static partial class Api
         _result = null;
         _picture = null;
         _freeze = null;
+        _black = null;
         _kept = null;
         _rangeBytes = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
@@ -125,6 +126,7 @@ public static partial class Api
         _result = null;
         _picture = null;
         _freeze = null;
+        _black = null;
         _kept = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
@@ -176,7 +178,7 @@ public static partial class Api
             throw new InvalidOperationException(NotMerged + e.Message, e);
         }
 
-        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures), PictureFreeze.Of(result, input.Video),
+        return Answered(input, request.ToOptions(), result, merged, PictureMeasures.Join(pictures), PictureFreeze.Of(result),
             damaged);
     }
 

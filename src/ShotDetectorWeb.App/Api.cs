@@ -41,6 +41,7 @@ public static partial class Api
         _result = null;
         _picture = null;
         _freeze = null;
+        _black = null;
         _toldInFirstRange = null;
         _file?.Dispose();
         _file = file;
@@ -86,6 +87,7 @@ public static partial class Api
         _result = null;
         _picture = null;
         _freeze = null;
+        _black = null;
         _kept = null;
         _toldInFirstRange = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
@@ -136,7 +138,7 @@ public static partial class Api
 
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
         return Answered(input, options, result, ranges,
-            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result, input.Video),
+            PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result),
             earlier.Damaged.Concat(input.DamagedFrames(result.FrameCount)));
     }
 
@@ -157,6 +159,7 @@ public static partial class Api
         _corrected = null;
         _picture = picture?.Take(result.FrameCount);
         _freeze = freeze;
+        _black = _picture is null ? null : PictureSummary.BlackOf(result, _picture, input.Video);
         _kept = new KeptRun(ranges, _picture, read);
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
@@ -294,6 +297,13 @@ sealed record DetectRequest
     /// </summary>
     public bool? Freeze { get; init; }
 
+    /// <summary>
+    /// Whether the run looks for black spans (<see cref="DetectionOptions.BlackDetect"/> with <c>d=0</c>; decision
+    /// 2026-11-04-black-spans-and-times.md): unless false. A stopped run kept before every run looked for them resumes
+    /// with false (its ranges scored without), which the page gives it; its black spans are then the page's own.
+    /// </summary>
+    public bool? Black { get; init; }
+
     public DetectionOptions ToOptions(IProgress<DetectionProgress>? progress = null, IProgress<Shot>? onShot = null)
     {
         var options = new DetectionOptions
@@ -305,6 +315,7 @@ sealed record DetectRequest
             Progress = progress,
             OnShot = onShot,
             FreezeDetect = Freeze == false ? null : new FreezeDetectOptions(),
+            BlackDetect = Black == false ? null : new BlackDetectOptions { MinDuration = TimeSpan.Zero },
         };
         if (MinSceneLength is not null)
             options = options with { MinSceneLength = MinSceneLength };

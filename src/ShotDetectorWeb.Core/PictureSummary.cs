@@ -7,7 +7,9 @@ namespace ShotDetectorWeb;
 /// The picture's measures as the page shows them (<see cref="PictureMeasures"/>), the App's <c>Picture()</c> JSON and
 /// the file NativeCheck writes for app-check.mjs to compare with: the run's frames, the lane's points, blackdetect's
 /// spans, the colour bars, BRNG and cropdetect's crop. Frames count from the video's first (display order); times in
-/// seconds are FFmpeg's (the frames' pts in the time base).
+/// seconds are FFmpeg's: the colour bars' the frames' pts in the time base, the black spans' and still pictures'
+/// ShotDetector's, from the video stream's start, as <c>ffmpeg -vf blackdetect,freezedetect</c> prints them (decision
+/// 2026-11-04-black-spans-and-times.md).
 /// </summary>
 /// <param name="Frames">The frames measured: the run's (a stopped run's, those it read).</param>
 /// <param name="FullRange">Full range (yuvj420p): blackdetect's threshold is 25, not 37 (102, not 151, at 10 bits), and BRNG means little.</param>
@@ -16,7 +18,11 @@ namespace ShotDetectorWeb;
 /// thresholds they were counted against (<see cref="PictureMeter"/>).
 /// </param>
 /// <param name="Points">The lane's points, a few thousand at most, each over <see cref="PicturePoints.FramesPerPoint"/> frames.</param>
-/// <param name="Black">blackdetect's spans with <c>d=0</c>, every one; <see cref="PictureSpan.Long"/> those its default 2 s keeps.</param>
+/// <param name="Black">
+/// blackdetect's spans with <c>d=0</c>, every one, ShotDetector's (<see cref="ShotDetector.DetectionResult.BlackSpans"/>:
+/// of the frames as the run reads them, deinterlaced when it deinterlaces); <see cref="PictureSpan.Long"/> those its default
+/// 2 s keeps (<see cref="BlackOf"/>).
+/// </param>
 /// <param name="Bars">The colour bars' spans (by their definition).</param>
 /// <param name="Brng">signalstats' BRNG over the frames.</param>
 /// <param name="Levels">signalstats' YMIN, YAVG and YMAX over the frames.</param>
@@ -40,10 +46,14 @@ public sealed record PictureSummary(
     /// <summary>blackdetect's default <c>d</c>: the card lists the spans this long or longer.</summary>
     public const double BlackSeconds = 2;
 
-    /// <summary>The summary of <paramref name="m"/>, with <paramref name="freeze"/>'s still pictures (or why there are none).</summary>
-    public static PictureSummary Of(PictureMeasures m, PictureFreeze freeze)
+    /// <summary>
+    /// The summary of <paramref name="m"/>, with <paramref name="black"/>'s spans (<see cref="BlackOf"/>) and
+    /// <paramref name="freeze"/>'s still pictures (or why there are none).
+    /// </summary>
+    public static PictureSummary Of(PictureMeasures m, IReadOnlyList<PictureSpan> black, PictureFreeze freeze)
     {
         ArgumentNullException.ThrowIfNull(m);
+        ArgumentNullException.ThrowIfNull(black);
         ArgumentNullException.ThrowIfNull(freeze);
         int per = Math.Max(1, (m.Count + MostPoints - 1) / MostPoints);
         int points = (m.Count + per - 1) / per;
@@ -70,8 +80,6 @@ public sealed record PictureSummary(
             brng[p] = worst;
         }
 
-        var longBlack = m.BlackSpans(BlackSeconds).Select(s => s.FirstFrame).ToHashSet();
-        var black = m.BlackSpans(0).Select(s => Span(m, s, longBlack.Contains(s.FirstFrame))).ToArray();
         var bars = m.BarsSpans().Select(s => Span(m, s, false)).ToArray();
 
         int brngFrames = 0, largestAt = -1;
@@ -95,10 +103,36 @@ public sealed record PictureSummary(
             new PictureBrng(brngFrames, largest, largestAt < 0 ? null : largestAt), levels, m.Crop(), freeze);
     }
 
-    static PictureSpan Span(PictureMeasures m, FrameSpan s, bool isLong)
+    static PictureSpan Span(PictureMeasures m, FrameSpan s, bool isLong, double shift = 0)
     {
         double tb = m.TimeBase.Num / (double)m.TimeBase.Den;
-        return new PictureSpan(s.FirstFrame, s.EndFrame, s.StartPts * tb, s.EndPts * tb, isLong);
+        return new PictureSpan(s.FirstFrame, s.EndFrame, s.StartPts * tb - shift, s.EndPts * tb - shift, isLong);
+    }
+
+    /// <summary>
+    /// The run's black spans: ShotDetector's (<see cref="ShotDetector.DetectionResult.BlackSpans"/>, <c>d=0</c>), each
+    /// <see cref="PictureSpan.Long"/> by blackdetect's own rule for its default 2 s (<c>check_black_end</c>: black_end -
+    /// black_start, in the time base of the frames it sees, at least 2 s over that time base truncated; yadif's doubles
+    /// the rate); for a run kept before every run looked for them (none: its ranges were scored without), the page's own
+    /// from <paramref name="m"/>, from the stream's start as ShotDetector's are.
+    /// </summary>
+    public static IReadOnlyList<PictureSpan> BlackOf(ShotDetector.DetectionResult result, PictureMeasures m, ShotDetector.YuvVideo video)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(m);
+        ArgumentNullException.ThrowIfNull(video);
+        double tb = m.TimeBase.Num / (double)m.TimeBase.Den;
+        if (result.BlackSpans is { } spans)
+        {
+            double seen = result.Video.Deinterlaced ? tb / 2 : tb;
+            long least = (long)(BlackSeconds / seen);
+            return [.. spans.Select(s => new PictureSpan(s.StartFrame, s.EndFrame, s.Start, s.End,
+                (long)Math.Round((s.End - s.Start) / seen) >= least))];
+        }
+
+        double start = video.StartPts * tb;
+        var longBlack = m.BlackSpans(BlackSeconds).Select(s => s.FirstFrame).ToHashSet();
+        return [.. m.BlackSpans(0).Select(s => Span(m, s, longBlack.Contains(s.FirstFrame), start))];
     }
 }
 
@@ -136,18 +170,15 @@ public sealed record PictureFreeze(IReadOnlyList<PictureStill>? Spans, string? N
         "Not looked for: the stopped part was kept before the page looked for still pictures in every run. A run from the start looks for them.");
 
     /// <summary>
-    /// <paramref name="result"/>'s still pictures, or <see cref="KeptWithout"/> when it didn't look for them. ShotDetector
-    /// times them from the stream's start, as <c>ffmpeg -vf freezedetect</c> prints them; the page times its spans by the
-    /// stream's own pts (as <c>-copyts</c> prints them, the black spans too): <paramref name="video"/>'s start is added.
+    /// <paramref name="result"/>'s still pictures, or <see cref="KeptWithout"/> when it didn't look for them, timed as
+    /// ShotDetector times them, from the stream's start, as <c>ffmpeg -vf freezedetect</c> prints them (decision
+    /// 2026-11-04-black-spans-and-times.md).
     /// </summary>
-    public static PictureFreeze Of(ShotDetector.DetectionResult result, ShotDetector.YuvVideo video)
+    public static PictureFreeze Of(ShotDetector.DetectionResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
-        ArgumentNullException.ThrowIfNull(video);
-        double start = video.TimeBase is { } tb ? video.StartPts * tb.Num / (double)tb.Den : 0;
         return result.FreezeSpans is { } spans
-            ? new([.. spans.Select(s => new PictureStill(s.StartFrame, s.EndFrame, s.Start + start, s.End + start))], null,
-                result.Video.Deinterlaced)
+            ? new([.. spans.Select(s => new PictureStill(s.StartFrame, s.EndFrame, s.Start, s.End))], null, result.Video.Deinterlaced)
             : KeptWithout;
     }
 }
