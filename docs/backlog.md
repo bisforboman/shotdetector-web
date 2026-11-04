@@ -85,13 +85,6 @@ group until their rows move them to phones.
   - Done when: the file is "same" in the phones group.
   - Status: Waiting (2026-11-04): on ManagedCodecs#317 ('mdhd' as the stream duration)
 
-- A 3GP's chroma location
-  - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
-    (unspecified).
-  - Where: `SpsInfo`'s chroma location (its VUI, or FFmpeg's default for a 3GP), with the file.
-  - Done when: the file moves to the phones group, "same".
-  - Status: Open (2026-11-04)
-
 - An iPhone file's picture measures
   - Why: `phone-iphone-2018.mov` (960x720 High, full range): every frame's signalstats and cropdetect differ from
     FFmpeg's filters (frame 0: YAVG 152.574 against 152.79; cropdetect 0-959 x 0-719 against FFmpeg's 0-871 x 0-651,
@@ -219,7 +212,6 @@ file out of `samples/reject/`, and passes the native check.
   - Done when: the page check shows that sample's picture and stills.
   - Not: decoding in .NET for the picture.
   - Status: Maybe (found 2026-10-31)
-
 
 
 - A Cinemetrics file

@@ -8,7 +8,8 @@ namespace ShotDetectorWeb;
 /// <param name="ChromaLocation">
 /// FFmpeg's chroma location (AVChromaLocation: 0 unspecified, 1 left, 2 center, 3 topleft, ...): the VUI's
 /// chroma_sample_loc_type_top_field plus one where it has one (0 for a type over 5), else left, the H.264 default
-/// (libavcodec's h2645_vui.c, and its SPS parser without a VUI).
+/// (libavcodec's h2645_vui.c); unspecified for an SPS without a VUI (FFmpeg 8.1's ffprobe, stream and frames alike:
+/// realworld.sh's phone-android-2011.3gp).
 /// </param>
 internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDepthChroma, bool VideoSignalTypePresent, bool FullRange, int? MatrixCoefficients,
     int ChromaLocation = SpsInfo.Left)
@@ -101,9 +102,11 @@ internal sealed record SpsInfo(int ChromaFormatIdc, int BitDepthLuma, int BitDep
 
         bool signalType = false, fullRange = false;
         int? matrix = null;
-        int location = Left;
+        // Without a VUI FFmpeg says unspecified (an Android phone's 3GP, 2011); with one, left unless it says otherwise.
+        int location = 0;
         if (r.U(1) == 1)
         {
+            location = Left;
             if (r.U(1) == 1 && r.U(8) == 255)
                 r.U(32); // Extended_SAR: sar_width, sar_height
             if (r.U(1) == 1)

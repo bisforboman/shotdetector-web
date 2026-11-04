@@ -1751,3 +1751,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     ebur128's frame metadata, which AudioCheck reads, prints a peak's linear amplitude to three decimals (0.00842 as
     0.008, -41.938 dB). AudioCheck now takes a peak within that precision as dB at its level (here 0.56 dB), or 0.1 dB
     where wider; the file "All agree" and moves to realworld.yml's phones group
+
+- A 3GP's chroma location
+  - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
+    (unspecified).
+  - Where: `SpsInfo`'s chroma location (its VUI, or FFmpeg's default for a 3GP), with the file.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion): the page's own description. The 3GP's SPS
+    has no VUI, and FFmpeg 8.1 then says unspecified (stream and frames); with a VUI that has no chroma location it
+    says left, which every x264 sample has. `SpsInfo` now starts unspecified and says left once a VUI is present.
+    NativeCheck: the 3GP "All agree", every sample too; the file moves to realworld.yml's phones group
