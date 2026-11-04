@@ -1740,3 +1740,13 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     are the nightly phones group (run 41793805746: native All agree, the AOT bundle 156 of 156 files identical), the
     four whose description or measures differ run by hand (phones-differ) under rows of their own ("Found by the real
     phone files"). No openly licensed broadcast capture was found on a host either reaches.
+
+- A 3GP's chroma location
+  - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
+    (unspecified).
+  - Where: `SpsInfo`'s chroma location (its VUI, or FFmpeg's default for a 3GP), with the file.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion): the page's own description. The 3GP's SPS
+    has no VUI, and FFmpeg 8.1 then says unspecified (stream and frames); with a VUI that has no chroma location it
+    says left, which every x264 sample has. `SpsInfo` now starts unspecified and says left once a VUI is present.
+    NativeCheck: the 3GP "All agree", every sample too; the file moves to realworld.yml's phones group

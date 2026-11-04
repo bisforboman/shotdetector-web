@@ -82,13 +82,6 @@ group until their rows move them to phones.
   - Done when: the file moves to realworld.yml's phones group, "same".
   - Status: Open (2026-11-04)
 
-- A 3GP's chroma location
-  - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
-    (unspecified).
-  - Where: `SpsInfo`'s chroma location (its VUI, or FFmpeg's default for a 3GP), with the file.
-  - Done when: the file moves to the phones group, "same".
-  - Status: Open (2026-11-04)
-
 - A WhatsApp file's audio peaks
   - Why: `phone-whatsapp-2017.mp4` (AAC 48 kHz 2 ch, very quiet: -64.6 LUFS): true and sample peaks -41.494 dB on both
     channels against FFmpeg's ebur128 -41.938; the loudness and the waveform agree.

@@ -72,7 +72,7 @@ FILES=(
   # rate, AAC 48 kHz; 37 MB.
   "phone-android-2017-portrait.mp4|$ia/Flickr-37923566351/VID_20171025_115139-37923566351.mp4|a0af51a91bbe70a3a7b1222177b6f371a60b9ea80cd69ce26d768b4b74f5fdf7||same|"
   # An Android phone's 3GP, 2011: VID_20110905_143459.3gp (CC-BY 2.0): 720x480 Baseline, a variable rate, AAC 16 kHz;
-  # 5.9 MB. Its chroma location differs from FFmpeg's (backlog "A 3GP's chroma location").
+  # 5.9 MB. Its SPS has no VUI: chroma location unspecified, as FFmpeg says (backlog-done "A 3GP's chroma location").
   "phone-android-2011.3gp|$ia/Flickr-6126538087/VID_20110905_143459-6126538087.3gp|9752f66a318c7e5c4ee96a799a17ef6254b1a962cd82085dd5f84024b210fa50||same|"
   # A phone video as WhatsApp sent it, 2017: VID-20170819-WA0023.mp4 (CC-BY-SA 2.0): 640x352 Baseline, 30.343 fps,
   # AAC 48 kHz; 6.4 MB. Its sound's peaks differ from FFmpeg's (backlog "A WhatsApp file's audio peaks").
