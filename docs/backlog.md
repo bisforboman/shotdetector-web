@@ -69,6 +69,17 @@ publish").
 
 ## Waiting
 
+- The reference tone left out of the detection
+  - Why: ShotDetector 3.25.0's `YuvVideo.ReferenceTone` and `DetectionOptions.TrimReferenceTone` leave a file's
+    leading tone (and the bars over it) out of the shots, as `Detect(path)` does with FFmpeg finding the tone; the page
+    measures the tone already (`Mp4Audio`, the sound's worker), alongside the run, not before it.
+  - Where: decision [2026-11-04-reference-tone.md](decisions/2026-11-04-reference-tone.md), the owner's 1A and 2A:
+    ShotDetector's ranges taking the trim first (3.28.0's is "not for ranges": `ScoreRange` refuses a time range),
+    then an option on the page, off by default, the run waiting for the sound's worker's tone, `YuvVideo.ReferenceTone`
+    set from it in `Api`; NativeCheck's run with `TrimReferenceTone` on the tone sample, whole, split and resumed.
+  - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
+  - Status: Waiting (2026-11-04): asked of the shotdetector coordinator, the trim in ranges
+
 - A stopped run's end at a variable rate (upstream)
   - Why: with ShotDetector 3.28.0, frames that end early (the page's Stop) end the last shot at the frames read over
     the average rate, where the FFmpeg path ends a run that ends early at the last frame's pts + 1 / average rate, in
@@ -184,14 +195,7 @@ file out of `samples/reject/`, and passes the native check.
   - Done when: realworld.yml runs them, each "same" or "refused" with its row named.
   - Status: Maybe
 
-- The reference tone left out of the detection
-  - Why: ShotDetector 3.25.0's `YuvVideo.ReferenceTone` and `DetectionOptions.TrimReferenceTone` leave a file's
-    leading tone (and the bars over it) out of the shots, as `Detect(path)` does with FFmpeg finding the tone; the page
-    measures the tone already (`Mp4Audio`, the sound's worker), alongside the run, not before it.
-  - Where: the tone found before the run (or the run told it once the sound's worker has it), `YuvVideo.ReferenceTone`
-    set from it in `Api`, an option on the page; NativeCheck's run with `TrimReferenceTone` on the tone sample.
-  - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
-  - Status: Maybe (found adopting ShotDetector 3.25.0, 2026-11-01)
+
 
 - A Cinemetrics file
   - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's
