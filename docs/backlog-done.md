@@ -1775,3 +1775,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     figures are the core's (YAVG 152.574, cropdetect 960x720). PictureCheck's ffmpeg passes now take -apply_cropping
     codec (the SPS's frame cropping kept, which 'none' also drops: a 320x240 sample is coded 320x256); the file moves
     to realworld.yml's phones group. Whether detection should honour 'clap' went to the shotdetector coordinator
+
+- Chapter titles kept with the kept run
+  - Why: the titles typed for a run's YouTube chapters (the run card's Titles) last while the run is shown; a stopped
+    run kept in IndexedDB and shown again on a later visit (decision `2026-10-30-resume-across-visits.md`) comes back
+    without them, and a resumed run's chapters change where the rest adds cuts.
+  - Where: `app.js`'s `KEPT` record (the titles by chapter start, beside the options and `Kept()`'s Blob), told to
+    `run.js` with the kept run; the page check's reload.
+  - Done when: the page check types a title, stops, reloads and finds it in the chapters' download.
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion, decision
+    2026-11-04-kept-chapter-titles.md: the titles go with a run that is kept anyway): the titles typed and the
+    chapters' minimum go with a stopped or corrected run's record, beside its corrections (EDITS_KEY), and come back
+    with it on a later visit and through a resume (app.js `keepTitles`, 'done's `titles`). The page check stops the
+    demo 70 % in, titles a chapter at 10 s, reloads and finds it in the download; it also waits for Resume once a run
+    has stopped (Api's Kept comes after the result: the AV1 WebM's stop and resume missed it)

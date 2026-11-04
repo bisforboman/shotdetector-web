@@ -155,8 +155,10 @@ chapter has run the minimum typed beside the download (30 s to begin with; YouTu
 up to the second, a last chapter shorter than that joined to the one before; YouTube wants the first at 0:00 and at
 least three, so with fewer the card says why instead (Timeline's words). The titles are typed on the page, under
 Titles, a field a chapter with Timeline's placeholder in it: the download carries them, a chapter left empty keeps
-"Chapter n" (the titles last while the run is shown, not kept with a stopped run: backlog, "Chapter titles kept with
-the kept run"). Under the run's card, a contact sheet (`panels/sheet.js`, issue #93, marked the page's): each shot's
+"Chapter n" (the titles, by their chapter's start, and the minimum they were typed at are kept with the run when the
+page keeps it, stopped or corrected, and come back with it, through a resume too; a finished run without corrections
+keeps them while it is shown: decision
+[2026-11-04-kept-chapter-titles.md](docs/decisions/2026-11-04-kept-chapter-titles.md)). Under the run's card, a contact sheet (`panels/sheet.js`, issue #93, marked the page's): each shot's
 still, or three (its first, middle and last frame, as scenedetect's `--num-images 3`), with its number, start timecode
 and length, in the columns chosen, under a header with the file's name, duration, shot count and average shot length;
 made when asked, downloaded as `<file>.sheet.png` and as a PDF to print, `<file>.sheet.a4.pdf` or
@@ -964,8 +966,9 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   Deinterlace auto, on threads and on two workers, its downloads
   the native check's `deinterlace-auto` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
-  paused and stopped while paused, then the page reloaded and the demo picked again, which shows the stopped run kept
-  in IndexedDB (`stopped`, its options in the form, Resume offered, its downloads the stopped run's) and resumed on
+  paused and stopped while paused (70 % in), a YouTube chapter titled, then the page reloaded and the demo picked
+  again, which shows the stopped run kept in IndexedDB (`stopped`, its options in the form, Resume offered, its
+  downloads the stopped run's, the chapters' minimum and title as typed) and resumed on
   threads to the whole run's downloads (screenshots of both in `out/page/`); the installed app ("The installed app"):
   its manifest as Chromium reads it (no errors, installable, the icons served), the sample opened with it through
   `launchQueue` and shared to it through `sw.js`, each on threads and on `?threads=0`, to the same downloads; the page reloaded offline (Playwright's network off), from the service worker's
@@ -1252,7 +1255,7 @@ decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`):
   the `playing` event, an AVI's picture (`frameAt(t)`, which `shots.js`' stills use too), the split (`SPLIT_SECONDS`,
   `MOST_WORKERS`), threads (`MOST_THREADS`; `serve()` registers `sw.js`, `startWorker` starts the page's worker), a file
   arriving (`arrive`), the kept run in IndexedDB (`KEPT`, one record: the file by name, size and modified time, the
-  options, `Kept()`'s Blob, the corrections) and `correct(cuts)`. For the panels: the events they listen to, `call(name,
+  options, `Kept()`'s Blob, the corrections, the chapter titles), `correct(cuts)` and `keepTitles(titles)`. For the panels: the events they listen to, `call(name,
   ...args)`, `card(title, { place, mark, markTitle })` and `frameSeconds(video, frames)` (where a frame starts: its
   number over the rate, or a variable rate's frame's own pts from Open's `frameTimestamps`; what a lane places frames
   by).

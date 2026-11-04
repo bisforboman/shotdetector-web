@@ -18,8 +18,9 @@
 //      stats CSV the native run's first rows up to there, the shots table, the JSON and the HTML a shot each of its
 //      scenes CSV's;
 //   5. across a reload (backlog "Resume after Stop, across visits"): the page reloaded, the demo picked again shows the
-//      stopped run kept in IndexedDB (its downloads the stopped run's, its options in the form, Resume beside Detect),
-//      and Resume goes on from there on threads to the whole run's downloads;
+//      stopped run kept in IndexedDB (its downloads the stopped run's, its options in the form, Resume beside Detect,
+//      the YouTube chapters' title typed before the reload: backlog "Chapter titles kept with the kept run"), and
+//      Resume goes on from there on threads to the whole run's downloads;
 //   6. offline: the page reloaded with the network off comes from the service worker's cache, isolated, and the demo
 //      (cached when it was fetched) runs on threads to the same downloads;
 //   7. the demo split across two workers (?workers=2), stopped half-way and resumed in the same visit: the rest split
@@ -191,7 +192,8 @@ async function stopped(page, what, at) {
 
 // The page reloaded (a later visit) and the demo picked again: the stopped run kept in this browser shown at once,
 // stopped at frames, with Resume and Forget, its downloads the stopped run's; then resumed to the whole run's.
-async function resumedAfterReload(page, what, frames, run, settle, threads) {
+// titled: the chapters' text with a title typed before the reload (typeTitle), which the run shown again carries.
+async function resumedAfterReload(page, what, frames, run, settle, threads, titled = null) {
   settlings.get(page)(true);
   await page.reload();
   await settle(page);
@@ -205,6 +207,7 @@ async function resumedAfterReload(page, what, frames, run, settle, threads) {
     fail(`${what}: after the reload, not the stopped run at frame ${frames} kept with Resume: ${status}`);
   await compare(page, `${what}, shown again`, 'sintel-trailer.mp4', run, frames);
   await keptCards(page, `${what}, shown again`, frames);
+  if (titled !== null) await keptTitle(page, `${what}, shown again`, titled);
   await looks(page, `${what}, shown again`, `${what.replace(/\W+/g, '-')}.kept`);
   await page.click('#resume');
   const done = await finished(page, `${what}, resumed`);
@@ -214,6 +217,12 @@ async function resumedAfterReload(page, what, frames, run, settle, threads) {
   await compare(page, `${what}, resumed`, 'sintel-trailer.mp4', run);
   await looks(page, `${what}, resumed`, `${what.replace(/\W+/g, '-')}.resumed`);
   if (await page.isVisible('#resume')) fail(`${what}: finished, Resume is still offered`);
+}
+
+// Whether Resume is offered for the run just stopped: the status says stopped once the result is shown, Resume comes
+// once the run's scores are kept (app.js, keep: Api's Kept, from the runner, after the result), up to 10 s later.
+async function resumeOffered(page) {
+  return page.waitForSelector('#resume', { state: 'visible', timeout: 10000 }).then(() => true, () => false);
 }
 
 // A resumed run's status names the frame the stopped run had got to, and the keyframe before it its rest scored again
@@ -559,6 +568,49 @@ async function checkTitles(page, what, expected, saved) {
   else console.log(`${what}: the chapters' download carries the title typed: ${want.split('\n')[1]}`);
   await input.fill('');
   await page.locator('#run .chapter-titles summary').click();
+}
+
+// A stopped run's chapters at 10 s, a title typed for the second (backlog "Chapter titles kept with the kept run"):
+// the chapters' text the download then has, or null.
+async function typeTitle(page, what) {
+  await page.locator('#chapters-min').fill('10');
+  const input = page.locator('#run .chapter-titles li').nth(1).locator('input');
+  if (await page.locator('#run .chapter-titles').isHidden() || await input.count() !== 1) {
+    fail(`${what}: no second chapter at 10 s to title: ${await page.textContent('#run .chapters')}`);
+    return null;
+  }
+  await page.locator('#run .chapter-titles summary').click();
+  await input.fill('Le dragon arrive');
+  await page.waitForFunction(() => document.querySelector('#chapters-txt').title.includes('1 titled on the page'), null,
+    { timeout: 10000 }).catch(() => fail(`${what}: the chapters' link doesn't say a title was typed`));
+  const text = await chaptersText(page);
+  if (text.split('\n')[1]?.endsWith(' Le dragon arrive') !== true) fail(`${what}: the second chapter isn't titled: ${text}`);
+  // Written to IndexedDB after the run's record, apart from it (app.js, storeEdits).
+  await page.waitForTimeout(1000);
+  return text;
+}
+
+// The run shown again after the reload: the chapters at the minimum the title was typed at, the download carrying it,
+// the title in its field; then the title cleared and the minimum back at 30 (forgotten with the run kept), as the
+// resumed run's comparison expects.
+async function keptTitle(page, what, titled) {
+  const field = page.locator('#chapters-min');
+  if (await field.inputValue() !== '10') fail(`${what}: the chapters' minimum reads ${await field.inputValue()}, not 10 as kept`);
+  await page.waitForFunction(() => !!document.querySelector('#chapters-txt').href, null, { timeout: 10000 }).catch(() => {});
+  const text = await chaptersText(page);
+  if (text !== titled) fail(`${what}: the chapters' download isn't the one titled before the reload: ${JSON.stringify(text)}`);
+  else console.log(`${what}: the chapter title typed before the reload kept: ${text.split('\n')[1]}`);
+  await page.locator('#run .chapter-titles summary').click();
+  await page.locator('#run .chapter-titles li').nth(1).locator('input').fill('');
+  await page.locator('#run .chapter-titles summary').click();
+  await field.fill('30');
+}
+
+// The chapters' download, as text (a second after its link's new blob URL, clicked again if need be: clicked).
+async function chaptersText(page) {
+  await page.waitForTimeout(1000);
+  const download = await clicked(page, page.locator('#chapters-txt'));
+  return readFileSync(await download.path(), 'utf8');
 }
 
 // Pauses the run once its bar reaches from (a fraction): the button reads Resume, and once the run has reached the
@@ -1008,7 +1060,7 @@ async function resumedBrowser(file, query) {
     frames = status === null ? null : Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
   }
   if (frames !== null) {
-    if (!await page.isVisible('#resume')) fail(`${what}: stopped at frame ${frames}, Resume isn't offered`);
+    if (!await resumeOffered(page)) fail(`${what}: stopped at frame ${frames}, Resume isn't offered`);
     else {
       await page.click('#resume');
       const done = await finished(page, `${what}, resumed`);
@@ -1250,10 +1302,11 @@ try {
     console.log(`${what}: the sound measured`);
     await looks(page, what, 'the-demo.done');
 
-    // Detected again, paused and stopped while paused: the result for the frames read up to the pause.
+    // Detected again, paused and stopped while paused: the result for the frames read up to the pause (far enough in
+    // for YouTube chapters of 10 s, one of which is titled before the reload).
     const again = 'the demo stopped while paused';
     await page.click('#detect');
-    const at = await paused(page, again, 0.15);
+    const at = await paused(page, again, 0.7);
     if (at !== null) {
       await page.click('#stop');
       const status = await finished(page, again, 'stopped');
@@ -1264,8 +1317,9 @@ try {
         if (frames !== at)
           fail(`${again}: stopped at frame ${frames}, not at ${at}, where it said it was held: ${status}`);
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
-        if (!await page.isVisible('#resume')) fail(`${again}: no Resume offered`);
-        await resumedAfterReload(page, 'the demo across a reload', frames, run, isolated, true);
+        if (!await resumeOffered(page)) fail(`${again}: no Resume offered`);
+        const titled = await typeTitle(page, again);
+        await resumedAfterReload(page, 'the demo across a reload', frames, run, isolated, true, titled);
       }
     }
 
