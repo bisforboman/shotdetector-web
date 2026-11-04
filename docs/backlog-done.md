@@ -1751,3 +1751,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     ebur128's frame metadata, which AudioCheck reads, prints a peak's linear amplitude to three decimals (0.00842 as
     0.008, -41.938 dB). AudioCheck now takes a peak within that precision as dB at its level (here 0.56 dB), or 0.1 dB
     where wider; the file "All agree" and moves to realworld.yml's phones group
+
+- An iPhone file's picture measures
+  - Why: `phone-iphone-2018.mov` (960x720 High, full range): every frame's signalstats and cropdetect differ from
+    FFmpeg's filters (frame 0: YAVG 152.574 against 152.79; cropdetect 0-959 x 0-719 against FFmpeg's 0-871 x 0-651,
+    crop 864x640+4+6), while the shots and CSVs equal `Detect(path)`'s: FFmpeg's command line likely crops the frames
+    (a container crop, applied by the CLI and not by ShotDetector's in-process decode), or the frames differ.
+  - Where: the file's boxes ('clap', the track's size) and PictureCheck's ffmpeg pass, with the file.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion: whole frames, as detection): the file has a
+    clean aperture ('clap' 872x653, FFmpeg's frame-cropping side data 44/44/33/34), which FFmpeg 8.1's command line
+    crops to by default and neither ShotDetector's Detect(path) nor the core does. With -apply_cropping none FFmpeg's
+    figures are the core's (YAVG 152.574, cropdetect 960x720). PictureCheck's ffmpeg passes now take -apply_cropping
+    none; the file moves to realworld.yml's phones group. Whether detection should honour 'clap' went to the
+    shotdetector coordinator
