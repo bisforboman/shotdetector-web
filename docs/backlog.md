@@ -171,7 +171,8 @@ file out of `samples/reject/`, and passes the native check.
     the resumed 10-bit AV1 run on threads done, but none of its downloads within 10 s (`ShotsJson` and `ShotsHtml` from
     the threaded runner not answering; no error on the page); once Chromium's renderer crashed during
     `vp9-320x240-25.webm` on threads ("Target crashed"). The step alone, or the WebM steps alone, passed each time
-    (3 and 1 runs), and a whole page check on main passed once: they come with the whole check's run before them.
+    (3 and 1 runs, page-check.mjs on the same published bundle), and a whole page check on main passed once: they came
+    only in `tools/check.sh page`, whose WebM steps run first, right after the publish.
   - Where: a repro first (page-check's WebM steps after the rest, in a loop), then .NET's issue tracker if it is the
     runtime's.
   - Status: Maybe (2026-11-04)
