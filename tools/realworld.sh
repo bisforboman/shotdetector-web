@@ -51,9 +51,9 @@ FILES=(
   "caminandes-1080i25.mp4|caminandes_gran_dillama.mp4||@ -t 60 -vf fps=50,interlace=scan=tff,setfield=tff -c:v libx264 -preset fast -flags +ildct+ilme -x264-params tff=1 -b:v 8M -r 25 -c:a aac -b:a 192k|same|"
   # Real phone files as the phones wrote them (backlog "Real phone and broadcast files"): Flickr uploads' originals,
   # mirrored on archive.org (reachable from GitHub's runners), CC-BY 2.0 or CC-BY-SA 2.0 as each item says, by their
-  # Flickr authors. Their SHA-256 recorded from realworld.yml's first download (2026-11-04, run 41787733573). The four
-  # whose description or measures differ from FFmpeg's are in realworld.yml's phones-differ group, run by hand, until
-  # their rows move them to phones.
+  # Flickr authors. Their SHA-256 recorded from realworld.yml's first download (2026-11-04, run 41787733573). A file whose
+  # description or measures differ from FFmpeg's goes in a group of realworld.yml's run by hand (byHand), under a
+  # backlog row of its own, until that row moves it to phones; all eight are in phones.
   # An iPhone, portrait, 2012: IMG_0644.mov (CC-BY 2.0): 1280x720 Baseline turned -90, 29.97 fps a variable rate (avg
   # 198000/6607), AAC 44.1 kHz; 15 MB.
   "phone-iphone-2012-portrait.mov|$ia/Flickr-7390656336/IMG_0644-7390656336.mov|db8d8d1b1047127adc63d459aa4cd89cbb6d33c50587c380c6eaca2b9efa7660||same|"
@@ -67,7 +67,8 @@ FILES=(
   # measures").
   "phone-iphone-2018.mov|$ia/Flickr-44309131575/IMG_6572-44309131575.mov|86d6e0bb2a785ebafcc3f5c89e990bb0d39eefe5c7e39658ec85c24e4a5b8f8f||same|"
   # An Android phone, 1080p, 2017: VID_20171119_173236.mp4 (CC-BY 2.0): 1920x1080 Baseline, full range, ~29.6 fps a
-  # variable rate, AAC 48 kHz; 11 MB. Its duration differs from FFmpeg's (backlog "An Android file's duration").
+  # variable rate, AAC 48 kHz; 11 MB. Its 'mdhd' durations are shorter than its samples' (backlog-done "An Android
+  # file's duration": ManagedCodecs 0.8.0).
   "phone-android-2017-1080p.mp4|$ia/Flickr-26747292089/VID_20171119_173236-26747292089.mp4|53361a019528f2ea242dd3ae9b3efeef0b953173ffd1ead3b7c80a0c5780841a||same|"
   # An Android phone, portrait, 2017: VID_20171025_115139.mp4 (CC-BY 2.0): 1280x720 Baseline turned -90, a variable
   # rate, AAC 48 kHz; 37 MB.

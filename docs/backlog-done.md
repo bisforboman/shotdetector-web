@@ -1789,3 +1789,15 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     with it on a later visit and through a resume (app.js `keepTitles`, 'done's `titles`). The page check stops the
     demo 70 % in, titles a chapter at 10 s, reloads and finds it in the download; it also waits for Resume once a run
     has stopped (Api's Kept comes after the result: the AV1 WebM's stop and resume missed it)
+
+- An Android file's duration
+  - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch, no edit list): the
+    core's duration 4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs were the same. FFmpeg ends
+    each stream at its start plus its stream duration, the track's 'mdhd' (audio 196605, video 359884), where
+    ManagedCodecs 0.7.0 gave the samples' sums (196608, 364801):
+    [ManagedCodecs#317](https://github.com/bisforboman/ManagedCodecs/issues/317).
+  - Where: the ManagedCodecs pin; the file moves to realworld.yml's phones group.
+  - Done when: the file is "same" in the phones group.
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion): ManagedCodecs 0.8.0, whose stream duration
+    is the shorter of 'mdhd''s and the samples' summed durations (the longer in a fragmented file). The file "All
+    agree" natively, description included; it moves to realworld.yml's phones group; phones-differ, now empty, is gone
