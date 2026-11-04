@@ -42,9 +42,13 @@ kin: ManagedCodecs' list since 0.6.0; `samples/mjpeg-dmb1-320x240-25.avi`). A da
 picture does, is decoded with the part it doesn't reach black, where FFmpeg leaves an earlier frame's picture, which
 one depending on its threads: the run's warnings name it, and the checks hold everything else to FFmpeg's, the stats
 rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`, the owner's choice;
-`samples/mjpeg-damaged-320x240-25.avi`). **And VP9 or AV1 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full
-range or not, with a DefaultDuration, with a Segment Duration or without one (a live recording's, as
-`samples/vp9-live-320x240-25.webm`: no duration, as FFmpeg says); decisions `docs/decisions/2026-11-02-browser-decoder.md` and
+`samples/mjpeg-damaged-320x240-25.avi`). JPEGs without Huffman tables (an MJPEG frame may leave its DHT out, the
+standard tables implied) are decoded as with them, by ManagedCodecs and, for the page's picture and stills, by the
+browser (libjpeg-turbo, Chromium's and Firefox's, supplies them; decision
+`docs/decisions/2026-11-04-jpegs-without-huffman-tables.md`; `samples/mjpeg-nodht-320x240-25.avi`). **And VP9 or AV1
+in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full range or not, with a DefaultDuration, with a Segment Duration or
+without one (a live recording's, as `samples/vp9-live-320x240-25.webm`: no duration, as FFmpeg says); decisions
+`docs/decisions/2026-11-02-browser-decoder.md` and
 `2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
 libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
 browser's own `VideoDecoder` (WebCodecs), its run card's chip "your browser's decoder". It runs as any file does: on
@@ -956,7 +960,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   `<img>` of the file's own JPEG in the video's place, frame 0 at first, then the frame the playhead is in after a click
   on the timeline and the shot's first frame after a click on its row, each decoded at 320x240, and a still drawn for
   every shot; the contact sheet of each sample picked on threads and of the AVI (a PNG and A4 and Letter PDFs
-  downloaded, each valid, a still per shot); then what those don't have, each picked on threads and on two workers:
+  downloaded, each valid, a still per shot); `mjpeg-nodht-320x240-25.avi` (its JPEGs without Huffman tables) the same
+  as the AVI; then what those don't have, each picked on threads and on two workers:
   `rotated-90-320x240-25.mp4`
   (a quarter turn), `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times) and
   `yuv420p10-full-topleft-bt709-320x240-25.mp4` (10 bits: its picture card and lane in 10-bit values); `interlaced-tff-320x240-25.mp4` with

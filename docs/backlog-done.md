@@ -1774,7 +1774,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     crops to by default and neither ShotDetector's Detect(path) nor the core does. With -apply_cropping none FFmpeg's
     figures are the core's (YAVG 152.574, cropdetect 960x720). PictureCheck's ffmpeg passes now take -apply_cropping
     codec (the SPS's frame cropping kept, which 'none' also drops: a 320x240 sample is coded 320x256); the file moves
-    to realworld.yml's phones group. Whether detection should honour 'clap' went to the shotdetector coordinator
+    to realworld.yml's phones group. Whether detection should honour 'clap' went to the shotdetector coordinator:
+    it shouldn't (shotdetector#738: scenedetect 0.7.2 reads the whole frame too; ShotDetector's ffmpeg-executable
+    path now passes -apply_cropping codec), so nothing changes here
 
 - Chapter titles kept with the kept run
   - Why: the titles typed for a run's YouTube chapters (the run card's Titles) last while the run is shown; a stopped
@@ -1789,3 +1791,31 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     with it on a later visit and through a resume (app.js `keepTitles`, 'done's `titles`). The page check stops the
     demo 70 % in, titles a chapter at 10 s, reloads and finds it in the download; it also waits for Resume once a run
     has stopped (Api's Kept comes after the result: the AV1 WebM's stop and resume missed it)
+
+- An AVI's JPEGs without Huffman tables
+  - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
+    FFmpeg's and ManagedCodecs' decoders supply but a browser's JPEG decoder doesn't; the page's picture and stills of
+    such a file (backlog-done "The picture of an AVI on the page") would then be missing (the stills say "didn't show").
+    ffmpeg's encoder writes the tables, so no sample has the case yet.
+  - Where: `make-samples.sh` (a sample with the DHT stripped, checked with a JPEG parser); the page inserting the
+    standard tables before the first SOS when a JPEG has none (bytes copied, no decoding).
+  - Done when: the page check shows that sample's picture and stills.
+  - Not: decoding in .NET for the picture.
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion, decision
+    2026-11-04-jpegs-without-huffman-tables.md: the sample and the checks, no change to the page): Chromium's JPEG
+    decoder (libjpeg-turbo, Firefox's too) sets the standard tables when a JPEG has none, so its picture and stills show
+    as with them; ManagedCodecs decodes it as FFmpeg does. make-samples.sh makes mjpeg-nodht-320x240-25.avi (written
+    with -huffman default, each DHT cut, checked: none left, the frames those with the tables); native "All agree",
+    wasm identical, and the page check picks it as the AVI (--avi): its picture, stills and contact sheet drawn. Safari
+    (ImageIO) isn't checked anywhere
+
+- WebM without a Duration
+  - Why: `WebmInput` refuses a WebM whose Segment has no Duration (a live recording, written as it went: no Cues, the
+    Segment's size unknown); FFmpeg's format then has no duration.
+  - Where: `WebmInput` (no duration), make-samples.sh (a VP9 written to a pipe).
+  - Done when: the sample passes the native check and the page check.
+  - Status: Done (2026-11-04; the owner split "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4"
+    into this row and the two after it, one PR each, through AskUserQuestion): `WebmInput` takes a Segment without a
+    Duration and describes no duration, as FFmpeg's format has none; make-samples.sh makes vp9-live-320x240-25.webm,
+    written to a pipe (no Duration, no Cues, the Segment's size unknown; ffprobe's duration N/A). Native "All agree",
+    the page check decodes it in Chromium to the native run's files
