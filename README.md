@@ -46,8 +46,9 @@ rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`
 range or not, with a DefaultDuration and a Duration; decisions `docs/decisions/2026-11-02-browser-decoder.md` and
 `2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
 libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
-browser's own `VideoDecoder` (WebCodecs) in the page's worker, on that worker alone (no threads, no split, a stopped
-run not kept), its run card's chip "your browser's decoder". Natively FFmpeg stands in for the browser
+browser's own `VideoDecoder` (WebCodecs), its run card's chip "your browser's decoder". It runs as any file does: on
+threads (the threaded runtime runs its imports on the main thread, where threads.js gives it the decoder's), split
+across workers (each worker's own `VideoDecoder` from its range's keyframe), and a stopped run kept to resume. Natively FFmpeg stands in for the browser
 (`tools/NativeCheck/FfmpegDecoder.cs`: the core's packets as IVF to ffmpeg) and every check holds the result to
 `Detect(path)`'s byte for byte; page-check then holds Chromium's decoder to the same files on every WebM sample. A
 browser whose decoder doesn't take the codec, or whose frames aren't Y, U and V planes (Firefox's BGRX), refuses the run
@@ -728,7 +729,7 @@ whose JSON is 13.5 KB. Under Node, the trailer's pass takes 0.46 s compiled ahea
 var meter = new PictureMeter(input.Video);         // or new PictureMeter(video, range) for one range of a split run
 var result = input.Detect(options, picture: meter);  // DetectAsync and ScoreRangeAsync take one too
 var m = meter.Measures;                              // per frame: YMin, YAvg, YMax, Brng, IsBlack, IsBars, FrameCrop
-// m.BlackSpans(2), m.BarsSpans(), m.Crop(); PictureSummary.Of(m): the page's JSON
+// m.BarsSpans(), m.Crop(); PictureSummary.Of(m, PictureSummary.BlackOf(result, m, video), PictureFreeze.Of(result))
 ```
 
 Every run measures each frame as it reads it, before ShotDetector converts it (decision
@@ -764,15 +765,19 @@ back, by the mean difference of its samples, on the frames as the run reads them
 deinterlaced frames (the card says so). A split run's ranges each keep their comparisons and the merge gives the whole
 video's spans; a range that starts inside a still is scored again first, given the ranges before it, from the still's
 first frame (`VideoInput.ScoreAgain`, ShotDetector's `FirstRangeToScoreAgain`, in the merging worker), and a resumed
-run's rest that starts inside one is given its frames from there (`VideoInput.Continue`). ShotDetector times them
-from the stream's start, as `ffmpeg -vf freezedetect` prints them; the page adds the stream's start, timing them by the
-stream's own pts as its black spans are (`-copyts`: `PictureFreeze.Of`). Decision
+run's rest that starts inside one is given its frames from there (`VideoInput.Continue`). Decision
 [2026-11-03-spans-on-ranges.md](docs/decisions/2026-11-03-spans-on-ranges.md), the owner's choice (before it, only a
 run that read every frame in order looked, FrameReader's `FreezeDetector`: 2026-11-01-freeze-spans.md). A stopped run's
 are those found by its stop, one still going there without an end. A stopped run kept before this, its ranges scored
 without, resumes without (its options have no `freeze`: the page gives it `freeze: false`), and the card says why.
-ShotDetector's own `BlackSpans` equal the page's black spans on every sample; the page keeps its own, which every
-range and kept run already carries (the owner's choice, the same decision).
+The black spans are ShotDetector's too (`BlackDetect` with `d=0`, `BlackSpans`, on every run, split and resumed; a
+deinterlaced run's of its deinterlaced frames), each marked long (`long`) by blackdetect's own rule for its default 2 s
+(`PictureSummary.BlackOf`), and both kinds of span are timed as ShotDetector times them, from the video stream's start,
+as `ffmpeg -vf blackdetect,freezedetect` prints them without `-copyts` (a stream that starts at 0.08 s, as
+vfr-fragmented-320x240.mp4: its still at 5.6 s, not 5.68): decision
+[2026-11-04-black-spans-and-times.md](docs/decisions/2026-11-04-black-spans-and-times.md), the owner's choice. A run
+kept before (no `black` in its options: the page gives it `black: false`) resumes without, its black spans the page's
+own measures' (FrameReader's `PictureMeter`, the same counts), from the stream's start too.
 
 ## The npm package
 
@@ -871,10 +876,11 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   are FFmpeg's and the filters count integers over them. Per frame, `signalstats=stat=brng`'s YMIN and YMAX equal and
   its YAVG and BRNG to the digits it prints, `cropdetect=reset=1:skip=0`'s x1, x2, y1, y2, w, h, x and y equal;
   `cropdetect`'s crop with its defaults after the last frame; `blackdetect`'s spans at `d=0` and at its default 2 s,
-  their times to the digits it prints (`-copyts`, the stream's own pts as ours); `freezedetect`'s still pictures with
+  ShotDetector's `BlackSpans` (those the summary marks long at 2 s), their times to the digits it prints (a pass of
+  their own without `-copyts`: from the stream's start, as ShotDetector's); `freezedetect`'s still pictures with
   its defaults (ShotDetector's `FreezeSpans`), their `freeze_start` and `freeze_end` to the digits it prints (one still
-  at the end has no end), and a run deinterlacing every frame's against the FFmpeg path's (FFmpeg's yadif), frames and
-  times. The colour bars by their definition:
+  at the end has no end), and a run deinterlacing every frame's still pictures and black spans against the FFmpeg path's
+  (FFmpeg's yadif), frames and times. The colour bars by their definition:
   on the samples that end in `smptehdbars` (make-samples.sh's three shots), one span, the last shot's frames exactly;
   on the fades sample, one span from within its `smptebars` fade-in to the end; none on the others. The run split
   into ranges, each measured while it is scored, must join into the whole run's measures byte for byte, and merged
@@ -1170,7 +1176,8 @@ rules for changing them (adding to the page among them).
   `Types()`, one character a frame as ffprobe prints them, `ToBytes`/`FromBytes` (hashed), `Join` for a split run's
   ranges.
 - `PictureSummary.cs`: the page's JSON of the measures (`PictureJson`, The picture), which NativeCheck also writes; its
-  `Freeze` (`PictureFreeze.Of`: ShotDetector's `FreezeSpans`) the still pictures, or why a run didn't look for them.
+  `Black` (`BlackOf`: ShotDetector's `BlackSpans`, or a run kept without them the page's own) and `Freeze`
+  (`PictureFreeze.Of`: ShotDetector's `FreezeSpans`) the still pictures, or why a run didn't look for them.
 - `TimelineFiles.cs`: the timeline formats and each one's extension, and `Chapters(result, minimum)`, the YouTube
   chapters (Running the page). A format built from a cut list lives on ShotDetector's `Timeline` (shotdetector#648).
 - `CorrectedCuts.cs`: corrected cuts made into a result (Correcting the cuts).
@@ -1293,6 +1300,7 @@ decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`):
   `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
   `2026-11-01-freeze-spans.md`: still pictures only in a run that reads every frame in order, the owner's A;
   `2026-11-03-spans-on-ranges.md`: ShotDetector's still pictures on every run, split and resumed, the page's black spans;
+  `2026-11-04-black-spans-and-times.md`: ShotDetector's black spans too, both timed from the stream's start;
   `2026-11-02-correcting-cuts.md`: correcting the cuts on the page, a corrected finished run kept, `LoadScenes` as it
   is; `2026-11-02-browser-decoder.md`: the files the page refuses, a refusal that says what to do, then VP9 and AV1
   through the browser's decoder, checked in Chromium; `2026-11-02-webm-browser-decoder.md`: how VP9 and AV1 in WebM are

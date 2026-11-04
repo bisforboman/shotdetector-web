@@ -39,8 +39,9 @@
 // The picture's measures (Api's Picture, every run's): the first run's against the native check's (--native:
 // <sample>.picture.json, FFmpeg's figures there), exactly, a 10-bit sample's in 10-bit values; a split run's merge the
 // whole run's; a stopped run's (one worker or split) for the frames its result read. The still pictures (freezedetect:
-// ShotDetector's, decision 2026-11-03-spans-on-ranges.md) on every run: the whole run's the native check's, a split or
-// resumed run's the whole run's, a stopped run's (one worker or split) the whole run's up to its stop (one still there
+// ShotDetector's, decision 2026-11-03-spans-on-ranges.md) and the black spans (blackdetect: ShotDetector's too, decision
+// 2026-11-04-black-spans-and-times.md) on every run: the whole run's the native check's, a split or resumed run's the
+// whole run's, a stopped run's (one worker or split) still pictures the whole run's up to its stop (one still there
 // without an end).
 // The frame types (Api's FrameTypes, every run's): the first run's ffprobe's pict_type, frame by frame, as the native
 // check wrote them (--native: <sample>.frametypes.txt) after comparing them with the core's; a split run's merge the
@@ -907,12 +908,14 @@ async function checkResume(sample, video, run, options, whole, wholeScenes, whol
 // A stopped run's kept bytes resumed with other options than its own: NOT_RESUMED and ShotDetector's reason. Stopped
 // at 90% of the frames, past the last place a range can start on every sample (the tone sample's is frame 252 of
 // 375): kept bytes with no place to resume from but frame 0 start over, and nothing of theirs is compared.
-// A stopped run kept before every run looked for still pictures (its options without freeze; the page gives such a
-// record freeze: false): its ranges, scored without, resume with freeze: false to the whole run's scenes CSV, and its
-// still pictures aren't looked for; the same bytes with freeze on don't resume (NOT_RESUMED). Decision
-// 2026-11-03-spans-on-ranges.md.
+// A stopped run kept before every run looked for still pictures and black spans (its options without freeze and black;
+// the page gives such a record freeze: false, black: false): its ranges, scored without, resume so to the whole run's
+// scenes CSV, its still pictures not looked for and its black spans the page's own, the whole run's frames; the same
+// bytes with both on don't resume (NOT_RESUMED). Decisions 2026-11-03-spans-on-ranges.md, 2026-11-04-black-spans-and-times.md.
 async function checkKeptWithoutStills(sample) {
-  const name = `${basename(sample)} kept without still pictures`, without = { ...RUNS.adaptive, freeze: false };
+  const name = `${basename(sample)} kept without still pictures`, without = { ...RUNS.adaptive, freeze: false, black: false };
+  await Detect(JSON.stringify(RUNS.adaptive));
+  const wholeBlack = JSON.parse(Picture()).black.map(s => [s.firstFrame, s.endFrame, s.long]);
   await Detect(JSON.stringify(without));
   const scenes = ScenesCsv();
   stopAt = Math.floor(JSON.parse(Ranges(JSON.stringify(without), 1, 0)).frames / 2);
@@ -927,10 +930,12 @@ async function checkKeptWithoutStills(sample) {
   }
   if (!message?.startsWith(NOT_RESUMED)) fail(`${name}: resumed with still pictures looked for, or failed otherwise: ${message}`);
   await Resume(JSON.stringify(without), bytes);
-  const { freeze } = JSON.parse(Picture());
-  if (ScenesCsv() !== scenes || freeze.spans !== null || !freeze.notMeasured?.startsWith('Not looked for: the stopped part was kept before'))
-    fail(`${name}: resumed to another scenes CSV, or still pictures ${JSON.stringify(freeze)}`);
-  else console.error(`${name}: resumes without (freeze: false), the whole run's scenes CSV; with freeze on: "${message}"`);
+  const { freeze, black } = JSON.parse(Picture());
+  const blackFrames = black.map(s => [s.firstFrame, s.endFrame, s.long]);
+  if (ScenesCsv() !== scenes || freeze.spans !== null || !freeze.notMeasured?.startsWith('Not looked for: the stopped part was kept before') ||
+    JSON.stringify(blackFrames) !== JSON.stringify(wholeBlack))
+    fail(`${name}: resumed to another scenes CSV, still pictures ${JSON.stringify(freeze)}, or black spans ${JSON.stringify(blackFrames)}, not ${JSON.stringify(wholeBlack)}`);
+  else console.error(`${name}: resumes without (freeze: false, black: false), the whole run's scenes CSV and black spans' frames; with both on: "${message}"`);
 }
 
 async function checkNotResumed(sample) {

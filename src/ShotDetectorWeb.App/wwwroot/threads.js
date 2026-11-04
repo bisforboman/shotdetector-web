@@ -9,6 +9,7 @@
 // reload; one whose runtime ends calls its onerror, as a worker that dies does.
 import { hold, pause, release, whenHeld } from './pause.js';
 import { append, blob, parts } from './blob-write.js';
+import { decoderClose, decoderDecode, decoderNext, decoderOpen, decoderTake } from './video-decode.js';
 
 // The exports' names in the threaded bundle: tasks, as .NET on the main thread calls nothing synchronously
 // (Api.Threads.cs). The last run's result: RESULTS, which app.js asks of the runner that ran it.
@@ -53,6 +54,12 @@ function start() {
       parts,
       append,
       blob,
+      // A WebM's VP9 or AV1: WebCodecs' VideoDecoder on the main thread, where the runtime runs its imports (JsDecoder).
+      decoderOpen,
+      decoderDecode,
+      decoderNext,
+      decoderTake,
+      decoderClose,
     });
     const exports = await getAssemblyExports(getConfig().mainAssemblyName);
     await runMain();

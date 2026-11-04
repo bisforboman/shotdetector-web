@@ -20,6 +20,9 @@ public static partial class Api
     // The last run's still pictures, or why it didn't look for them (decision 2026-11-01-freeze-spans.md).
     static PictureFreeze? _freeze;
 
+    // The last run's black spans (PictureSummary.BlackOf: ShotDetector's, decision 2026-11-04-black-spans-and-times.md).
+    static IReadOnlyList<PictureSpan>? _black;
+
     /// <summary>
     /// The last run's picture measures as JSON (<see cref="PictureSummary"/>, camelCase), for the frames it read, with its
     /// still pictures: a run that read every frame in order from the first looked for them, a split or resumed run says
@@ -28,7 +31,7 @@ public static partial class Api
     [JSExport]
     public static string Picture() =>
         JsonSerializer.Serialize(PictureSummary.Of(_picture ?? throw new InvalidOperationException("Detect first."),
-            _freeze ?? PictureFreeze.KeptWithout), PictureJson.Default.PictureSummary);
+            _black ?? [], _freeze ?? PictureFreeze.KeptWithout), PictureJson.Default.PictureSummary);
 
     /// <summary>
     /// A range's bytes, little-endian: the scores' length, the scores, the picture measures' length, the measures, then the

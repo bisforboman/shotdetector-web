@@ -31,6 +31,8 @@ it there, don't work around it).
 
 ## Working on this repository
 
+- **Ask the owner**: at each decision (which row, a design choice, before a PR or a merge), prompt the owner with
+  the question tool rather than deciding or asking in prose; the owner's standing instruction, 2026-11-03.
 - **One backlog row, one cloud session, one PR** against `main`, CI green. Set the row's status to In progress (with
   the date) when starting, move it to `docs/backlog-done.md` when it lands, add a row when a gap turns up. A design
   question the row doesn't settle goes to `docs/decisions/` first.
@@ -43,7 +45,8 @@ it there, don't work around it).
 - **The browser's decoder** (WebM's VP9 and AV1, decision 2026-11-02-webm-browser-decoder.md): the core reads and
   describes the file; only the frames are the browser's (`IHostDecoder`). A WebM sample is checked natively with FFmpeg
   standing in (`FfmpegDecoder`) and in Chromium by page-check (`--browser`); Node has none (app-check only opens it).
-  Such a run stays on the page's worker: no threads, no split, nothing kept to resume.
+  Such a run goes as any (on threads, split, kept to resume): each runtime's `VideoDecoder` from its range's keyframe,
+  the threaded runtime's on the main thread (threads.js gives it the decoder imports).
 - **Samples**: a new one isolates one thing and is checked to really have it (ffprobe, `-bsf:v trace_headers`). ffmpeg
   tags its test sources BT.601 (bt470bg): an untagged sample needs `setparams=...=unknown`.
 - **FastYuv is LGPL-2.1**: it stays its own DLL/.wasm (no single-file output), its COPYING.LGPL is copied into every

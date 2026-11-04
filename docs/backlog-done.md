@@ -1694,3 +1694,32 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     PictureCheck.cs and the CLAUDE.md gotcha with it. The page has no one-worker limit for such a run: its ranges
     already deinterlace (`RangeFrames`' margins, ShotDetector 3.25.0), and the checks hold split and resumed
     deinterlaced runs to the whole run's)
+
+- WebM runs split, resumed and on threads
+  - Why: a browser-decoded WebM runs on the page's worker alone, and a stopped one isn't kept (decision
+    `2026-11-02-webm-browser-decoder.md`, the owner's "one worker only"). NativeCheck's ranges, threads and resume
+    checks already pass on the WebM samples with FFmpeg standing in: what is missing is the page's side (a
+    `VideoDecoder` per range's worker from its keyframe, the threaded runtime's imports on the main thread).
+  - Where: `app.js`'s `ranges`, `go` and `keep` (`browserDecoded`), `threads.js` (the decoder imports), page-check.
+  - Done when: page-check splits a WebM across two workers, stops and resumes one, to the native run's files.
+  - Status: Done (2026-11-04, the owner's choice through the coordinator: `ranges`, `go` and `keep` no longer set a
+    browser-decoded run apart; threads.js gives the threaded runtime the decoder imports on the main thread and
+    `OpenThreaded` passes `JsDecoder`. page-check runs every WebM on threads, and the AV1 ones on two workers and held,
+    stopped and resumed on threads and on two workers, to the native run's files, on the interpreted and the AOT
+    publish. Once in nineteen threaded resumes the runtime trapped afterwards: row "An unaligned atomic in the
+    threaded runtime, once", Maybe)
+
+- Black spans from ShotDetector, the spans timed from the stream's start
+  - Why: the owner's answers of 2026-11-04 (decision
+    [2026-11-04-black-spans-and-times.md](decisions/2026-11-04-black-spans-and-times.md)), changing two of
+    2026-11-03-spans-on-ranges.md's: one source for the picture's spans (ShotDetector's `BlackSpans` as its
+    `FreezeSpans`, not the page's own black spans), and their times as ShotDetector and plain `ffmpeg -vf blackdetect`
+    give them, from the video stream's start (not the stream's own pts, `-copyts`).
+  - Where: `DetectRequest` (`black`), `app.js` (`options()`, `readKept`), `PictureSummary.cs`, `Api.cs`/`Api.Picture.cs`,
+    `panels/picture.js`; PictureCheck, app-check.mjs; README.
+  - Done when: the card's black spans are ShotDetector's on every run, split and resumed too, equal to `ffmpeg -vf
+    blackdetect`'s and the still pictures to `freezedetect`'s without `-copyts`; a run kept without them resumes; `tools/check.sh
+    native wasm aot page` passes.
+  - Status: Done (2026-11-04: `tools/check.sh native wasm aot page` on every sample; ShotDetector's black spans and
+    still pictures equal blackdetect's and freezedetect's without `-copyts`, split, resumed and deinterlaced runs the
+    whole run's or the FFmpeg path's; a run kept without them resumes)

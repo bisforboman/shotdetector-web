@@ -181,14 +181,15 @@ a frame of another size refused (#625). What it still lacks is in its `docs/fram
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
 
-- WebM runs split, resumed and on threads
-  - Why: a browser-decoded WebM runs on the page's worker alone, and a stopped one isn't kept (decision
-    `2026-11-02-webm-browser-decoder.md`, the owner's "one worker only"). NativeCheck's ranges, threads and resume
-    checks already pass on the WebM samples with FFmpeg standing in: what is missing is the page's side (a
-    `VideoDecoder` per range's worker from its keyframe, the threaded runtime's imports on the main thread).
-  - Where: `app.js`'s `ranges`, `go` and `keep` (`browserDecoded`), `threads.js` (the decoder imports), page-check.
-  - Done when: page-check splits a WebM across two workers, stops and resumes one, to the native run's files.
-  - Status: Maybe (2026-11-02)
+- An unaligned atomic in the threaded runtime, once
+  - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
+    interpreted publish) gave the native run's files, then the threaded runtime ended: "operation does not support
+    unaligned accesses" (WebAssembly's trap for an atomic on an unaligned address) and `RuntimeError: unreachable` in
+    `threads/_framework/dotnet.native.js`. Nineteen such runs, the same file and the 8-bit AV1 one, gave it once. The
+    page's code has no atomics of its own there: .NET's threaded runtime (10.0.14), or the decoder imports it runs on
+    the main thread for a WebM (`JsDecoder`'s `Span` views).
+  - Where: a repro first (page-check's `resumedBrowser` in a loop), then .NET's issue tracker if it is the runtime's.
+  - Status: Maybe (2026-11-04)
 
 - WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
   - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration (FFmpeg's rate then comes from the frames
