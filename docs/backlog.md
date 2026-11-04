@@ -184,15 +184,6 @@ file out of `samples/reject/`, and passes the native check.
     `WebmInput` on its demuxer.
   - Status: Maybe (2026-11-02)
 
-- Chapter titles kept with the kept run
-  - Why: the titles typed for a run's YouTube chapters (the run card's Titles) last while the run is shown; a stopped
-    run kept in IndexedDB and shown again on a later visit (decision `2026-10-30-resume-across-visits.md`) comes back
-    without them, and a resumed run's chapters change where the rest adds cuts.
-  - Where: `app.js`'s `KEPT` record (the titles by chapter start, beside the options and `Kept()`'s Blob), told to
-    `run.js` with the kept run; the page check's reload.
-  - Done when: the page check types a title, stops, reloads and finds it in the chapters' download.
-  - Status: In progress (2026-11-04)
-
 - An AVI's JPEGs without Huffman tables
   - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
     FFmpeg's and ManagedCodecs' decoders supply but a browser's JPEG decoder doesn't; the page's picture and stills of
