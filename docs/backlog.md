@@ -67,21 +67,6 @@ threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4",
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
 publish").
 
-### Black spans and span times from ShotDetector
-
-- Black spans from ShotDetector, the spans timed from the stream's start
-  - Why: the owner's answers of 2026-11-04 (decision
-    [2026-11-04-black-spans-and-times.md](decisions/2026-11-04-black-spans-and-times.md)), changing two of
-    2026-11-03-spans-on-ranges.md's: one source for the picture's spans (ShotDetector's `BlackSpans` as its
-    `FreezeSpans`, not the page's own black spans), and their times as ShotDetector and plain `ffmpeg -vf blackdetect`
-    give them, from the video stream's start (not the stream's own pts, `-copyts`).
-  - Where: `DetectRequest` (`black`), `app.js` (`options()`, `readKept`), `PictureSummary.cs`, `Api.cs`/`Api.Picture.cs`,
-    `panels/picture.js`; PictureCheck, app-check.mjs; README.
-  - Done when: the card's black spans are ShotDetector's on every run, split and resumed too, equal to `ffmpeg -vf
-    blackdetect`'s and the still pictures to `freezedetect`'s without `-copyts`; a run kept without them resumes; `tools/check.sh
-    native wasm aot page` passes.
-  - Status: In progress (2026-11-04)
-
 ## Waiting
 
 - The reference tone left out of the detection
