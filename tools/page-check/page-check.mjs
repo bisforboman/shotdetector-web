@@ -215,6 +215,12 @@ async function resumedAfterReload(page, what, frames, run, settle, threads, titl
   if (await page.isVisible('#resume')) fail(`${what}: finished, Resume is still offered`);
 }
 
+// Whether Resume is offered for the run just stopped: the status says stopped once the result is shown, Resume comes
+// once the run's scores are kept (app.js, keep: Api's Kept, from the runner, after the result), up to 10 s later.
+async function resumeOffered(page) {
+  return page.waitForSelector('#resume', { state: 'visible', timeout: 10000 }).then(() => true, () => false);
+}
+
 // A resumed run's status names the frame the stopped run had got to, and the keyframe before it its rest scored again
 // from only as that, in brackets (app.js, resumedFrom): "resumed from frame 216 (rescored from its keyframe, frame 124)".
 function resumedAt(status, frames) {
@@ -1050,7 +1056,7 @@ async function resumedBrowser(file, query) {
     frames = status === null ? null : Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
   }
   if (frames !== null) {
-    if (!await page.isVisible('#resume')) fail(`${what}: stopped at frame ${frames}, Resume isn't offered`);
+    if (!await resumeOffered(page)) fail(`${what}: stopped at frame ${frames}, Resume isn't offered`);
     else {
       await page.click('#resume');
       const done = await finished(page, `${what}, resumed`);
@@ -1305,7 +1311,7 @@ try {
         if (frames !== at)
           fail(`${again}: stopped at frame ${frames}, not at ${at}, where it said it was held: ${status}`);
         await compare(page, again, 'sintel-trailer.mp4', run, frames);
-        if (!await page.isVisible('#resume')) fail(`${again}: no Resume offered`);
+        if (!await resumeOffered(page)) fail(`${again}: no Resume offered`);
         const titled = await typeTitle(page, again);
         await resumedAfterReload(page, 'the demo across a reload', frames, run, isolated, true, titled);
       }
