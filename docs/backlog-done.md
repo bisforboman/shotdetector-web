@@ -1723,3 +1723,20 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-11-04: `tools/check.sh native wasm aot page` on every sample; ShotDetector's black spans and
     still pictures equal blackdetect's and freezedetect's without `-copyts`, split, resumed and deinterlaced runs the
     whole run's or the FFmpeg path's; a run kept without them resumes)
+
+- Real phone and broadcast files for the real-world check
+  - Why: the real-world check's rotated and interlaced files are made from Blender films by FFmpeg, since no openly
+    licensed phone video or broadcast capture is on a host the cloud sandbox reaches (download.blender.org only:
+    not Wikimedia Commons, archive.org, FFmpeg's samples or test-videos.co.uk, tried 2026-10-31). Real ones have an
+    encoder's own SEI, rotation as phones write it, VFR as phones make it, PAFF field pictures.
+  - Where: `tools/realworld.sh`'s list: files from Wikimedia Commons (reachable from GitHub's runners), pinned by
+    SHA-256 recorded from the workflow's first download, as ci.yml's Sintel trailer was.
+  - Done when: realworld.yml runs them, each "same" or "refused" with its row named.
+  - Status: Done (2026-11-04, the owner's choice through the coordinator; README, "Real world"): eight real phone files,
+    Flickr originals under CC-BY or CC-BY-SA mirrored on archive.org (reachable from GitHub's runners; the cloud
+    session can't reach its file servers, so their SHA-256 came from realworld.yml's first download, an "unpinned"
+    row's), all H.264: iPhones 2012-2018 and Android phones 2011-2017, turned -90 and 180, variable rates, full range,
+    a 3GP, a WhatsApp file. All eight give the FFmpeg path's CSVs and shots on every run; the four that agree in full
+    are the nightly phones group (run 41793805746: native All agree, the AOT bundle 156 of 156 files identical), the
+    four whose description or measures differ run by hand (phones-differ) under rows of their own ("Found by the real
+    phone files"). No openly licensed broadcast capture was found on a host either reaches.

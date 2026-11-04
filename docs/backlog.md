@@ -225,16 +225,6 @@ file out of `samples/reject/`, and passes the native check.
   - Not: decoding in .NET for the picture.
   - Status: Maybe (found 2026-10-31)
 
-- Real phone and broadcast files for the real-world check
-  - Why: the real-world check's rotated and interlaced files are made from Blender films by FFmpeg, since no openly
-    licensed phone video or broadcast capture is on a host the cloud sandbox reaches (download.blender.org only:
-    not Wikimedia Commons, archive.org, FFmpeg's samples or test-videos.co.uk, tried 2026-10-31). Real ones have an
-    encoder's own SEI, rotation as phones write it, VFR as phones make it, PAFF field pictures.
-  - Where: `tools/realworld.sh`'s list: files from Wikimedia Commons (reachable from GitHub's runners), pinned by
-    SHA-256 recorded from the workflow's first download, as ci.yml's Sintel trailer was.
-  - Done when: realworld.yml runs them, each "same" or "refused" with its row named.
-  - Status: In progress (2026-11-04)
-
 
 
 - A Cinemetrics file
