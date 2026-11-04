@@ -26,7 +26,7 @@
 //                                                                run's first range's as it scores, the rest at the
 //                                                                merge); one told again replaces those from its number
 //                                                                on (a resumed run's last, the first range's last)
-//                        'done'     { video, result, seconds, name, from, restored }   the run's result (Api's
+//                        'done'     { video, result, seconds, name, from, restored, titles }   the run's result (Api's
 //                                                                Detect, its CSVs as scenesCsv, a string, and statsCsv,
 //                                                                a Blob of text/csv); name: the file's, without its
 //                                                                extension, for downloads. A stopped run's too, with
@@ -34,7 +34,9 @@
 //                                                                from: the frame a resumed run's rest started at (the
 //                                                                frames before it scored in an earlier run), else 0;
 //                                                                restored: a stopped run kept in this browser shown
-//                                                                again, which didn't run now (seconds 0)
+//                                                                again, which didn't run now (seconds 0); titles:
+//                                                                the chapter titles kept with it (keepTitles), else
+//                                                                null
 //                        'corrected' { video, result, detected, cuts, edits }   the run's cuts corrected on the page
 //                                                                (correct; issue #90): result as 'done's, its shots and
 //                                                                scenesCsv the corrected list's (Api's Correct: made by
@@ -55,6 +57,10 @@
 //   correct(cuts)      corrects the shown run's cuts to cuts (frames counted from 0, frame 0 left out): a promise of
 //                       whether it did (only a done or stopped run is corrected); 'corrected' tells the panels.
 //                       detectedCuts() the shown run's cuts as detected, correctedCuts() as corrected now
+//   keepTitles(t)      the shown run's YouTube chapter titles as typed, { minimum, titles: { start: title } } (the
+//                       chapters' minimum, and each title by its chapter's start in seconds): kept with the run when it
+//                       is kept (KEPT, the owner's choice, decision 2026-11-04-kept-chapter-titles.md), and told again
+//                       with it ('done's titles) when it is shown again or resumed
 //   call(name, ...args) an export of Api's, by name, in the worker: a promise of what it returns (a call made before
 //                       the worker has started, as the footer's Versions, waits for it: startWorker)
 //   frameSeconds(video, frames) where frame number `frames` (counted from 0 as decoded: a range's, a span's) starts,
@@ -167,6 +173,7 @@ let resumeFrom = 0;     // the frame the current run's rest starts at when it re
 let resumeAt = 0;       // and the frame the stopped run had got to: the rest scores again from its keyframe (from)
 let detected = null;    // the shown run, as detected: { result, options, record (the kept record that holds it) }
 let edits = { removed: [], added: [] }; // its corrections, the frames of the cuts removed and added (correct)
+let titles = null;      // its YouTube chapters' titles as typed (keepTitles): { minimum, titles: { start: title } }
 let correcting = Promise.resolve(); // the corrections asked for, one after another
 
 const listeners = {};
@@ -531,9 +538,10 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   if (opened !== video) return; // a new file was chosen meanwhile
   // The corrections kept for this file and these options (a resumed run's, or a run of them again) apply to the new
   // result's cuts: the stopped part's stay as corrected, the rest's come in as detected.
-  const carried = keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run) ? kept.edits : null;
+  const same = keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run);
+  const carried = same ? kept.edits : null;
   detected = { result: r, options: run, record: null };
-  show(r, seconds, workers, by === threaded ? r.threads : 1);
+  show(r, seconds, workers, by === threaded ? r.threads : 1, null, same ? kept.titles ?? null : null);
   if (carried) await correct(applied(carried));
   if (opened !== video) return;
   // Stopped, or corrected: kept, to resume or to show again, in this visit or a later one; finished: the kept run of
@@ -548,16 +556,17 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
 
 // A stopped run kept in this browser to resume (the owner's choices, 2026-10-30: only the last one, of any file; shown
 // at once when its file is picked again, its options in the form): IndexedDB's KEPT store, one record under KEPT_KEY,
-// { name, size, lastModified, options, blob, frames, from, shots, edits, saved }: the file (by name, size and modified time),
-// the options it ran with, its scores as Api's Kept gives them (a Blob, whose first four bytes are the frame its rest
-// starts at: from), the frames its result read and its shots (which a resume shows while the rest's are told), and
-// when; edits, its cuts' corrections ({ removed, added }, correct). A finished run is kept too once it is corrected (the
-// owner's choice, 2026-11-02, decision 2026-11-02-correcting-cuts.md): its from is -1, nothing to resume, and it is
-// shown again with its corrections. A correction made later goes under EDITS_KEY, { saved, edits } (saved: the record's),
-// not into the record: the record, its Blob among it, is written once, as Firefox's Blob read back from IndexedDB stops
-// answering once its record is written again (a resume after a reload never got its bytes, seen 2026-11-02 in CI).
-// Nothing leaves the browser. Storage can be off or fail (a private window): the run then resumes only in this visit,
-// from the record kept in memory.
+// { name, size, lastModified, options, blob, frames, from, shots, edits, titles, saved }: the file (by name, size and
+// modified time), the options it ran with, its scores as Api's Kept gives them (a Blob, whose first four bytes are the
+// frame its rest starts at: from), the frames its result read and its shots (which a resume shows while the rest's are
+// told), and when; edits, its cuts' corrections ({ removed, added }, correct); titles, its YouTube chapters' titles
+// (keepTitles). A finished run is kept too once it is corrected (the owner's choice, 2026-11-02, decision
+// 2026-11-02-correcting-cuts.md): its from is -1, nothing to resume, and it is shown again with its corrections. A
+// correction or a title made later goes under EDITS_KEY, { saved, edits, titles } (saved: the record's), not into the
+// record: the record, its Blob among it, is written once, as Firefox's Blob read back from IndexedDB stops answering
+// once its record is written again (a resume after a reload never got its bytes, seen 2026-11-02 in CI). Nothing
+// leaves the browser. Storage can be off or fail (a private window): the run then resumes only in this visit, from the
+// record kept in memory.
 const KEPT = 'kept', KEPT_KEY = 'last', EDITS_KEY = 'edits';
 
 function keptStore(mode, f) {
@@ -580,7 +589,10 @@ async function readKept() {
       s.get(EDITS_KEY).onsuccess = e => { later = e.target.result ?? null; };
       return s.get(KEPT_KEY);
     }) ?? null;
-    if (record && later?.saved === record.saved) record.edits = later.edits;
+    if (record && later?.saved === record.saved) {
+      record.edits = later.edits;
+      if ('titles' in later) record.titles = later.titles;
+    }
     // Kept before every run looked for still pictures, or black spans: its ranges were scored without, and resume so.
     if (record?.options && !('freeze' in record.options)) record.options.freeze = false;
     if (record?.options && !('black' in record.options)) record.options.black = false;
@@ -607,7 +619,7 @@ async function keep(by, run, r) {
   if (opened !== video || (from < 0 && r.stopped)) return;
   const shownRun = detected;
   kept = { name: chosen.name, size: chosen.size, lastModified: chosen.lastModified, options: run, blob,
-    frames: r.frameCount, from: r.stopped ? from : -1, shots: r.shots, edits, saved: Date.now() };
+    frames: r.frameCount, from: r.stopped ? from : -1, shots: r.shots, edits, titles, saved: Date.now() };
   if (shownRun?.result === r) shownRun.record = kept;
   setState(state);
   await store(kept);
@@ -622,11 +634,14 @@ async function store(record) {
   } catch { /* kept for this visit only */ }
 }
 
-// A kept record's corrections changed: written apart from it (EDITS_KEY), the record left as it is.
-async function storeEdits(record) {
-  try {
-    await keptStore('readwrite', s => s.put({ saved: record.saved, edits: record.edits }, EDITS_KEY));
-  } catch { /* kept for this visit only */ }
+// A kept record's corrections or titles changed: written apart from it (EDITS_KEY), the record left as it is; one
+// write after another, in the order they were asked for.
+let storing = Promise.resolve();
+function storeEdits(record) {
+  const later = { saved: record.saved, edits: record.edits, titles: record.titles ?? null };
+  storing = storing.then(() => keptStore('readwrite', s => s.put(later, EDITS_KEY)))
+    .catch(() => { /* kept for this visit only */ });
+  return storing;
 }
 
 function forget() {
@@ -671,7 +686,7 @@ async function restore(record) {
   if (opened !== video) return;
   resumeFrom = resumeAt = 0;
   detected = { result: r, options: record.options, record };
-  show(r, 0, 1, 1, record);
+  show(r, 0, 1, 1, record, record.titles ?? null);
   if (record.edits?.removed.length || record.edits?.added.length) await correct(applied(record.edits));
 }
 
@@ -1025,7 +1040,7 @@ function fail(message) {
 }
 
 // restored: the kept record of a stopped run shown again (restore), not a run of this visit.
-function show(r, seconds, workers, threads, restored = null) {
+function show(r, seconds, workers, threads, restored = null, typed = null) {
   setState(r.stopped ? 'stopped' : 'done');
   // A resumed run read its rest's frames (and those it scored again from a keyframe), not the stopped part's: its speed
   // and its times real time are of those (as the shot statistics' Run).
@@ -1058,8 +1073,9 @@ function show(r, seconds, workers, threads, restored = null) {
   // its workers', not this browser's on one.
   if (!restored && seconds >= 5 && workers === 1) storeRate(ran * opened.width * opened.height / seconds, threads);
   edits = { removed: [], added: [] };
+  titles = typed;
   emit('done', { video: opened, result: r, seconds, name: file.name.replace(/\.[^.]*$/, ''), from: resumeFrom,
-    restored: !!restored });
+    restored: !!restored, titles });
   clearShots();
   for (const shot of r.shots) addShot(shot);
   result.hidden = false;
@@ -1141,6 +1157,18 @@ async function keepEdits(run) {
   if (JSON.stringify(record.edits) === JSON.stringify(edits)) return;
   record.edits = edits;
   await storeEdits(record);
+}
+
+// The chapter titles typed for the shown run (panels/run.js): kept with its record if it is kept (a stopped run, or a
+// finished one kept for its corrections), else with the run while it is shown, for keep to take if it comes to be
+// kept. Typing a title keeps no run of itself (the owner's choice, decision 2026-11-04-kept-chapter-titles.md).
+export function keepTitles(t) {
+  if (!detected) return;
+  titles = t && Object.keys(t.titles).length > 0 ? t : null;
+  const record = detected.record && kept === detected.record ? detected.record : null;
+  if (!record || JSON.stringify(record.titles ?? null) === JSON.stringify(titles)) return;
+  record.titles = titles;
+  storeEdits(record);
 }
 
 // The shot playing, a caption under the video: the last shot starting at or before the playhead, if the playhead is

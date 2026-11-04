@@ -191,7 +191,7 @@ file out of `samples/reject/`, and passes the native check.
   - Where: `app.js`'s `KEPT` record (the titles by chapter start, beside the options and `Kept()`'s Blob), told to
     `run.js` with the kept run; the page check's reload.
   - Done when: the page check types a title, stops, reloads and finds it in the chapters' download.
-  - Status: Maybe (left out of the chapters row, 2026-10-31)
+  - Status: In progress (2026-11-04)
 
 - An AVI's JPEGs without Huffman tables
   - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which

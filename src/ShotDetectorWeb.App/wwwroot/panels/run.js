@@ -7,13 +7,16 @@
 // YouTubeChapters: ShotDetector's Timeline's rule and lines), the cuts as a video description's chapter list, each at
 // least the minimum typed beside it (30 s to begin with, YouTube's 10 at least), with a title for each typed on the page
 // (Titles, folded under the row: the download carries them, a chapter left empty keeps Timeline's "Chapter n"; kept
-// while the run is shown, by the chapter's start, so a new minimum keeps the titles of the starts it keeps). A stopped run's are the result for the part
+// while the run is shown, by the chapter's start, so a new minimum keeps the titles of the starts it keeps; and with
+// the minimum, kept with the run when the page keeps it, stopped or corrected, to come back with it on a later visit
+// and through a resume: app.js's keepTitles, decision 2026-11-04-kept-chapter-titles.md). A stopped run's are the
+// result for the part
 // read, and its figures say where it stopped. A run lost with its worker (one that didn't answer a stop) says where it
 // had got to and has no downloads (.NET and the result went with the worker). Once the cuts are corrected on the page
 // ('corrected', panels/corrections.js), the figures and every download but the stats CSV are the corrected list's,
 // made by ShotDetector (Api's Correct: LoadScenes of the list), still checked byte for byte; the stats CSV, each frame's
 // scores, stays the run's.
-import { browserDecoded, call, card, frameSeconds, on } from '../app.js';
+import { browserDecoded, call, card, frameSeconds, keepTitles, on } from '../app.js';
 import { secondsOf, timecode } from '../timeline.js';
 
 const section = card('This run', {
@@ -170,8 +173,14 @@ on('shot', ({ shot }) => {
   show([String(shots.length), `${shots.length === 1 ? 'shot' : 'shots'} so far`], ran());
 });
 let done = null; // the run done's { video, name }, which its corrections are shown with
-on('done', ({ video, result, name }) => {
+on('done', ({ video, result, name, titles: kept }) => {
   done = { video, name };
+  // The titles kept with the run (shown again, or resumed), at the minimum they were typed at.
+  typed.clear();
+  if (kept) {
+    for (const [start, title] of Object.entries(kept.titles)) typed.set(Number(start), title);
+    chaptersMin.value = String(kept.minimum);
+  }
   return shown(video, result, name, null);
 });
 on('corrected', ({ video, result, edits }) => {
@@ -180,7 +189,7 @@ on('corrected', ({ video, result, edits }) => {
 
 // The run's figures and downloads: of its result, or of its corrected list (edits: the corrections, else null).
 async function shown(video, r, name, edits) {
-  clear({ keepTitles: edits !== null });
+  clear({ keepTitles: true });
   const rate = r.frameRate.num / r.frameRate.den, n = r.shots.length, cuts = Math.max(n - 1, 0);
   const fps = `${Number(rate.toFixed(3))} fps${video.frameTimestamps ? ' on average' : ''}`;
   if (r.stopped) {
@@ -257,7 +266,16 @@ async function showChapters() {
   showTitles();
   chapters.hidden = false;
 }
-chaptersMin.addEventListener('input', showChapters);
+chaptersMin.addEventListener('input', () => {
+  showChapters();
+  if (chaptered !== null && chaptered.at === runs) keepTyped();
+});
+
+// The titles typed, told to app.js to keep with the run (those not empty), with the minimum they are shown at.
+function keepTyped() {
+  const titles = Object.fromEntries([...typed].filter(([, title]) => title.trim()));
+  keepTitles({ minimum: typedMinimum(), titles });
+}
 
 // Timeline's lines with the titles typed: each line is its start ("1:23"), a space and Timeline's placeholder title,
 // which a title typed for that start replaces.
@@ -293,6 +311,7 @@ function showTitles() {
     input.addEventListener('input', () => {
       typed.set(start, input.value);
       linkChapters();
+      keepTyped();
     });
     li.append(time, input);
     titleList.append(li);
