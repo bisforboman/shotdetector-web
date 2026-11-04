@@ -181,11 +181,20 @@ async function served(page) {
   await page.waitForLoadState('load');
 }
 
+// Clicks button id once the run's bar reaches at (a fraction), in the page in the same moment it sees the bar there: a
+// click from Playwright waits for the button to be stable first, by when a short file's run (an AOT one: 114 frames
+// at 105 fps, seen in CI 2026-11-04) may have ended and the button gone.
+async function clickAt(page, id, at) {
+  await page.waitForFunction(([f, b]) => {
+    if (document.body.dataset.state !== 'detecting' || document.getElementById('progress').value < f) return false;
+    document.getElementById(b).click();
+    return true;
+  }, [at, id], { timeout: 15 * 60 * 1000, polling: 50 });
+}
+
 // Stops a run once its bar reaches at (a fraction): the stopped result, its frames read (null if it didn't stop).
 async function stopped(page, what, at) {
-  await page.waitForFunction(f => document.body.dataset.state === 'detecting' &&
-    document.getElementById('progress').value >= f, at, { timeout: 15 * 60 * 1000, polling: 50 });
-  await page.click('#stop');
+  await clickAt(page, 'stop', at);
   const status = await finished(page, what, 'stopped');
   return status === null ? null : Number(/frame ([\d,]+) of/.exec(status)?.[1].replace(/,/g, ''));
 }
@@ -617,9 +626,7 @@ async function chaptersText(page) {
 // pause it waits at (up to 8 frames on, Api's PauseEvery), the bar and the status hold still. The frame it holds at,
 // or null.
 async function paused(page, what, from) {
-  await page.waitForFunction(f => document.body.dataset.state === 'detecting' &&
-    document.getElementById('progress').value >= f, from, { timeout: 15 * 60 * 1000, polling: 50 });
-  await page.click('#pause');
+  await clickAt(page, 'pause', from);
   const held = () => page.evaluate(() => [document.body.dataset.state, document.getElementById('progress').value,
     document.getElementById('status-text').textContent, document.getElementById('pause').textContent]);
   await page.waitForTimeout(1000);
@@ -1212,6 +1219,15 @@ async function arrived(page, what, query) {
   await compare(page, what, name, run);
 }
 
+// A CDP call that fails after a minute rather than waiting: PWA.install or PWA.launchFilesInApp once never answered in
+// CI (2026-11-04), which held the job to its 120 minutes.
+function within(promise, what, ms = 60000) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} didn't answer in ${ms / 1000} s`)), ms);
+  })]).finally(() => clearTimeout(timer));
+}
+
 // The app installed and the sample opened with it: launchQueue.
 async function launched(query, what) {
   const app = appBrowser();
@@ -1219,9 +1235,9 @@ async function launched(query, what) {
   try {
     const cdp = await context.newCDPSession(page);
     if (query === '') await manifestValid(page, cdp);
-    const { appId: manifestId } = await cdp.send('Page.getAppId');
-    await cdp.send('PWA.install', { manifestId, installUrlOrBundleUrl: base });
-    await cdp.send('PWA.launchFilesInApp', { manifestId, files: [sample] });
+    const { appId: manifestId } = await within(cdp.send('Page.getAppId'), 'Page.getAppId');
+    await within(cdp.send('PWA.install', { manifestId, installUrlOrBundleUrl: base }), 'PWA.install');
+    await within(cdp.send('PWA.launchFilesInApp', { manifestId, files: [sample] }), 'PWA.launchFilesInApp');
     await arrived(page, what, query);
   } catch (e) {
     fail(`${what}: ${e.message}`);
