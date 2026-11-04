@@ -1761,3 +1761,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     has no VUI, and FFmpeg 8.1 then says unspecified (stream and frames); with a VUI that has no chroma location it
     says left, which every x264 sample has. `SpsInfo` now starts unspecified and says left once a VUI is present.
     NativeCheck: the 3GP "All agree", every sample too; the file moves to realworld.yml's phones group
+
+- An iPhone file's picture measures
+  - Why: `phone-iphone-2018.mov` (960x720 High, full range): every frame's signalstats and cropdetect differ from
+    FFmpeg's filters (frame 0: YAVG 152.574 against 152.79; cropdetect 0-959 x 0-719 against FFmpeg's 0-871 x 0-651,
+    crop 864x640+4+6), while the shots and CSVs equal `Detect(path)`'s: FFmpeg's command line likely crops the frames
+    (a container crop, applied by the CLI and not by ShotDetector's in-process decode), or the frames differ.
+  - Where: the file's boxes ('clap', the track's size) and PictureCheck's ffmpeg pass, with the file.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion: whole frames, as detection): the file has a
+    clean aperture ('clap' 872x653, FFmpeg's frame-cropping side data 44/44/33/34), which FFmpeg 8.1's command line
+    crops to by default and neither ShotDetector's Detect(path) nor the core does. With -apply_cropping none FFmpeg's
+    figures are the core's (YAVG 152.574, cropdetect 960x720). PictureCheck's ffmpeg passes now take -apply_cropping
+    codec (the SPS's frame cropping kept, which 'none' also drops: a 320x240 sample is coded 320x256); the file moves
+    to realworld.yml's phones group. Whether detection should honour 'clap' went to the shotdetector coordinator

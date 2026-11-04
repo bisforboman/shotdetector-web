@@ -85,15 +85,6 @@ group until their rows move them to phones.
   - Done when: the file is "same" in the phones group.
   - Status: Waiting (2026-11-04): on ManagedCodecs#317 ('mdhd' as the stream duration)
 
-- An iPhone file's picture measures
-  - Why: `phone-iphone-2018.mov` (960x720 High, full range): every frame's signalstats and cropdetect differ from
-    FFmpeg's filters (frame 0: YAVG 152.574 against 152.79; cropdetect 0-959 x 0-719 against FFmpeg's 0-871 x 0-651,
-    crop 864x640+4+6), while the shots and CSVs equal `Detect(path)`'s: FFmpeg's command line likely crops the frames
-    (a container crop, applied by the CLI and not by ShotDetector's in-process decode), or the frames differ.
-  - Where: the file's boxes ('clap', the track's size) and PictureCheck's ffmpeg pass, with the file.
-  - Done when: the file moves to the phones group, "same".
-  - Status: Open (2026-11-04)
-
 ## Waiting
 
 - The reference tone left out of the detection

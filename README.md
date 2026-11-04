@@ -873,7 +873,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   come out at -20 dBFS. Each file in `samples/no-aac/` (MP3 and Opus in MP4, and AAC Main, which the decoder refuses)
   must come back with the reason it isn't measured, not an exception.
 - **picture** (`tools/NativeCheck/PictureCheck.cs`, part of native): for each sample, the picture measures of the
-  default run (`PictureMeter`) against FFmpeg's filters on the same file in one ffmpeg pass, **exactly**: the frames
+  default run (`PictureMeter`) against FFmpeg's filters on the same file in one ffmpeg pass (`-apply_cropping codec`:
+  the frames as the stream crops them, as detection reads them, not a container's clean aperture), **exactly**: the frames
   are FFmpeg's and the filters count integers over them. Per frame, `signalstats=stat=brng`'s YMIN and YMAX equal and
   its YAVG and BRNG to the digits it prints, `cropdetect=reset=1:skip=0`'s x1, x2, y1, y2, w, h, x and y equal;
   `cropdetect`'s crop with its defaults after the last frame; `blackdetect`'s spans at `d=0` and at its default 2 s,

@@ -62,8 +62,9 @@ FILES=(
   # An iPhone, portrait 1080p, 2017: IMG_2557.mov (CC-BY 2.0): 1920x1080 High turned -90, 60 fps a variable rate,
   # AAC 44.1 kHz; 32 MB.
   "phone-iphone-2017-portrait.mov|$ia/Flickr-32792624145/IMG_2557-32792624145.mov|2200bd97508ea58012ab903c070fab230b0fc23fe47247caec0a4bca89ba88d1||same|"
-  # An iPhone, 2018: IMG_6572.mov (CC-BY 2.0): 960x720 High, full range, a variable rate, AAC 44.1 kHz; 2.2 MB. Its
-  # picture measures differ from FFmpeg's filters (backlog "An iPhone file's picture measures").
+  # An iPhone, 2018: IMG_6572.mov (CC-BY 2.0): 960x720 High, full range, a variable rate, AAC 44.1 kHz; 2.2 MB. A clean
+  # aperture ('clap', 872x653), which the core and ShotDetector don't crop to (backlog-done "An iPhone file's picture
+  # measures").
   "phone-iphone-2018.mov|$ia/Flickr-44309131575/IMG_6572-44309131575.mov|86d6e0bb2a785ebafcc3f5c89e990bb0d39eefe5c7e39658ec85c24e4a5b8f8f||same|"
   # An Android phone, 1080p, 2017: VID_20171119_173236.mp4 (CC-BY 2.0): 1920x1080 Baseline, full range, ~29.6 fps a
   # variable rate, AAC 48 kHz; 11 MB. Its duration differs from FFmpeg's (backlog "An Android file's duration").
