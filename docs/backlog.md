@@ -184,18 +184,6 @@ file out of `samples/reject/`, and passes the native check.
     `WebmInput` on its demuxer.
   - Status: Maybe (2026-11-02)
 
-- An AVI's JPEGs without Huffman tables
-  - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
-    FFmpeg's and ManagedCodecs' decoders supply but a browser's JPEG decoder doesn't; the page's picture and stills of
-    such a file (backlog-done "The picture of an AVI on the page") would then be missing (the stills say "didn't show").
-    ffmpeg's encoder writes the tables, so no sample has the case yet.
-  - Where: `make-samples.sh` (a sample with the DHT stripped, checked with a JPEG parser); the page inserting the
-    standard tables before the first SOS when a JPEG has none (bytes copied, no decoding).
-  - Done when: the page check shows that sample's picture and stills.
-  - Not: decoding in .NET for the picture.
-  - Status: In progress (2026-11-04)
-
-
 - A Cinemetrics file
   - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's
     `.cmsx` has no published format, and the classic `.cms` is described only by third-party code (README, "Shot
