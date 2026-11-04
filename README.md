@@ -868,7 +868,8 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   the level within 0.1 dB; silences against `silencedetect` at its default 2 s and at 1 s: the same spans, each end
   within a packet; integrated loudness and loudness range against `ebur128` (its frame metadata, three decimals)
   within 0.1 LU, true and sample peaks per channel against its `peak=true+sample` within 0.1 dB (its peaks there are
-  linear amplitudes to three decimals, which alone is up to 0.04 dB at -20 dBFS). On the tone sample both tones must
+  linear amplitudes to three decimals, which alone is up to 0.04 dB at -20 dBFS: on a quiet stream, where those
+  decimals are worth more, within half a unit of the last as dB at that level, 0.56 dB at -42 dBFS). On the tone sample both tones must
   come out at -20 dBFS. Each file in `samples/no-aac/` (MP3 and Opus in MP4, and AAC Main, which the decoder refuses)
   must come back with the reason it isn't measured, not an exception.
 - **picture** (`tools/NativeCheck/PictureCheck.cs`, part of native): for each sample, the picture measures of the

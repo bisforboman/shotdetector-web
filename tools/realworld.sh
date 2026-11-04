@@ -75,7 +75,8 @@ FILES=(
   # 5.9 MB. Its chroma location differs from FFmpeg's (backlog "A 3GP's chroma location").
   "phone-android-2011.3gp|$ia/Flickr-6126538087/VID_20110905_143459-6126538087.3gp|9752f66a318c7e5c4ee96a799a17ef6254b1a962cd82085dd5f84024b210fa50||same|"
   # A phone video as WhatsApp sent it, 2017: VID-20170819-WA0023.mp4 (CC-BY-SA 2.0): 640x352 Baseline, 30.343 fps,
-  # AAC 48 kHz; 6.4 MB. Its sound's peaks differ from FFmpeg's (backlog "A WhatsApp file's audio peaks").
+  # AAC 48 kHz; 6.4 MB. Very quiet (-64.6 LUFS): ebur128's metadata prints its peaks to three decimals (backlog-done
+  # "A WhatsApp file's audio peaks").
   "phone-whatsapp-2017.mp4|$ia/Flickr-37596263930/VID-20170819-WA0023-37596263930.mp4|d3e2aaabb1a55f49318f8e3a9ecd7013695508925fe09a99e64e02aac985c6b6||same|"
 )
 

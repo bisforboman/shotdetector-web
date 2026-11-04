@@ -92,14 +92,6 @@ group until their rows move them to phones.
   - Done when: the file moves to the phones group, "same".
   - Status: Open (2026-11-04)
 
-- A WhatsApp file's audio peaks
-  - Why: `phone-whatsapp-2017.mp4` (AAC 48 kHz 2 ch, very quiet: -64.6 LUFS): true and sample peaks -41.494 dB on both
-    channels against FFmpeg's ebur128 -41.938; the loudness and the waveform agree.
-  - Where: `Mp4Audio`'s peaks (FrameReader) or ManagedCodecs' AAC decoder on this stream, with the file: report
-    upstream if either is theirs.
-  - Done when: the file moves to the phones group, "same".
-  - Status: Open (2026-11-04)
-
 - An iPhone file's picture measures
   - Why: `phone-iphone-2018.mov` (960x720 High, full range): every frame's signalstats and cropdetect differ from
     FFmpeg's filters (frame 0: YAVG 152.574 against 152.79; cropdetect 0-959 x 0-719 against FFmpeg's 0-871 x 0-651,
