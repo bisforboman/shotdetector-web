@@ -43,7 +43,8 @@ picture does, is decoded with the part it doesn't reach black, where FFmpeg leav
 one depending on its threads: the run's warnings name it, and the checks hold everything else to FFmpeg's, the stats
 rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`, the owner's choice;
 `samples/mjpeg-damaged-320x240-25.avi`). **And VP9 or AV1 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full
-range or not, with a DefaultDuration and a Duration; decisions `docs/decisions/2026-11-02-browser-decoder.md` and
+range or not, with a DefaultDuration, with a Segment Duration or without one (a live recording's, as
+`samples/vp9-live-320x240-25.webm`: no duration, as FFmpeg says); decisions `docs/decisions/2026-11-02-browser-decoder.md` and
 `2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
 libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
 browser's own `VideoDecoder` (WebCodecs), its run card's chip "your browser's decoder". It runs as any file does: on

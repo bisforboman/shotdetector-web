@@ -170,12 +170,25 @@ file out of `samples/reject/`, and passes the native check.
   - Where: a repro first (page-check's `resumedBrowser` in a loop), then .NET's issue tracker if it is the runtime's.
   - Status: Maybe (2026-11-04)
 
-- WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
-  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration (FFmpeg's rate then comes from the frames
-    it probes) or whose Segment has no Duration (a live recording), and AV1 in MP4 (YouTube's) is refused as another
-    codec in `Mp4Input`. Each needs FFmpeg's rule for it, a sample, and the checks.
-  - Where: `WebmInput`, `Mp4Input` (an MP4 track's 'vp09' or 'av01' through the browser's decoder), make-samples.sh.
-  - Status: Maybe (2026-11-02)
+- WebM without a Duration
+  - Why: `WebmInput` refuses a WebM whose Segment has no Duration (a live recording, written as it went: no Cues, the
+    Segment's size unknown); FFmpeg's format then has no duration.
+  - Where: `WebmInput` (no duration), make-samples.sh (a VP9 written to a pipe).
+  - Done when: the sample passes the native check and the page check.
+  - Status: In progress (2026-11-04; the owner split "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in
+    MP4" into this row and the two below, one PR each, through AskUserQuestion)
+
+- WebM without a DefaultDuration
+  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration: FFmpeg's average rate then comes from the
+    frames it probes (avformat_find_stream_info's estimate), which the core would have to work out as FFmpeg does.
+  - Where: `WebmInput`, make-samples.sh (a sample without DefaultDuration, checked with ffprobe).
+  - Status: Maybe (2026-11-02, split 2026-11-04)
+
+- VP9 or AV1 in MP4
+  - Why: VP9 and AV1 in MP4 (YouTube's) are refused as another codec in `Mp4Input`; the browser's decoder could take
+    them as it takes WebM's, configured from the track's 'vpcC' or 'av1C'.
+  - Where: `Mp4Input` (an MP4 track's 'vp09' or 'av01' through `IHostDecoder`), make-samples.sh.
+  - Status: Maybe (2026-11-02, split 2026-11-04)
 
 - A Matroska demuxer in ManagedCodecs
   - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs has a
