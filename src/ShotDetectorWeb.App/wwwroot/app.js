@@ -491,7 +491,7 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   }
   result.hidden = false;
   progress.removeAttribute('value');
-  const workers = plan?.ranges.length ?? 1, threads = plan || browserDecoded(opened) ? 1 : threadCount();
+  const workers = plan?.ranges.length ?? 1, threads = plan ? 1 : threadCount();
   const frames = Math.max(opened.frames - from, 0);
   estimate = estimateText(opened, workers, threads, frames);
   estimated = estimateSeconds(opened, workers, threads, frames);
@@ -536,9 +536,9 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   show(r, seconds, workers, by === threaded ? r.threads : 1);
   if (carried) await correct(applied(carried));
   if (opened !== video) return;
-  // Stopped, or corrected: kept, to resume or to show again, in this visit or a later one (not a run the browser
-  // decoded); finished: the kept run of these options is done with.
-  if ((r.stopped || corrected()) && !browserDecoded(opened)) {
+  // Stopped, or corrected: kept, to resume or to show again, in this visit or a later one; finished: the kept run of
+  // these options is done with.
+  if (r.stopped || corrected()) {
     // Kept already when its carried corrections were applied (correct: a finished run's).
     if (!(detected.record && kept === detected.record)) await keep(by, run, r);
   } else if (keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run)) {
@@ -707,8 +707,8 @@ async function oneRun(run, threads, keptBytes = null) {
 }
 
 // Whether the browser decodes the opened file's frames (a WebM's VP9 or AV1: Open's decodedBy; decision
-// 2026-11-02-webm-browser-decoder.md): such a run goes on the page's worker alone, not on threads, not split, and a
-// stopped one isn't kept to resume.
+// 2026-11-02-webm-browser-decoder.md): the status says so. Such a run goes as any other (on threads, split across
+// workers, each its own VideoDecoder from its range's keyframe; a stopped one kept to resume).
 export function browserDecoded(video) {
   return video?.decodedBy === 'browser';
 }
@@ -760,7 +760,6 @@ function replaceRunner(w) {
 // { count, frames, ranges }, or null for one worker (a short video, a machine with two cores, too few keyframes). A
 // resumed run's rest from frame from, by its own length.
 async function ranges(video, run, from = 0) {
-  if (browserDecoded(video)) return null;
   const length = lengthOf(video) * Math.max(video.frames - from, 0) / video.frames;
   const count = ASKED_WORKERS ??
     (length > SPLIT_SECONDS ? Math.min((navigator.hardwareConcurrency || 1) - 1, MOST_WORKERS) : 1);
@@ -1128,8 +1127,8 @@ async function corrections(cuts) {
 async function keepEdits(run) {
   const record = run.record && kept === run.record ? run.record : null;
   if (!record) {
-    // A stopped run's record is keep's, made once it has answered; a run the browser decoded isn't kept.
-    if (corrected() && !run.result.stopped && !browserDecoded(opened)) await keep(resultOn ?? worker, run.options, run.result);
+    // A stopped run's record is keep's, made once it has answered.
+    if (corrected() && !run.result.stopped) await keep(resultOn ?? worker, run.options, run.result);
     return;
   }
   if (!corrected() && record.from < 0) {

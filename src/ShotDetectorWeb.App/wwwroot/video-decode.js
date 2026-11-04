@@ -1,8 +1,9 @@
 // The host's decoder imports that .NET's JsDecoder (src/ShotDetectorWeb.App/JsDecoder.cs) uses for WebM's VP9 and AV1
-// (decision 2026-11-02-webm-browser-decoder.md): WebCodecs' VideoDecoder in this worker, software first (Chromium's,
+// (decision 2026-11-02-webm-browser-decoder.md): WebCodecs' VideoDecoder in this worker (or on the page's main thread,
+// where the threaded runtime runs its imports: threads.js), software first (Chromium's,
 // whose frames were FFmpeg's in the measurement), each frame copied out packed in the video's format (copyTo, in the
-// order the decoder gives them) and taken by .NET one at a time. One decoder at a time; worker.js passes these to the
-// runtime.
+// order the decoder gives them) and taken by .NET one at a time. One decoder at a time; worker.js and threads.js pass
+// these to their runtime.
 let decoder = null;
 let format = '';     // the format .NET takes: I420, I422 or I420P10
 let ready = [];      // frames copied out, in order, not yet taken

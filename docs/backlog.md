@@ -138,7 +138,7 @@ file out of `samples/reject/`, and passes the native check.
     `VideoDecoder` per range's worker from its keyframe, the threaded runtime's imports on the main thread).
   - Where: `app.js`'s `ranges`, `go` and `keep` (`browserDecoded`), `threads.js` (the decoder imports), page-check.
   - Done when: page-check splits a WebM across two workers, stops and resumes one, to the native run's files.
-  - Status: Maybe (2026-11-02)
+  - Status: In progress (2026-11-04)
 
 - WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
   - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration (FFmpeg's rate then comes from the frames
