@@ -1763,5 +1763,5 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     clean aperture ('clap' 872x653, FFmpeg's frame-cropping side data 44/44/33/34), which FFmpeg 8.1's command line
     crops to by default and neither ShotDetector's Detect(path) nor the core does. With -apply_cropping none FFmpeg's
     figures are the core's (YAVG 152.574, cropdetect 960x720). PictureCheck's ffmpeg passes now take -apply_cropping
-    none; the file moves to realworld.yml's phones group. Whether detection should honour 'clap' went to the
+    codec (the SPS's frame cropping kept, which 'none' also drops: a 320x240 sample is coded 320x256); the file moves to realworld.yml's phones group. Whether detection should honour 'clap' went to the
     shotdetector coordinator

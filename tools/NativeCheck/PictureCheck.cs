@@ -337,20 +337,21 @@ static class PictureCheck
     /// frame, when a frame's tags change (tags-change-*.mp4): ffmpeg would otherwise build the graph again there, which
     /// starts the metadata file and the filters' state over, and the meter measures every frame with the video's range.
     /// </summary>
-    // -apply_cropping none: the whole decoded frames, as ShotDetector reads them and the core measures them (the owner's
-    // choice, 2026-11-04): FFmpeg 8.1's command line otherwise crops to a container's clean aperture ('clap': an
-    // iPhone's 872x653 in 960x720, realworld.sh's phone-iphone-2018.mov), which neither detection path does.
+    // -apply_cropping codec: the decoded frames as the stream crops them (the SPS's frame cropping: a 320x240 coded as
+    // 320x256), as ShotDetector reads them and the core measures them, without a container's clean aperture (the owner's
+    // choice, 2026-11-04): FFmpeg 8.1's command line otherwise crops to that too ('clap': an iPhone's 872x653 in 960x720,
+    // realworld.sh's phone-iphone-2018.mov), which neither detection path does. 'none' would drop the SPS's cropping too.
     static FfmpegPicture Ffmpeg(string libs, string sample)
     {
         string metadata = Path.GetTempFileName();
         try
         {
             string graph = $"signalstats=stat=brng,cropdetect=reset=1:skip=0,metadata=mode=print:file={metadata},cropdetect";
-            string log = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-copyts", "-reinit_filter", "0", "-apply_cropping", "none", "-i", sample,
+            string log = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-copyts", "-reinit_filter", "0", "-apply_cropping", "codec", "-i", sample,
                 "-map", "0:v:0", "-vf", graph, "-f", "null", "-");
             // The spans without -copyts: ffmpeg's times from the video stream's start, as ShotDetector's (a fragmented
             // stream starting at 0.08 s: its still at 5.6 s, not 5.68).
-            string spansLog = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-reinit_filter", "0", "-apply_cropping", "none", "-i", sample,
+            string spansLog = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-reinit_filter", "0", "-apply_cropping", "codec", "-i", sample,
                 "-map", "0:v:0", "-vf", "blackdetect=d=0,blackdetect,freezedetect", "-f", "null", "-");
 
             var frames = new List<Dictionary<string, string>>();
