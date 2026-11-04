@@ -31,6 +31,8 @@ it there, don't work around it).
 
 ## Working on this repository
 
+- **Ask the owner**: at each decision (which row, a design choice, before a PR or a merge), prompt the owner with
+  the question tool rather than deciding or asking in prose; the owner's standing instruction, 2026-11-03.
 - **One backlog row, one cloud session, one PR** against `main`, CI green. Set the row's status to In progress (with
   the date) when starting, move it to `docs/backlog-done.md` when it lands, add a row when a gap turns up. A design
   question the row doesn't settle goes to `docs/decisions/` first.
