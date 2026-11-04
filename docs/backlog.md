@@ -67,6 +67,45 @@ threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4",
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
 publish").
 
+### Found by the real phone files (2026-11-04)
+
+The eight phone files (realworld.sh, run 41787733573) give the FFmpeg path's scenes and stats CSVs, shots and every
+run's files byte for byte; four differ in their description or measures, run by hand in realworld.yml's phones-differ
+group until their rows move them to phones.
+
+- An Android file's duration
+  - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch): the core's duration
+    4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs are the same.
+  - Where: `Mp4Input`'s duration (the streams' ends as FFmpeg's mov demuxer takes them: the audio's priming and edit
+    list, `Gotchas`), found with the file (realworld.sh downloads it; the cloud session can't reach archive.org's file
+    servers).
+  - Done when: the file moves to realworld.yml's phones group, "same".
+  - Status: Open (2026-11-04)
+
+- A 3GP's chroma location
+  - Why: `phone-android-2011.3gp` (720x480 Baseline): the core says chroma location left, FFmpeg says none
+    (unspecified).
+  - Where: `SpsInfo`'s chroma location (its VUI, or FFmpeg's default for a 3GP), with the file.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Open (2026-11-04)
+
+- A WhatsApp file's audio peaks
+  - Why: `phone-whatsapp-2017.mp4` (AAC 48 kHz 2 ch, very quiet: -64.6 LUFS): true and sample peaks -41.494 dB on both
+    channels against FFmpeg's ebur128 -41.938; the loudness and the waveform agree.
+  - Where: `Mp4Audio`'s peaks (FrameReader) or ManagedCodecs' AAC decoder on this stream, with the file: report
+    upstream if either is theirs.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Open (2026-11-04)
+
+- An iPhone file's picture measures
+  - Why: `phone-iphone-2018.mov` (960x720 High, full range): every frame's signalstats and cropdetect differ from
+    FFmpeg's filters (frame 0: YAVG 152.574 against 152.79; cropdetect 0-959 x 0-719 against FFmpeg's 0-871 x 0-651,
+    crop 864x640+4+6), while the shots and CSVs equal `Detect(path)`'s: FFmpeg's command line likely crops the frames
+    (a container crop, applied by the CLI and not by ShotDetector's in-process decode), or the frames differ.
+  - Where: the file's boxes ('clap', the track's size) and PictureCheck's ffmpeg pass, with the file.
+  - Done when: the file moves to the phones group, "same".
+  - Status: Open (2026-11-04)
+
 ## Waiting
 
 - The reference tone left out of the detection

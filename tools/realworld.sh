@@ -51,23 +51,32 @@ FILES=(
   "caminandes-1080i25.mp4|caminandes_gran_dillama.mp4||@ -t 60 -vf fps=50,interlace=scan=tff,setfield=tff -c:v libx264 -preset fast -flags +ildct+ilme -x264-params tff=1 -b:v 8M -r 25 -c:a aac -b:a 192k|same|"
   # Real phone files as the phones wrote them (backlog "Real phone and broadcast files"): Flickr uploads' originals,
   # mirrored on archive.org (reachable from GitHub's runners), CC-BY 2.0 or CC-BY-SA 2.0 as each item says, by their
-  # Flickr authors. Their SHA-256 recorded from realworld.yml's first download.
-  # An iPhone, portrait, 2012: IMG_0644.mov (CC-BY 2.0); 15 MB.
-  "phone-iphone-2012-portrait.mov|$ia/Flickr-7390656336/IMG_0644-7390656336.mov|unpinned||same|"
-  # An iPhone, 1080p, 2016: IMG_1623.mov (CC-BY 2.0); 17 MB.
-  "phone-iphone-2016-1080p.mov|$ia/Flickr-30339103076/IMG_1623-30339103076.mov|unpinned||same|"
-  # An iPhone, portrait 1080p, 2017: IMG_2557.mov (CC-BY 2.0); 32 MB.
-  "phone-iphone-2017-portrait.mov|$ia/Flickr-32792624145/IMG_2557-32792624145.mov|unpinned||same|"
-  # An iPhone, 2018: IMG_6572.mov (CC-BY 2.0); 2.2 MB.
-  "phone-iphone-2018.mov|$ia/Flickr-44309131575/IMG_6572-44309131575.mov|unpinned||same|"
-  # An Android phone, 1080p, 2017: VID_20171119_173236.mp4 (CC-BY 2.0); 11 MB.
-  "phone-android-2017-1080p.mp4|$ia/Flickr-26747292089/VID_20171119_173236-26747292089.mp4|unpinned||same|"
-  # An Android phone, portrait, 2017: VID_20171025_115139.mp4 (CC-BY 2.0); 37 MB.
-  "phone-android-2017-portrait.mp4|$ia/Flickr-37923566351/VID_20171025_115139-37923566351.mp4|unpinned||same|"
-  # An Android phone's 3GP, 2011: VID_20110905_143459.3gp (CC-BY 2.0); 5.9 MB.
-  "phone-android-2011.3gp|$ia/Flickr-6126538087/VID_20110905_143459-6126538087.3gp|unpinned||same|"
-  # A phone video as WhatsApp sent it, 2017: VID-20170819-WA0023.mp4 (CC-BY-SA 2.0); 6.4 MB.
-  "phone-whatsapp-2017.mp4|$ia/Flickr-37596263930/VID-20170819-WA0023-37596263930.mp4|unpinned||same|"
+  # Flickr authors. Their SHA-256 recorded from realworld.yml's first download (2026-11-04, run 41787733573). The four
+  # whose description or measures differ from FFmpeg's are in realworld.yml's phones-differ group, run by hand, until
+  # their rows move them to phones.
+  # An iPhone, portrait, 2012: IMG_0644.mov (CC-BY 2.0): 1280x720 Baseline turned -90, 29.97 fps a variable rate (avg
+  # 198000/6607), AAC 44.1 kHz; 15 MB.
+  "phone-iphone-2012-portrait.mov|$ia/Flickr-7390656336/IMG_0644-7390656336.mov|db8d8d1b1047127adc63d459aa4cd89cbb6d33c50587c380c6eaca2b9efa7660||same|"
+  # An iPhone, 1080p, 2016: IMG_1623.mov (CC-BY 2.0): 1920x1080 High, full range, turned 180, 30 fps, no audio; 17 MB.
+  "phone-iphone-2016-1080p.mov|$ia/Flickr-30339103076/IMG_1623-30339103076.mov|7aff496a9290d1d89eec7c2d1fe1983a0920cb504bc2f211c37475f93f6db06c||same|"
+  # An iPhone, portrait 1080p, 2017: IMG_2557.mov (CC-BY 2.0): 1920x1080 High turned -90, 60 fps a variable rate,
+  # AAC 44.1 kHz; 32 MB.
+  "phone-iphone-2017-portrait.mov|$ia/Flickr-32792624145/IMG_2557-32792624145.mov|2200bd97508ea58012ab903c070fab230b0fc23fe47247caec0a4bca89ba88d1||same|"
+  # An iPhone, 2018: IMG_6572.mov (CC-BY 2.0): 960x720 High, full range, a variable rate, AAC 44.1 kHz; 2.2 MB. Its
+  # picture measures differ from FFmpeg's filters (backlog "An iPhone file's picture measures").
+  "phone-iphone-2018.mov|$ia/Flickr-44309131575/IMG_6572-44309131575.mov|86d6e0bb2a785ebafcc3f5c89e990bb0d39eefe5c7e39658ec85c24e4a5b8f8f||same|"
+  # An Android phone, 1080p, 2017: VID_20171119_173236.mp4 (CC-BY 2.0): 1920x1080 Baseline, full range, ~29.6 fps a
+  # variable rate, AAC 48 kHz; 11 MB. Its duration differs from FFmpeg's (backlog "An Android file's duration").
+  "phone-android-2017-1080p.mp4|$ia/Flickr-26747292089/VID_20171119_173236-26747292089.mp4|53361a019528f2ea242dd3ae9b3efeef0b953173ffd1ead3b7c80a0c5780841a||same|"
+  # An Android phone, portrait, 2017: VID_20171025_115139.mp4 (CC-BY 2.0): 1280x720 Baseline turned -90, a variable
+  # rate, AAC 48 kHz; 37 MB.
+  "phone-android-2017-portrait.mp4|$ia/Flickr-37923566351/VID_20171025_115139-37923566351.mp4|a0af51a91bbe70a3a7b1222177b6f371a60b9ea80cd69ce26d768b4b74f5fdf7||same|"
+  # An Android phone's 3GP, 2011: VID_20110905_143459.3gp (CC-BY 2.0): 720x480 Baseline, a variable rate, AAC 16 kHz;
+  # 5.9 MB. Its chroma location differs from FFmpeg's (backlog "A 3GP's chroma location").
+  "phone-android-2011.3gp|$ia/Flickr-6126538087/VID_20110905_143459-6126538087.3gp|9752f66a318c7e5c4ee96a799a17ef6254b1a962cd82085dd5f84024b210fa50||same|"
+  # A phone video as WhatsApp sent it, 2017: VID-20170819-WA0023.mp4 (CC-BY-SA 2.0): 640x352 Baseline, 30.343 fps,
+  # AAC 48 kHz; 6.4 MB. Its sound's peaks differ from FFmpeg's (backlog "A WhatsApp file's audio peaks").
+  "phone-whatsapp-2017.mp4|$ia/Flickr-37596263930/VID-20170819-WA0023-37596263930.mp4|d3e2aaabb1a55f49318f8e3a9ecd7013695508925fe09a99e64e02aac985c6b6||same|"
 )
 
 field() { local IFS='|'; local -a f; read -r -a f <<< "$1"; echo "${f[$2]:-}"; }
