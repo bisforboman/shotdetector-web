@@ -78,7 +78,11 @@ internal static class CorrectionCheck
                 // The list given is the list made (a cut a frame after another kept: the run's minimum shot length
                 // applies only with DropShortScenes or MergeLastScene, which the page doesn't set), and the last shot
                 // ends where the run's did (LoadScenes of a scene list ended at nb_frames, before 3.28.0's overload).
-                if (!corrected.CutFrames.SequenceEqual(edited.Where(s => s > 0)))
+                // Each frame once: a run's cut can fall between two frames at a variable rate (the threshold detector's
+                // fade cut, at its middle by the average rate: Elephants Dream's 428.508 s, in a 0.375 s gap before frame
+                // 10157), where CutFrames gives the next frame, the one the run's next cut is on too, and LoadScenes
+                // keeps the run's cuts at a frame given.
+                if (!corrected.CutFrames.Distinct().SequenceEqual(edited.Where(s => s > 0)))
                     differ.Add($"shots start at {string.Join(",", corrected.CutFrames)}, not {string.Join(",", edited.Skip(1))}");
                 if (compared && !ours.CutFrames.SequenceEqual(file.CutFrames))
                     differ.Add($"the run's cuts {string.Join(",", ours.CutFrames)}, the FFmpeg path's {string.Join(",", file.CutFrames)}");
