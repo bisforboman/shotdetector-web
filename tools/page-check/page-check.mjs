@@ -584,7 +584,14 @@ async function checkTitles(page, what, expected, saved) {
 async function typeTitle(page, what) {
   await page.locator('#chapters-min').fill('10');
   const input = page.locator('#run .chapter-titles li').nth(1).locator('input');
-  if (await page.locator('#run .chapter-titles').isHidden() || await input.count() !== 1) {
+  // Shown once the worker's YouTubeChapters answers (run.js, showChapters): checked at once, the card could still
+  // have the 30 s chapters (CI, 2026-11-05: "these shots make 1").
+  const shown = await page.waitForFunction(() => {
+    const titles = document.querySelector('#run .chapter-titles');
+    return !titles.hidden && titles.querySelectorAll('li').length > 1
+      && document.querySelector('#chapters-txt').title.includes('of at least 10 s');
+  }, null, { timeout: 10000 }).then(() => true, () => false);
+  if (!shown || await input.count() !== 1) {
     fail(`${what}: no second chapter at 10 s to title: ${await page.textContent('#run .chapters')}`);
     return null;
   }
