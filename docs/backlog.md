@@ -159,12 +159,17 @@ file out of `samples/reject/`, and passes the native check.
     runtime's.
   - Status: Maybe (2026-11-04)
 
-- WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
-  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration (FFmpeg's rate then comes from the frames
-    it probes) or whose Segment has no Duration (a live recording), and AV1 in MP4 (YouTube's) is refused as another
-    codec in `Mp4Input`. Each needs FFmpeg's rule for it, a sample, and the checks.
-  - Where: `WebmInput`, `Mp4Input` (an MP4 track's 'vp09' or 'av01' through the browser's decoder), make-samples.sh.
-  - Status: Maybe (2026-11-02)
+- WebM without a DefaultDuration
+  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration: FFmpeg's average rate then comes from the
+    frames it probes (avformat_find_stream_info's estimate), which the core would have to work out as FFmpeg does.
+  - Where: `WebmInput`, make-samples.sh (a sample without DefaultDuration, checked with ffprobe).
+  - Status: Maybe (2026-11-02, split 2026-11-04)
+
+- VP9 or AV1 in MP4
+  - Why: VP9 and AV1 in MP4 (YouTube's) are refused as another codec in `Mp4Input`; the browser's decoder could take
+    them as it takes WebM's, configured from the track's 'vpcC' or 'av1C'.
+  - Where: `Mp4Input` (an MP4 track's 'vp09' or 'av01' through `IHostDecoder`), make-samples.sh.
+  - Status: Maybe (2026-11-02, split 2026-11-04)
 
 - WebM on ManagedCodecs' Matroska demuxer
   - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs had a
