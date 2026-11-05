@@ -722,7 +722,7 @@ async function oneRun(run, threads, keptBytes = null) {
   return call(...args);
 }
 
-// Whether the browser decodes the opened file's frames (a WebM's VP9 or AV1: Open's decodedBy; decision
+// Whether the browser decodes the opened file's frames (a WebM's or an MP4's VP9 or AV1: Open's decodedBy; decision
 // 2026-11-02-webm-browser-decoder.md): the status says so. Such a run goes as any other (on threads, split across
 // workers, each its own VideoDecoder from its range's keyframe; a stopped one kept to resume).
 export function browserDecoded(video) {

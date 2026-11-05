@@ -58,7 +58,11 @@ browser's own `VideoDecoder` (WebCodecs), its run card's chip "your browser's de
 threads (the threaded runtime runs its imports on the main thread, where threads.js gives it the decoder's), split
 across workers (each worker's own `VideoDecoder` from its range's keyframe), and a stopped run kept to resume. Natively FFmpeg stands in for the browser
 (`tools/NativeCheck/FfmpegDecoder.cs`: the core's packets as IVF to ffmpeg) and every check holds the result to
-`Detect(path)`'s byte for byte; page-check then holds Chromium's decoder to the same files on every WebM sample. A
+`Detect(path)`'s byte for byte; page-check then holds Chromium's decoder to the same files on every WebM sample. **And
+VP9 or AV1 in MP4** ('vp09', 'av01': YouTube's; backlog "VP9 or AV1 in MP4"), the same way: the MP4's rate, duration,
+rotation and fragments as H.264's (`Mp4Input`), the picture from VP9's key frame header or the 'av1C' as a WebM's, the
+frames the browser's decoder's; packets an edit list leaves out are refused (`samples/mp4-vp9-aac-320x240-25.mp4`,
+`mp4-av1-320x240-25.mp4`, `mp4-vp9-fragmented-320x240-2997.mp4`). A
 browser whose decoder doesn't take the codec, or whose frames aren't Y, U and V planes (Firefox's BGRX), refuses the run
 and says so; Node has no `VideoDecoder`, so app-check.mjs checks that a WebM opens and its run is refused. Its audio is
 described, not measured. Anything else is refused when the file is opened, with an
@@ -67,9 +71,9 @@ and ShotDetector's frame source doesn't take yet), greyscale, 10-bit 4:2:2 or mo
 10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
 `docs/decisions/2026-10-30-scope-widening.md`). Another codec or container is named as a viewer and FFmpeg name it
 (`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4, MJPEG in AVI,
-and VP9 and AV1 in WebM so far.", "The video is VP8 (FFmpeg's vp8; 'V_VP8'): ..."), and the page says under a refusal
+and VP9 and AV1 in WebM and MP4 so far.", "The video is VP8 (FFmpeg's vp8; 'V_VP8'): ..."), and the page says under a refusal
 what reads the file instead: ShotDetector's `shotdetect` command, and for HEVC an iPhone's Most Compatible format
-(decision `docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `av1.mp4`, `vp8.webm`,
+(decision `docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `vp8.webm`,
 `h264.mkv`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
@@ -1170,8 +1174,11 @@ rules for changing them (adding to the page among them).
   ...)` (Resuming a stopped run), and `ScoreAgain` (a range that starts inside a still picture scored again: The
   picture).
 - `Mp4Input.cs`, `Mp4Header.cs` (the MP4 boxes FFmpeg reads that ManagedCodecs doesn't expose, the audio codec's FFmpeg
-  name and the display rotation among them) and `SpsInfo.cs` (the SPS's format and VUI colour fields): an MP4 described
-  and decoded (Using the library).
+  name, the display rotation and an 'av01' entry's 'av1C' among them) and `SpsInfo.cs` (the SPS's format and VUI colour
+  fields): an MP4 described and decoded (Using the library); its VP9 or AV1 decoded by the host's `IHostDecoder`.
+- `VideoInput.Host.cs`: the host decoder's frames (`HostFramesAsync`, each given its packet's pts and picture type) and
+  WebCodecs' codec string, for `WebmInput` and `Mp4Input`; `DecodedByHost`, which the App's `Open` JSON says as
+  `decodedBy`.
 - `AviInput.cs` and `AviHeader.cs`: MJPEG in AVI, through ManagedCodecs' `AviDemuxer` and `MjpegDecoder`; `AviHeader`
   reads each stream's 'strh' and 'strf' (Using the library).
 - `VideoInput.Damaged.cs`: `DamagedFrames(frames)`, the frames the decoder said were damaged (ManagedCodecs'
