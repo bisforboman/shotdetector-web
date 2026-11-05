@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using ManagedCodecs;
 using ManagedCodecs.Containers;
 using ManagedCodecs.H264;
@@ -8,37 +10,51 @@ namespace ShotDetectorWeb;
 
 /// <summary>
 /// An H.264 video in an MP4 file (<see cref="VideoInput"/>): described from its boxes (<see cref="Mp4Header"/>, the SPS's
-/// <see cref="SpsInfo"/>) and ManagedCodecs' <see cref="Mp4Demuxer"/>, decoded by its <see cref="H264Decoder"/>.
+/// <see cref="SpsInfo"/>) and ManagedCodecs' <see cref="Mp4Demuxer"/>, decoded by its <see cref="H264Decoder"/>; or VP9 or
+/// AV1 in an MP4 ('vp09', 'av01': YouTube's), described as FFmpeg's mov demuxer and its vp9 and libdav1d decoders describe
+/// it (the MP4's rate, duration and rotation as H.264's; the picture from VP9's key frame header or the 'av1C', as a
+/// WebM's), its frames decoded by the host's decoder (<see cref="IHostDecoder"/>, the browser's; decision
+/// 2026-11-02-webm-browser-decoder.md), each given its packet's pts.
 /// </summary>
 /// <remarks>
 /// So far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 (High, High 4:2:2, High 10) in an MP4, fragmented or not, at a constant or variable frame rate (every frame's pts given
 /// up front, <see cref="YuvVideo.FrameTimestamps"/>, where the rate varies), upright or turned by
 /// a quarter turn (<see cref="YuvVideo.Rotation"/>, the frames as decoded): progressive, or
 /// interlaced coded as MBAFF frames (its field order and each frame's flags described, for ShotDetector's
-/// <see cref="DetectionOptions.Deinterlace"/>; frames coded as field pictures refused); anything else
+/// <see cref="DetectionOptions.Deinterlace"/>; frames coded as field pictures refused); VP9 and AV1 as a WebM's are
+/// (8-bit 4:2:0 and 4:2:2, 10-bit 4:2:0, progressive), at any of those rates and turns, their packets in presentation
+/// order and none an edit list leaves out; anything else
 /// throws <see cref="UnsupportedVideoException"/> when opened. Damaged files throw ManagedCodecs'
 /// <see cref="InvalidDataException"/>.
 /// </remarks>
 public sealed class Mp4Input : VideoInput
 {
-    Mp4Input(Func<Stream> open)
+    readonly IHostDecoder? _decoder;
+    readonly HostDecoderConfig? _config;
+
+    Mp4Input(Func<Stream> open, IHostDecoder? decoder)
         : base(open)
     {
         using var stream = open();
         var header = Mp4Header.Read(stream);
-        if (header.SampleEntry is not ("avc1" or "avc3"))
+        // VP9 and AV1 go to the host's decoder (the browser's), as a WebM's.
+        string? hosted = header.SampleEntry switch { "vp09" => "vp9", "av01" => "av1", _ => null };
+        if (hosted is null && header.SampleEntry is not ("avc1" or "avc3"))
             throw new UnsupportedVideoException($"The video is {Refusal.Mp4Codec(header.SampleEntry)}, not H.264: {Refusal.Scope}");
+        if (hosted is not null && decoder is null)
+            throw new UnsupportedVideoException($"The video is {Refusal.Mp4Codec(header.SampleEntry)}: its frames need the browser's decoder, which isn't given here.");
+        _decoder = hosted is null ? null : decoder;
         int rotation = Rotation(header);
         // A fragmented file's samples are in its 'moof' boxes (its 'moov' may have some, or none): they are counted on
         // the walk below.
         if (header.Timescale == 0 || (!header.Fragmented && (header.SampleCount == 0 || header.TotalDuration <= 0)))
             throw new UnsupportedVideoException("The video track has no samples.");
 
-        var sps = SpsInfo.FromAvcConfig(header.AvcConfig.Span);
+        var sps = hosted is null ? SpsInfo.FromAvcConfig(header.AvcConfig.Span) : null;
         // The formats ShotDetector's frame source takes (3.24.0): 8-bit 4:2:0 and 4:2:2, 10-bit 4:2:0.
-        bool supported = sps.BitDepthLuma == sps.BitDepthChroma &&
-            (sps.ChromaFormatIdc, sps.BitDepthLuma) is (1, 8) or (2, 8) or (1, 10);
-        if (!supported)
+        bool supported = sps is null || (sps.BitDepthLuma == sps.BitDepthChroma &&
+            (sps.ChromaFormatIdc, sps.BitDepthLuma) is (1, 8) or (2, 8) or (1, 10));
+        if (!supported && sps is not null)
         {
             string chroma = sps.ChromaFormatIdc switch { 0 => "4:0:0 (greyscale)", 1 => "4:2:0", 2 => "4:2:2", _ => "4:4:4" };
             string depth = sps.BitDepthLuma == sps.BitDepthChroma ? $"{sps.BitDepthLuma} bits" : $"{sps.BitDepthLuma} bits (luma), {sps.BitDepthChroma} (chroma)";
@@ -52,7 +68,9 @@ public sealed class Mp4Input : VideoInput
 
         // The first frame's size (after the SPS's cropping) and timestamp: in display order, the smallest pts, which is
         // the stream's start (FFmpeg's start_time for an MP4 video track, edit list applied).
-        var (width, height, firstPts, fieldOrder) = FirstFrame(demuxer);
+        var (width, height, firstPts, fieldOrder) = sps is null
+            ? (demuxer.Video?.Width ?? 0, demuxer.Video?.Height ?? 0, 0L, FrameReader.FieldOrder.Progressive)
+            : FirstFrame(demuxer);
 
         // The audio track as FFmpeg's demuxer describes it: its codec's name from the headers, the rate and channels the
         // demuxer read from the sample entry (an AAC track's from its AudioSpecificConfig). Nothing is decoded.
@@ -67,6 +85,9 @@ public sealed class Mp4Input : VideoInput
         var samples = new SampleDurations();
         long? duration = FormatDuration(demuxer, packets, samples);
         Packets = packets.Build();
+        CodecHeader? picture = null;
+        if (hosted is not null)
+            (picture, firstPts) = HostedPicture(hosted, header, open);
 
         // FFmpeg's average rate is mov.c's nb_frames_for_fps over duration_for_fps: every sample of 'stts' and of each
         // track fragment's 'trun'. In a file without fragments that is the 'stts' totals.
@@ -81,8 +102,9 @@ public sealed class Mp4Input : VideoInput
         // The decoder's colour tags: the SPS's VUI where it has them, else the container's 'colr' box (FFmpeg's h264
         // decoder overrides the container's values with the SPS's). Full range makes FFmpeg's h264 decoder output
         // yuvj420p or yuvj422p at 8 bits; at 10 bits there is no such format, only the range tag.
-        bool fullRange = sps.VideoSignalTypePresent ? sps.FullRange : header.ColrFullRange ?? false;
-        int? matrix = sps.MatrixCoefficients ?? header.ColrMatrix;
+        // VP9's and AV1's decoders give each frame the bitstream's, whatever the container says (as a WebM's).
+        bool fullRange = picture?.FullRange ?? (sps!.VideoSignalTypePresent ? sps.FullRange : header.ColrFullRange ?? false);
+        int? matrix = picture is not null ? picture.Matrix : sps!.MatrixCoefficients ?? header.ColrMatrix;
         string colorSpace = matrix is int m ? MatrixName(m) ?? "" : "";
 
         var rate = ManagedCodecs.Rational.Reduce(header.Timescale * sampleCount, totalDuration);
@@ -92,7 +114,9 @@ public sealed class Mp4Input : VideoInput
             Width = width,
             Height = height,
             FrameRate = fps,
-            PixelFormat = (sps.ChromaFormatIdc, sps.BitDepthLuma) switch
+            PixelFormat = picture is not null
+                ? picture.PixelFormat ?? throw new UnsupportedVideoException($"The video is {picture.Describe()}: only 8-bit 4:2:0 and 4:2:2, and 10-bit 4:2:0, are supported so far.")
+                : (sps!.ChromaFormatIdc, sps.BitDepthLuma) switch
             {
                 (1, 10) => "yuv420p10le",
                 (2, _) => fullRange ? "yuvj422p" : "yuv422p",
@@ -100,8 +124,11 @@ public sealed class Mp4Input : VideoInput
             },
             ColorSpace = colorSpace,
             FullRange = fullRange,
-            // The SPS's chroma location (FFmpeg's h264 decoder gives each frame the SPS's; no MP4 box carries one).
-            ChromaLocation = ChromaLocationName(sps.ChromaLocation),
+            // The SPS's chroma location (FFmpeg's h264 decoder gives each frame the SPS's; no MP4 box carries one); libdav1d's
+            // for AV1 4:2:0 (vertical: left, colocated: topleft), FFmpeg's vp9 none.
+            ChromaLocation = picture is not null
+                ? picture.ChromaLocation switch { 1 => "left", 2 => "topleft", _ => null }
+                : ChromaLocationName(sps!.ChromaLocation),
             TimeBase = timeBase,
             StartPts = firstPts,
             // FFmpeg's nb_frames is the 'stts' count alone: unknown with an empty 'moov', short of the fragments' with
@@ -111,10 +138,55 @@ public sealed class Mp4Input : VideoInput
             Rotation = rotation,
             FieldOrder = fieldOrder,
             FrameTimestamps = VariableRate(Packets, firstPts, timeBase, fps),
-            Codec = "h264",
+            Codec = hosted ?? "h264",
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
         };
+
+        if (picture is not null)
+            _config = new HostDecoderConfig(HostCodecString(hosted!, picture, header.Av1Config.Span), hosted!,
+                header.Av1Config.ToArray(), width, height, DecodedFormat(Video.PixelFormat));
     }
+
+    /// <summary>
+    /// A VP9 or AV1 track's picture as FFmpeg's decoders say it (VP9's first key frame's header, AV1's sequence header in
+    /// the 'av1C') and its first frame's pts, its packets' least (one shown frame a packet, in presentation order). Packets an
+    /// edit list leaves out (which the decoder would decode for their references and not show) are refused.
+    /// </summary>
+    (CodecHeader Picture, long FirstPts) HostedPicture(string codec, Mp4Header header, Func<Stream> open)
+    {
+        var pts = Packets.Pts;
+        var flags = Packets.Flags;
+        int key = -1;
+        for (int i = 0; i < pts.Length; i++)
+        {
+            if ((flags[i] & PacketFlags.Discard) != 0)
+                throw new UnsupportedVideoException($"An edit list leaves out some of the {codec.ToUpperInvariant()} video's frames: not supported.");
+            if (i > 0 && pts[i] <= pts[i - 1])
+                throw new UnsupportedVideoException($"The {codec.ToUpperInvariant()} video's packets aren't in presentation order: not supported.");
+            if (key < 0 && (flags[i] & PacketFlags.Keyframe) != 0)
+                key = i;
+        }
+
+        if (pts.Length == 0 || key < 0)
+            throw new UnsupportedVideoException("The video track has no frames.");
+        CodecHeader? picture;
+        if (codec == "vp9")
+        {
+            using var stream = open();
+            using var demuxer = new Mp4Demuxer(stream, MediaTypes.Video, leaveOpen: false);
+            var first = demuxer.ReadPackets().First(p => p.Sequence == key);
+            picture = Vp9Header.Read(first.Data.Span);
+        }
+        else
+        {
+            picture = Av1Header.Read(header.Av1Config.Span);
+        }
+
+        return (picture ?? throw new UnsupportedVideoException($"The {codec.ToUpperInvariant()} stream's header couldn't be read."), pts[0]);
+    }
+
+    /// <inheritdoc/>
+    public override bool DecodedByHost => _decoder is not null;
 
     /// <summary>
     /// The display rotation as ShotDetector's file path takes it from FFmpeg (VideoReader: the display matrix's angle
@@ -134,16 +206,22 @@ public sealed class Mp4Input : VideoInput
     }
 
     /// <summary>Opens an MP4 file on disk.</summary>
-    public static new Mp4Input Open(string path) => new(() => File.OpenRead(path));
+    public static new Mp4Input Open(string path) => new(() => File.OpenRead(path), null);
 
     /// <summary>Opens an MP4 file held in memory (in the browser: the file the user picked).</summary>
-    public static new Mp4Input Open(byte[] data) => new(() => new MemoryStream(data, writable: false));
+    public static new Mp4Input Open(byte[] data) => new(() => new MemoryStream(data, writable: false), null);
 
     /// <summary>
     /// Opens an MP4 file read through <paramref name="open"/>, which must give a new readable, seekable stream over the
     /// file on every call (in the browser: one reading slices of the picked file, so it never has to fit in memory).
     /// </summary>
-    public static new Mp4Input Open(Func<Stream> open) => new(open);
+    public static new Mp4Input Open(Func<Stream> open) => new(open, null);
+
+    /// <summary>
+    /// <see cref="Open(Func{Stream})"/>, and VP9 or AV1 in the MP4 decoded by <paramref name="decoder"/> (the browser's);
+    /// without one, those are refused.
+    /// </summary>
+    public static new Mp4Input Open(Func<Stream> open, IHostDecoder? decoder) => new(open, decoder);
 
     /// <summary>
     /// The first frame's size and pts, and the stream's field order as ffprobe prints it (ManagedCodecs'
@@ -247,11 +325,47 @@ public sealed class Mp4Input : VideoInput
     /// </summary>
     private protected override IEnumerable<VideoFrame> DecodedFrames(int fromPacket)
     {
+        if (_decoder is not null)
+            throw new NotSupportedException("A VP9 or AV1 video's frames come from the host's decoder, asynchronously.");
         using var stream = new TimingOnlyStream(OpenStream());
         using var demuxer = new Mp4Demuxer(stream, MediaTypes.Video, leaveOpen: false);
         stream.SkipReads = fromPacket > 0;
         foreach (var frame in DecodedFrames(demuxer, fromPacket, stream, DecoderThreads))
             yield return frame;
+    }
+
+    /// <summary>
+    /// The frames from packet <paramref name="fromPacket"/> on: H.264's as <see cref="DecodedFrames(int)"/> gives them; VP9's
+    /// and AV1's from the host's decoder, each given its packet's pts, and its picture type as FFmpeg's decoder says it
+    /// (VP9's from its frame header, AV1's from its packet: a keyframe I, else P).
+    /// </summary>
+    private protected override IAsyncEnumerable<(VideoFrame Frame, PictureType Type)> DecodedFramesAsync(int fromPacket,
+        CancellationToken cancellationToken) =>
+        _decoder is null
+            ? base.DecodedFramesAsync(fromPacket, cancellationToken)
+            : HostFramesAsync(_decoder, _config!, types => HostPackets(fromPacket, types), fromPacket, cancellationToken);
+
+    // The video's packets from fromPacket on, each read as the decoder asks for it (those before it walked with their data
+    // skipped), its picture type queued.
+    IEnumerable<EncodedPacket> HostPackets(int fromPacket, ConcurrentQueue<PictureType> types)
+    {
+        using var stream = new TimingOnlyStream(OpenStream());
+        using var demuxer = new Mp4Demuxer(stream, MediaTypes.Video, leaveOpen: false);
+        stream.SkipReads = fromPacket > 0;
+        bool vp9 = Video.Codec == "vp9";
+        foreach (var packet in demuxer.ReadPackets())
+        {
+            if (packet.Sequence < fromPacket)
+            {
+                if (packet.Sequence == fromPacket - 1)
+                    stream.SkipReads = false;
+                continue;
+            }
+
+            var data = packet.Data.ToArray();
+            types.Enqueue((vp9 ? Vp9Header.ShownIsIntra(data) : packet.IsKeyframe) ? PictureType.I : PictureType.P);
+            yield return new EncodedPacket(data, packet.Pts, packet.IsKeyframe);
+        }
     }
 
     /// <summary>FFmpeg's field order (ManagedCodecs' has AVFieldOrder's values) as FrameReader's, which ShotDetector takes.</summary>

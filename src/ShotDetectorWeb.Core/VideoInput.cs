@@ -70,9 +70,10 @@ public abstract partial class VideoInput
     public static VideoInput Open(Func<Stream> open) => Open(open, null);
 
     /// <summary>
-    /// <see cref="Open(Func{Stream})"/>, and a WebM or Matroska file's VP9 or AV1 as <see cref="WebmInput"/>, its frames
-    /// decoded by <paramref name="decoder"/> (the browser's; decision 2026-11-02-webm-browser-decoder.md); without one, a
-    /// WebM file is refused as any other container.
+    /// <see cref="Open(Func{Stream})"/>, and a WebM or Matroska file's VP9 or AV1 as <see cref="WebmInput"/>, an MP4's as
+    /// <see cref="Mp4Input"/>, their frames decoded by <paramref name="decoder"/> (the browser's; decision
+    /// 2026-11-02-webm-browser-decoder.md); without one, a WebM file is refused as any other container, an MP4's VP9 or
+    /// AV1 as needing it.
     /// </summary>
     public static VideoInput Open(Func<Stream> open, IHostDecoder? decoder)
     {
@@ -90,7 +91,7 @@ public abstract partial class VideoInput
             }
         }
 
-        return matroska ? WebmInput.Open(open, decoder!) : avi ? AviInput.Open(open) : Mp4Input.Open(open);
+        return matroska ? WebmInput.Open(open, decoder!) : avi ? AviInput.Open(open) : Mp4Input.Open(open, decoder);
     }
 
     /// <summary>

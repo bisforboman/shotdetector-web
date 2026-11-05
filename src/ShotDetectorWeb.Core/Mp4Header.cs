@@ -4,7 +4,7 @@ namespace ShotDetectorWeb;
 
 /// <summary>
 /// What FFmpeg's MP4 demuxer (mov.c) reads from the headers that ManagedCodecs' <c>Mp4Demuxer</c> doesn't expose: the
-/// video track's 'stts' totals (FFmpeg's nb_frames and avg_frame_rate), 'mdhd' timescale, 'tkhd' matrix (rotation), the 'colr' box and the 'avcC' record of its 'avc1' sample entry;
+/// video track's 'stts' totals (FFmpeg's nb_frames and avg_frame_rate), 'mdhd' timescale, 'tkhd' matrix (rotation), the 'colr' box and the 'avcC' record of its 'avc1' sample entry (an 'av01' entry's 'av1C');
 /// the first audio track's codec as FFmpeg names it.
 /// </summary>
 internal sealed class Mp4Header
@@ -26,6 +26,9 @@ internal sealed class Mp4Header
 
     /// <summary>The 'avcC' payload; empty without one.</summary>
     public ReadOnlyMemory<byte> AvcConfig { get; private init; }
+
+    /// <summary>The 'av1C' payload (an 'av01' entry's: the AV1CodecConfigurationRecord, as Matroska's CodecPrivate); empty without one.</summary>
+    public ReadOnlyMemory<byte> Av1Config { get; private init; }
 
     /// <summary>The 'colr' box's matrix coefficients (nclx or nclc); null without one.</summary>
     public int? ColrMatrix { get; private init; }
@@ -102,7 +105,7 @@ internal sealed class Mp4Header
         }
 
         string entry = "";
-        ReadOnlyMemory<byte> avcC = default;
+        ReadOnlyMemory<byte> avcC = default, av1C = default;
         int? colrMatrix = null;
         bool? colrFull = null;
         if (Child(stbl, "stsd") is { } stsd && stsd.Length >= 16)
@@ -119,6 +122,10 @@ internal sealed class Mp4Header
                     if (type == "avcC")
                     {
                         avcC = payload;
+                    }
+                    else if (type == "av1C")
+                    {
+                        av1C = payload;
                     }
                     else if (type == "colr" && payload.Length >= 10 && colrMatrix is null)
                     {
@@ -145,6 +152,7 @@ internal sealed class Mp4Header
             TimeToSample = stts,
             SampleEntry = entry,
             AvcConfig = avcC,
+            Av1Config = av1C,
             ColrMatrix = colrMatrix,
             ColrFullRange = colrFull,
             Rotation = Child(trak, "tkhd") is { } tkhd ? DisplayRotation(tkhd.Span, movieMatrix) : null,

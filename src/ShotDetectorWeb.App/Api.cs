@@ -56,7 +56,7 @@ public static partial class Api
         json["frames"] = input.ShownFrames;
         // Who decodes the frames: ManagedCodecs, or the browser (a WebM's VP9 or AV1, JsDecoder), which the page marks
         // and runs on its own worker only (decision 2026-11-02-webm-browser-decoder.md).
-        json["decodedBy"] = input is WebmInput ? "browser" : "managedcodecs";
+        json["decodedBy"] = input.DecodedByHost ? "browser" : "managedcodecs";
         json["audio"] = input.Audio is { } a
             ? new JsonObject { ["codec"] = a.Codec, ["sampleRate"] = a.SampleRate, ["channels"] = a.Channels }
             : null;

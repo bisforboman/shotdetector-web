@@ -148,7 +148,7 @@ public sealed class WebmInput : VideoInput
         if (mkv.Audio is { } audio)
             Audio = new AudioStream(AudioCodec(audio.CodecId), audio.CodecId == "A_OPUS" ? 48000 : (int)audio.SamplingFrequency, audio.Channels);
 
-        _config = new HostDecoderConfig(CodecString(ffmpegCodec, header, track.CodecPrivate), ffmpegCodec, track.CodecPrivate,
+        _config = new HostDecoderConfig(HostCodecString(ffmpegCodec, header, track.CodecPrivate), ffmpegCodec, track.CodecPrivate,
             track.Width, track.Height, DecodedFormat(pixelFormat));
     }
 
@@ -156,6 +156,9 @@ public sealed class WebmInput : VideoInput
 
     /// <summary>Opens a WebM or Matroska file read through <paramref name="open"/>, its frames decoded by <paramref name="decoder"/>.</summary>
     public static new WebmInput Open(Func<Stream> open, IHostDecoder decoder) => new(open, decoder);
+
+    /// <inheritdoc/>
+    public override bool DecodedByHost => true;
 
     /// <summary>What the host's decoder is configured with (its codec string for WebCodecs among it).</summary>
     public HostDecoderConfig DecoderConfig => _config;
@@ -173,25 +176,8 @@ public sealed class WebmInput : VideoInput
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var stream = OpenStream();
-
-        // A concurrent queue: a host's decoder may read the packets on a thread of its own (FfmpegDecoder writes them to
-        // ffmpeg from a task) while the frames come out here. A plain Queue lost an Enqueue's count to a Dequeue on the
-        // other thread now and then: the last frame then found the queue empty (type None), or a lost item shifted the
-        // types after it by one.
-        var types = new ConcurrentQueue<PictureType>();
-        var pts = Packets.Pts.ToArray();
-        int shown = fromPacket;
-        await foreach (var frame in _decoder.DecodeAsync(_config, Read(stream, fromPacket, types), cancellationToken))
-        {
-            if (shown >= pts.Length)
-            {
-                frame.Dispose();
-                throw new InvalidDataException("The decoder gave more frames than the video has blocks.");
-            }
-
-            frame.Pts = pts[shown++];
-            yield return (frame, types.TryDequeue(out var type) ? type : PictureType.None);
-        }
+        await foreach (var item in HostFramesAsync(_decoder, _config, types => Read(stream, fromPacket, types), fromPacket, cancellationToken))
+            yield return item;
     }
 
     // The blocks from fromPacket on, each read as the decoder asks for it, its picture type queued.
@@ -207,20 +193,6 @@ public sealed class WebmInput : VideoInput
             types.Enqueue(intra ? PictureType.I : PictureType.P);
             yield return new EncodedPacket(data, block.Timestamp, block.Keyframe);
         }
-    }
-
-    // WebCodecs' codec strings: VP9's 'vp09.PP.LL.DD' (level 4.1: Chromium decodes past it), AV1's from its 'av1C'.
-    static string CodecString(string codec, CodecHeader header, byte[] av1C)
-    {
-        if (codec == "vp9")
-        {
-            int profile = (header.BitDepth > 8 ? 2 : 0) + (header.SubsampledY ? 0 : 1);
-            return $"vp09.{profile:D2}.41.{header.BitDepth:D2}";
-        }
-
-        int seqProfile = av1C.Length > 1 ? av1C[1] >> 5 : 0, level = av1C.Length > 1 ? av1C[1] & 0x1F : 8;
-        bool high = av1C.Length > 2 && (av1C[2] & 0x80) != 0;
-        return $"av01.{seqProfile}.{level:D2}{(high ? 'H' : 'M')}.{header.BitDepth:D2}";
     }
 
     // ffprobe's codec_name of a Matroska audio track's CodecID.

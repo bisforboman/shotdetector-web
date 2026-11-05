@@ -34,7 +34,6 @@ var RefusalNames = new Dictionary<string, string>
     ["hevc.mp4"] = "FFmpeg's hevc",
     ["vp8.webm"] = "FFmpeg's vp8",
     ["h264.mkv"] = "H.264 in Matroska",
-    ["av1.mp4"] = "FFmpeg's av1",
     ["mpeg4.mp4"] = "FFmpeg's mpeg4",
     ["h264.avi"] = "FFmpeg's h264",
 };

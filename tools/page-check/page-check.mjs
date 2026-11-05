@@ -46,7 +46,7 @@
 //      target's multipart POST, which sw.js answers) on both: each to the same downloads as 1.
 //  12. each --refused file (HEVC in MP4, VP8 in WebM) picked: the core's refusal naming the codec, what reads the file
 //      instead under it, the iPhone's line for HEVC alone (backlog "A refusal that says what to do").
-//  13. each --browser file (VP9 and AV1 in WebM) picked on an isolated page: decoded by Chromium's VideoDecoder on
+//  13. each --browser file (VP9 and AV1 in WebM and MP4) picked on an isolated page: decoded by Chromium's VideoDecoder on
 //      threads (its imports on the main thread), its chip the browser's decoder's, its downloads, picture and frame types
 //      the native check's (FFmpeg standing in for the browser) byte for byte; the AV1 ones also on two workers, and held,
 //      stopped and resumed on threads and on two workers, to the native run's files.
@@ -59,7 +59,7 @@
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
-//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [--avi <file.avi>]... [<more.mp4>...]
+//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm|file.mp4>]... [--avi <file.avi>]... [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -72,7 +72,7 @@ const args = process.argv.slice(2);
 const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
 if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
   console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
-    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm>]... [--avi <file.avi>]... [<more.mp4>...]');
+    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm|file.mp4>]... [--avi <file.avi>]... [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
@@ -886,7 +886,7 @@ async function pickedRefused(file) {
     }));
     const hevc = /FFmpeg's hevc/.test(shown.message);
     console.log(`${what}: ${shown.message}`);
-    if (!/this page reads H\.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM so far/.test(shown.message))
+    if (!/this page reads H\.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM and MP4 so far/.test(shown.message))
       fail(`${what}: the message isn't the core's refusal: ${shown.message}`);
     if (!shown.refused || !shown.link.startsWith('https://github.com/bisforboman/shotdetector'))
       fail(`${what}: no line under the message pointing to the shotdetect command (${JSON.stringify(shown)})`);
