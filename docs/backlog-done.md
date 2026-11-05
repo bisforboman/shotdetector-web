@@ -1800,4 +1800,6 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Done when: the file is "same" in the phones group.
   - Status: Done (2026-11-04, the owner's choice through AskUserQuestion): ManagedCodecs 0.8.0, whose stream duration
     is the shorter of 'mdhd''s and the samples' summed durations (the longer in a fragmented file). The file "All
-    agree" natively, description included; it moves to realworld.yml's phones group; phones-differ, now empty, is gone
+    agree" natively, description included, and the AOT bundle under Node gives the same 39 files; it moves to
+    realworld.yml's phones group, and phones-differ, now empty, is gone. NativeCheck "All agree" on every sample; the
+    AOT wasm check on with-audio, fragmented and vfr-320x240, 387 of 387 identical
