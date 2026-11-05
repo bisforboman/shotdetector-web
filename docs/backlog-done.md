@@ -1846,3 +1846,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     agree" natively, description included, and the AOT bundle under Node gives the same 39 files; it moves to
     realworld.yml's phones group, and phones-differ, now empty, is gone. NativeCheck "All agree" on every sample; the
     AOT wasm check on with-audio, fragmented and vfr-320x240, 387 of 387 identical
+
+- VP9 or AV1 in MP4
+  - Why: VP9 and AV1 in MP4 (YouTube's) are refused as another codec in `Mp4Input`; the browser's decoder could take
+    them as it takes WebM's, configured from the track's 'vpcC' or 'av1C'.
+  - Where: `Mp4Input` (an MP4 track's 'vp09' or 'av01' through `IHostDecoder`), make-samples.sh.
+  - Status: Done (2026-11-05, the owner's choice through AskUserQuestion): `Mp4Input` hands a 'vp09' or 'av01'
+    track's packets to the host's decoder, configured as a WebM's (VP9's key frame header, AV1's 'av1C' from
+    `Mp4Header`), the MP4's rate, duration, rotation and fragments as H.264's; packets an edit list leaves out are
+    refused. WebmInput's frame loop moved to `VideoInput.HostFramesAsync`, and the App's `decodedBy` asks
+    `VideoInput.DecodedByHost`. Samples `mp4-vp9-aac-320x240-25.mp4`, `mp4-av1-320x240-25.mp4` and
+    `mp4-vp9-fragmented-320x240-2997.mp4`; `samples/reject/av1.mp4` gone. Native "All agree" on every sample; wasm 258
+    of 258 files identical (the new samples refused under Node for want of a decoder, as a WebM's); page-check decodes
+    the three in Chromium, 11 of 11 files each identical to the native run's. No real-world file, as for WebM: the
+    real-world check runs under Node.
