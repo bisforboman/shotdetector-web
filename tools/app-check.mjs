@@ -199,10 +199,11 @@ for (const [i, sample] of samples.entries()) {
   const video = JSON.parse(Open(fileBlob(sample)));
   fileName = basename(sample);
   console.error(`${basename(sample)}: ${video.width}x${video.height}, ${video.frameRate.num}/${video.frameRate.den} fps, ${video.frames} frames, ${video.duration} s`);
-  // A WebM's VP9 or AV1 (decision 2026-11-02-webm-browser-decoder.md): opened and described by the core as natively,
+  // A WebM's or an MP4's VP9 or AV1 (decision 2026-11-02-webm-browser-decoder.md; the MP4 samples named mp4-vp9-* and
+  // mp4-av1-*): opened and described by the core as natively,
   // its frames the browser's decoder's, which Node hasn't: the run is refused in the page's words. The runs themselves
   // are NativeCheck's (FFmpeg standing in for the browser) and page-check's (Chromium's decoder).
-  if (extname(sample) === '.webm') {
+  if (extname(sample) === '.webm' || /^mp4-(vp9|av1)-/.test(basename(sample))) {
     if (video.decodedBy !== 'browser' || !['vp9', 'av1'].includes(video.codec))
       fail(`${basename(sample)}: opened as ${video.codec} decoded by ${video.decodedBy}, not the browser's VP9 or AV1`);
     try {
@@ -330,7 +331,7 @@ for (const file of noAac) {
 // the promise rejected with the core's message, which the page shows. A codec or container the core doesn't read is
 // named as FFmpeg names it (NativeCheck's RefusalNames, kept the same; backlog "A refusal that says what to do").
 const REFUSAL_NAMES = {
-  'hevc.mp4': "FFmpeg's hevc", 'vp8.webm': "FFmpeg's vp8", 'h264.mkv': 'H.264 in Matroska', 'av1.mp4': "FFmpeg's av1", 'mpeg4.mp4': "FFmpeg's mpeg4",
+  'hevc.mp4': "FFmpeg's hevc", 'vp8.webm': "FFmpeg's vp8", 'h264.mkv': 'H.264 in Matroska', 'mpeg4.mp4': "FFmpeg's mpeg4",
   'h264.avi': "FFmpeg's h264",
 };
 for (const file of rejects) {

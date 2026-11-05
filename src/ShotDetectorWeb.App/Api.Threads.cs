@@ -16,7 +16,7 @@ namespace ShotDetectorWeb.App;
 [SupportedOSPlatform("browser")]
 public static partial class Api
 {
-    /// <summary><see cref="Open"/>, the frames then decoded on <paramref name="threads"/> threads (ManagedCodecs'; a WebM's are the browser's).</summary>
+    /// <summary><see cref="Open"/>, the frames then decoded on <paramref name="threads"/> threads (ManagedCodecs'; VP9's and AV1's are the browser's).</summary>
     [JSExport]
     public static async Task<string> OpenThreaded(JSObject file, int threads)
     {
@@ -24,7 +24,7 @@ public static partial class Api
         _result = null;
         _file?.Dispose();
         _file = file;
-        // A WebM's frames from the browser's decoder (JsDecoder), whose imports threads.js gives on the main thread.
+        // VP9's and AV1's frames (WebM, MP4) from the browser's decoder (JsDecoder), whose imports threads.js gives on the main thread.
         var input = await Host.Run(() => Task.FromResult(DamagedPrefixed(() => VideoInput.Open(() => new BlobStream(file), JsDecoder.Instance))));
         input.DecoderThreads = threads;
         return Opened(input);

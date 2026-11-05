@@ -115,8 +115,9 @@ if [[ $wasm == true ]]; then
   # named), each written by the run.
   files=0 differ=0 extra=0 missing=0
   for s in "${samples[@]}"; do
-    # A WebM's frames are the browser's decoder's, which Node hasn't: page-check compares its runs.
-    [[ $s == *.webm ]] && continue
+    # A WebM's frames are the browser's decoder's, which Node hasn't, as are an MP4's VP9 and AV1 (mp4-vp9-*, mp4-av1-*):
+    # page-check compares their runs.
+    [[ $s == *.webm || $(basename "$s") == mp4-vp9-* || $(basename "$s") == mp4-av1-* ]] && continue
     b=out/native/$(basename "${s%.*}")
     written=("$b".*.csv "$b".*.shots.json "$b".*.shots.html "$b".*.edl "$b".*.fcpxml "$b".*.fcp7.xml "$b".*.otio "$b".*.qp "$b".*.keyframes.txt "$b".*.shotchanges \
       "$b".*.chapters-*.json)
@@ -155,9 +156,10 @@ if [[ $page == true ]]; then
   nodht=samples/mjpeg-nodht-320x240-25.avi
   more=(samples/rotated-90-320x240-25.mp4 samples/vfr-320x240.mp4 samples/yuv420p10-full-topleft-bt709-320x240-25.mp4)
   interlaced=samples/interlaced-tff-320x240-25.mp4
-  # Every WebM sample, decoded by Chromium's own VideoDecoder (decision 2026-11-02-webm-browser-decoder.md).
+  # Every WebM sample and the MP4s of VP9 and AV1, decoded by Chromium's own VideoDecoder (decision
+  # 2026-11-02-webm-browser-decoder.md).
   browser=()
-  for f in samples/*.webm; do browser+=(--browser "$f"); done
+  for f in samples/*.webm samples/mp4-vp9-*.mp4 samples/mp4-av1-*.mp4; do browser+=(--browser "$f"); done
   (( ${#browser[@]} > 0 )) || { echo "No WebM samples (tools/make-samples.sh)" >&2; exit 1; }
   for f in "$sample" "$demo" "$avi" "$nodht" "${more[@]}" "$interlaced" samples/reject/hevc.mp4 samples/reject/vp8.webm; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi

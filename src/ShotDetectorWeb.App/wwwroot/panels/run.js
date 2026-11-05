@@ -133,7 +133,7 @@ function clear({ keepTitles = false } = {}) {
   shots = [];
 }
 
-// Whose shots these are: scenedetect's, byte for byte, from ManagedCodecs' frames; or, for a WebM's VP9 or AV1, from
+// Whose shots these are: scenedetect's, byte for byte, from ManagedCodecs' frames; or, for VP9 or AV1 (WebM, MP4), from
 // the browser's own decoder's (decision 2026-11-02-webm-browser-decoder.md), checked in Chromium only.
 const chip = section.querySelector('h2 .chip'), exactChip = { text: chip.textContent, title: chip.title };
 const BROWSER_TITLE = 'Decoded by your browser\'s own decoder (WebCodecs\' VideoDecoder), not ManagedCodecs: the page ' +

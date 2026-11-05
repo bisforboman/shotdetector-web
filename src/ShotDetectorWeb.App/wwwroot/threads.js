@@ -54,7 +54,7 @@ function start() {
       parts,
       append,
       blob,
-      // A WebM's VP9 or AV1: WebCodecs' VideoDecoder on the main thread, where the runtime runs its imports (JsDecoder).
+      // A WebM's or an MP4's VP9 or AV1: WebCodecs' VideoDecoder on the main thread, where the runtime runs its imports (JsDecoder).
       decoderOpen,
       decoderDecode,
       decoderNext,

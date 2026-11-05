@@ -1,4 +1,4 @@
-// The host's decoder imports that .NET's JsDecoder (src/ShotDetectorWeb.App/JsDecoder.cs) uses for WebM's VP9 and AV1
+// The host's decoder imports that .NET's JsDecoder (src/ShotDetectorWeb.App/JsDecoder.cs) uses for VP9 and AV1 (WebM's, MP4's)
 // (decision 2026-11-02-webm-browser-decoder.md): WebCodecs' VideoDecoder in this worker (or on the page's main thread,
 // where the threaded runtime runs its imports: threads.js), software first (Chromium's,
 // whose frames were FFmpeg's in the measurement), each frame copied out packed in the video's format (copyTo, in the

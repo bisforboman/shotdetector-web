@@ -17,7 +17,7 @@
 //                            Once held: out: { type: 'held', frames }, the frames read, where a stop ends it.
 // A worker that doesn't answer at all (a long decode between two pauses, a crash) the page terminates. The file is read
 // in slices as .NET needs them (blob-read.js), not copied into memory; the stats CSV comes out as a Blob made of the
-// parts .NET writes (blob-write.js). A WebM's VP9 or AV1 is decoded by the browser's VideoDecoder here (video-decode.js).
+// parts .NET writes (blob-write.js). A WebM's or an MP4's VP9 or AV1 is decoded by the browser's VideoDecoder here (video-decode.js).
 import { dotnet } from './_framework/dotnet.js';
 import { read } from './blob-read.js';
 import { append, blob, parts } from './blob-write.js';
