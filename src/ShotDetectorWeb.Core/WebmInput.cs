@@ -33,9 +33,10 @@ public readonly record struct EncodedPacket(byte[] Data, long Pts, bool Keyframe
 /// VP9 or AV1 in a WebM (or Matroska) file (<see cref="VideoInput"/>): described from its headers as FFmpeg's matroska
 /// demuxer and its vp9 and libdav1d decoders describe it (<see cref="MatroskaReader"/>, <see cref="Vp9Header"/>,
 /// <see cref="Av1Header"/>), its frames decoded by the host's decoder (<see cref="IHostDecoder"/>), each given the pts
-/// of its block. So far: 8-bit 4:2:0 and 4:2:2 and 10-bit 4:2:0, a DefaultDuration (FFmpeg's frame rate), with a
-/// Segment Duration or without (a live recording's: no duration, as FFmpeg's), progressive, unrotated; anything else is
-/// refused when opened.
+/// of its block. So far: 8-bit 4:2:0 and 4:2:2 and 10-bit 4:2:0, with a DefaultDuration (FFmpeg's frame rate) or
+/// without (the rate FFmpeg works out from the blocks it probes: <see cref="ProbedFrameRate"/>), with a Segment Duration
+/// or without (a live recording's: no duration, as FFmpeg's), progressive, unrotated; anything else is refused when
+/// opened.
 /// </summary>
 public sealed class WebmInput : VideoInput
 {
@@ -65,8 +66,7 @@ public sealed class WebmInput : VideoInput
             throw new UnsupportedVideoException("The video is rotated (a Matroska Projection): not supported yet in WebM.");
         if (track.Interlaced == 1)
             throw new UnsupportedVideoException("The video is interlaced: not supported in WebM.");
-        if (track.DefaultDuration is not long frameDuration || frameDuration <= 0)
-            throw new UnsupportedVideoException("The WebM file's video track has no DefaultDuration (FFmpeg's frame rate then comes from the frames it probes): not supported yet.");
+        long? frameDuration = track.DefaultDuration is long d && d > 0 ? d : null;
 
         // The blocks' timing, sizes and keyframes (FFmpeg's packets), their data not read.
         var timeBase = Reduce(mkv.TimestampScale, 1_000_000_000);
@@ -96,9 +96,31 @@ public sealed class WebmInput : VideoInput
             ?? throw new UnsupportedVideoException($"The video is {header.Describe()}: only 8-bit 4:2:0 and 4:2:2, and 10-bit 4:2:0, are supported so far.");
 
         // FFmpeg's matroska demuxer: the average rate from DefaultDuration (av_reduce of 1e9 / DefaultDuration, at most
-        // 30000), the format's duration from the Segment's Duration (in microseconds, a double truncated).
-        var rate = ReduceRate(1_000_000_000, frameDuration, 30000);
-        var fps = new Fps(rate.Num, rate.Den);
+        // 30000), the format's duration from the Segment's Duration (in microseconds, a double truncated). Without a
+        // DefaultDuration, the rate FFmpeg works out from the blocks it probes (decision
+        // 2026-11-05-webm-without-default-duration.md): the average, or r_frame_rate when it has none, as the file path
+        // reports it.
+        Fps fps;
+        if (frameDuration is long defaultDuration)
+        {
+            var rate = ReduceRate(1_000_000_000, defaultDuration, 30000);
+            fps = new Fps(rate.Num, rate.Den);
+        }
+        else
+        {
+            var probed = new List<ProbedFrameRate.ProbedPacket>();
+            foreach (var p in mkv.Packets(stream))
+            {
+                // A BlockGroup's BlockDuration gives FFmpeg packet durations, which it averages instead: not ported.
+                if (p.Video && p.HasDuration)
+                    throw new UnsupportedVideoException("The WebM file's video track has no DefaultDuration but its blocks have durations: not supported yet.");
+                probed.Add(new ProbedFrameRate.ProbedPacket(p.Video, p.Timestamp, p.Size));
+            }
+
+            var rates = ProbedFrameRate.Estimate(probed, timeBase.Num, timeBase.Den);
+            var chosen = rates.AverageFrameRate ?? rates.RFrameRate;
+            fps = new Fps(checked((int)chosen.Num), checked((int)chosen.Den));
+        }
         // Without one (a live recording's, written as it went), FFmpeg's format has no duration either.
         long? durationUs = mkv.Duration is double ticks && ticks > 0 ? (long)(ticks * mkv.TimestampScale * 1000 / 1_000_000) : null;
 

@@ -97,6 +97,21 @@ publish").
   - Done when: NativeCheck's stopped corrected runs agree with the FFmpeg path on every sample.
   - Status: Waiting (2026-11-03): on the ShotDetector release with the fix
 
+- The spans' times when another stream starts first (upstream)
+  - Why: ShotDetector 3.28.0 times `BlackSpans` and `FreezeSpans` from the video stream's start; `ffmpeg -vf
+    blackdetect,freezedetect` (without `-copyts`) times them from the file's start, the earliest stream's (format
+    `start_time`). Decision 2026-11-04-black-spans-and-times.md took the two for the same; they are on every sample,
+    whose file starts with its video, but not on `caminandes-fragmented.mp4` (realworld), whose video starts at
+    1000/24000 and audio at 0: every black span and still picture comes out one frame (1/24 s) early (0-1.958333
+    against FFmpeg's 0.0416667-2). The core agrees with the FFmpeg path (`Detect(path)`) there, frames and times: the
+    nightly's "Real world (fragmented)" job fails on PictureCheck since 2026-11-05 (run 41994804094). Sent to the
+    shotdetector coordinator 2026-11-05; the owner chose to leave the nightly red and change no check until the release.
+  - Where: the ShotDetector pin to the release with the fix; the core's description gives it the file's start if the
+    fix needs one (`Mp4Input`'s spans already know every stream's start).
+  - Done when: realworld.yml's PictureCheck agrees on `caminandes-fragmented.mp4`.
+  - Status: Waiting (2026-11-05): on the ShotDetector release with the fix (the owner chose to fix it now: spans from
+    the file's start, as ffmpeg times them; likely a new optional `YuvVideo` value, the file's start, which the core then gives)
+
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
     npm's trusted publishing needs the package to exist on npmjs.com with this repository's `npm.yml` as its trusted
@@ -158,12 +173,6 @@ file out of `samples/reject/`, and passes the native check.
   - Where: a repro first (page-check's WebM steps after the rest, in a loop), then .NET's issue tracker if it is the
     runtime's.
   - Status: Maybe (2026-11-04)
-
-- WebM without a DefaultDuration
-  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration: FFmpeg's average rate then comes from the
-    frames it probes (avformat_find_stream_info's estimate), which the core would have to work out as FFmpeg does.
-  - Where: `WebmInput`, make-samples.sh (a sample without DefaultDuration, checked with ffprobe).
-  - Status: Maybe (2026-11-02, split 2026-11-04)
 
 - VP9 or AV1 in MP4
   - Why: VP9 and AV1 in MP4 (YouTube's) are refused as another codec in `Mp4Input`; the browser's decoder could take

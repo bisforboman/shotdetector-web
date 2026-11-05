@@ -246,7 +246,9 @@ static YuvVideo Oracle(string path)
     {
         Width = info.Width,
         Height = info.Height,
-        FrameRate = info.AverageFrameRate,
+        // avg_frame_rate, or r_frame_rate where FFmpeg has no average (a variable-rate WebM without a DefaultDuration),
+        // as the file path reports it (ShotDetector 3.28.0's Detect(path): decision 2026-11-05-webm-without-default-duration.md).
+        FrameRate = info.AverageFrameRate.Num > 0 && info.AverageFrameRate.Den > 0 ? info.AverageFrameRate : info.FrameRate,
         PixelFormat = info.PixelFormat!,
         ColorSpace = colorSpace,
         FullRange = colorRange == "pc",

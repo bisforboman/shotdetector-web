@@ -1820,6 +1820,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     written to a pipe (no Duration, no Cues, the Segment's size unknown; ffprobe's duration N/A). Native "All agree",
     the page check decodes it in Chromium to the native run's files
 
+- WebM without a DefaultDuration
+  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration: FFmpeg's average rate then comes from the
+    frames it probes (avformat_find_stream_info's estimate), which the core would have to work out as FFmpeg does.
+  - Where: `WebmInput`, make-samples.sh (a sample without DefaultDuration, checked with ffprobe).
+  - Status: Done (2026-11-05, the owner's choice through AskUserQuestion, decision
+    2026-11-05-webm-without-default-duration.md: FFmpeg's estimate, ported): `ProbedFrameRate` works out FFmpeg 8.1's
+    `r_frame_rate` from the first 40 blocks' timestamps (`ff_rfps_add_frame` and `ff_rfps_calculate`, the probe's 5 MB
+    and 5 s stops) and its `avg_frame_rate` from it; the video's rate is the average, or `r_frame_rate` without one, as
+    `Detect(path)` reports (NativeCheck's oracle too). MatroskaReader also reads the deprecated FrameRate (a
+    DefaultDuration for FFmpeg); blocks with BlockDurations and no DefaultDuration stay refused (FFmpeg averages
+    those). Samples vp9-nodefault-320x240-2997.webm (30000/1001) and vfr-nodefault-320x240.webm (r_frame_rate 25, no
+    average): native "All agree", and 25, 30000/1001, 24000/1001, 60, 12 and 17 fps cut the same way agreed too
+
 - An Android file's duration
   - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch, no edit list): the
     core's duration 4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs were the same. FFmpeg ends
