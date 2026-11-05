@@ -1819,3 +1819,17 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     Duration and describes no duration, as FFmpeg's format has none; make-samples.sh makes vp9-live-320x240-25.webm,
     written to a pipe (no Duration, no Cues, the Segment's size unknown; ffprobe's duration N/A). Native "All agree",
     the page check decodes it in Chromium to the native run's files
+
+- An Android file's duration
+  - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch, no edit list): the
+    core's duration 4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs were the same. FFmpeg ends
+    each stream at its start plus its stream duration, the track's 'mdhd' (audio 196605, video 359884), where
+    ManagedCodecs 0.7.0 gave the samples' sums (196608, 364801):
+    [ManagedCodecs#317](https://github.com/bisforboman/ManagedCodecs/issues/317).
+  - Where: the ManagedCodecs pin; the file moves to realworld.yml's phones group.
+  - Done when: the file is "same" in the phones group.
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion): ManagedCodecs 0.8.0, whose stream duration
+    is the shorter of 'mdhd''s and the samples' summed durations (the longer in a fragmented file). The file "All
+    agree" natively, description included, and the AOT bundle under Node gives the same 39 files; it moves to
+    realworld.yml's phones group, and phones-differ, now empty, is gone. NativeCheck "All agree" on every sample; the
+    AOT wasm check on with-audio, fragmented and vfr-320x240, 387 of 387 identical

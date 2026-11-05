@@ -60,30 +60,12 @@ The owner's queue of 2026-11-01: the bump first (done, #124), then freeze spans 
 The owner's choice of 2026-11-02 ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)):
 a refusal that says what to do first, then VP9 and AV1 through the browser's decoder, held to the FFmpeg path's CSVs.
 Both rows are done (backlog-done, #133 and #135); what they left is in Maybe ("WebM runs split, resumed and on
-threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "A Matroska demuxer in ManagedCodecs").
+threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "WebM on ManagedCodecs' Matroska demuxer").
 
 ### The npm package (issue #92)
 
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
 publish").
-
-### Found by the real phone files (2026-11-04)
-
-The eight phone files (realworld.sh, run 41787733573) give the FFmpeg path's scenes and stats CSVs, shots and every
-run's files byte for byte; four differ in their description or measures, run by hand in realworld.yml's phones-differ
-group until their rows move them to phones.
-
-- An Android file's duration
-  - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch, no edit list): the
-    core's duration 4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs are the same. Traced
-    (2026-11-04): FFmpeg ends each stream at its start plus its stream duration, the track's 'mdhd' (audio 196605, video
-    359884), where ManagedCodecs 0.7.0's `AudioStreamInfo.Duration` and `VideoStreamInfo.Duration` give the samples'
-    sums (196608, 364801), against their own documentation ("else the track's 'mdhd' duration"). Filed as
-    [ManagedCodecs#317](https://github.com/bisforboman/ManagedCodecs/issues/317). `Mp4Input` now ends the audio at its start plus its stream duration as
-    it did the video (FFmpeg's rule; native agrees on every sample), so the release with ManagedCodecs' fix moves it.
-  - Where: the ManagedCodecs pin, once fixed; the file moves to realworld.yml's phones group.
-  - Done when: the file is "same" in the phones group.
-  - Status: Waiting (2026-11-04): on ManagedCodecs#317 ('mdhd' as the stream duration)
 
 ## Waiting
 
@@ -189,12 +171,12 @@ file out of `samples/reject/`, and passes the native check.
   - Where: `Mp4Input` (an MP4 track's 'vp09' or 'av01' through `IHostDecoder`), make-samples.sh.
   - Status: Maybe (2026-11-02, split 2026-11-04)
 
-- A Matroska demuxer in ManagedCodecs
-  - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs has a
-    Matroska demuxer that gives packets and the track's headers as its MP4 and AVI demuxers do.
-  - Where: an issue on ManagedCodecs (not filed from this session: the repository wasn't in its scope), then
-    `WebmInput` on its demuxer.
-  - Status: Maybe (2026-11-02)
+- WebM on ManagedCodecs' Matroska demuxer
+  - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs had a
+    Matroska demuxer; 0.8.0 has one (`MatroskaDemuxer`, with `Ebml`), which the core doesn't use yet.
+  - Where: a decision first (replacing the core's reader, against the 2026-11-02 choice), then `WebmInput` on the
+    demuxer, held to the same CSVs on every WebM sample.
+  - Status: Maybe (2026-11-04: ManagedCodecs 0.8.0 on nuget.org)
 
 - A Cinemetrics file
   - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's
