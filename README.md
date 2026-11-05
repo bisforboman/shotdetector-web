@@ -1094,9 +1094,9 @@ archive.org, whose file servers GitHub's runners reach but the cloud sessions do
 Android phones from 2011 to 2017, portrait (turned -90) and turned 180, at variable rates, full range, one a 3GP, one
 as WhatsApp sent it, all H.264. A row whose source a session can't reach may be "unpinned": its download prints its
 SHA-256 and ffprobe's summary, and the check fails ("Unpinned") until the SHA-256 is pinned from that log. All eight
-give the FFmpeg path's CSVs and shots on every run; four differ in their description or measures, each a backlog row
-("Found by the real phone files"), and run by hand (realworld.yml's `phones-differ`, a group `byHand` that `all`
-leaves out) until their rows move them to `phones`. No openly licensed broadcast capture was found on a host either
+give the FFmpeg path's CSVs and shots on every run, and their description and measures too (`phones`); four didn't at
+first, each a row of backlog-done's. A file that differs goes in a group `byHand`, which `all` leaves out, until its
+row moves it to `phones`. No openly licensed broadcast capture was found on a host either
 reaches (archive.org's are TV recordings without a licence). A file expected refused
 must be refused with an `UnsupportedVideoException`; once its row widens the scope the nightly run says "Not refused",
 and the row moves it to "same". On the files over three minutes (Big Buck Bunny, Tears of Steel) the bundle runs only
@@ -1332,7 +1332,7 @@ video's, shotdetector#625, 3.25.0 the first with ranges that deinterlace, shotde
 end, `RangeScores.EndFrame`, 3.27.0 the first whose hash detector gives x64's bits on browser-wasm, shotdetector#701;
 3.28.0's own additions the page doesn't use yet, docs/backlog.md),
 FrameReader (2.22.0),
-ManagedCodecs (0.7.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.8.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
 under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
@@ -1341,7 +1341,9 @@ holds"; 0.5.0 gives each frame's colour tags and sample aspect ratio, the stream
 duration, and seeking, which the core doesn't use yet: `Mp4Header`, `SpsInfo` and `AviHeader` still read what FFmpeg says; 0.6.0 takes the
 other AVI FourCCs FFmpeg reads as MJPEG, decodes a JPEG whose scan runs past its data (the rest 0, `IsDamaged`; FFmpeg's
 picture there is undefined, Status), and decodes 4:1:1 and 4:4:0 JPEG, which ShotDetector's frame source doesn't take
-yet; 0.7.0 adds JPEG thumbnails, which the page doesn't use)
+yet; 0.7.0 adds JPEG thumbnails, which the page doesn't use; 0.8.0 ends a track's stream at the shorter of 'mdhd''s and
+the samples' durations, as FFmpeg does, ManagedCodecs#317, and adds a Matroska demuxer, which the core doesn't use yet:
+`MatroskaReader` reads a WebM)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
