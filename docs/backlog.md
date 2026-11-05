@@ -109,7 +109,8 @@ publish").
   - Where: the ShotDetector pin to the release with the fix; the core's description gives it the file's start if the
     fix needs one (`Mp4Input`'s spans already know every stream's start).
   - Done when: realworld.yml's PictureCheck agrees on `caminandes-fragmented.mp4`.
-  - Status: Waiting (2026-11-05): on the shotdetector coordinator's answer and the release with the fix
+  - Status: Waiting (2026-11-05): on the ShotDetector release with the fix (the owner chose to fix it now: spans from
+    the file's start, as ffmpeg times them; likely a new optional `YuvVideo` value, the file's start, which the core then gives)
 
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
