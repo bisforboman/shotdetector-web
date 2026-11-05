@@ -1790,6 +1790,23 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     demo 70 % in, titles a chapter at 10 s, reloads and finds it in the download; it also waits for Resume once a run
     has stopped (Api's Kept comes after the result: the AV1 WebM's stop and resume missed it)
 
+- An AVI's JPEGs without Huffman tables
+  - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
+    FFmpeg's and ManagedCodecs' decoders supply but a browser's JPEG decoder doesn't; the page's picture and stills of
+    such a file (backlog-done "The picture of an AVI on the page") would then be missing (the stills say "didn't show").
+    ffmpeg's encoder writes the tables, so no sample has the case yet.
+  - Where: `make-samples.sh` (a sample with the DHT stripped, checked with a JPEG parser); the page inserting the
+    standard tables before the first SOS when a JPEG has none (bytes copied, no decoding).
+  - Done when: the page check shows that sample's picture and stills.
+  - Not: decoding in .NET for the picture.
+  - Status: Done (2026-11-04, the owner's choice through AskUserQuestion, decision
+    2026-11-04-jpegs-without-huffman-tables.md: the sample and the checks, no change to the page): Chromium's JPEG
+    decoder (libjpeg-turbo, Firefox's too) sets the standard tables when a JPEG has none, so its picture and stills show
+    as with them; ManagedCodecs decodes it as FFmpeg does. make-samples.sh makes mjpeg-nodht-320x240-25.avi (written
+    with -huffman default, each DHT cut, checked: none left, the frames those with the tables); native "All agree",
+    wasm identical, and the page check picks it as the AVI (--avi): its picture, stills and contact sheet drawn. Safari
+    (ImageIO) isn't checked anywhere
+
 - An Android file's duration
   - Why: `phone-android-2017-1080p.mp4` (1920x1080 Baseline, a variable rate, AAC 48 kHz 2 ch, no edit list): the
     core's duration 4.0960000 s, FFmpeg's format duration 4.0959380 s; the shots and CSVs were the same. FFmpeg ends

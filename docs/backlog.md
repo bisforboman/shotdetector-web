@@ -142,14 +142,21 @@ a frame of another size refused (#625). What it still lacks is in its `docs/fram
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
 
-- An unaligned atomic in the threaded runtime, once
+- A threaded WebM run's intermittent failures (an unaligned atomic, a crash, a result that doesn't come)
   - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
     interpreted publish) gave the native run's files, then the threaded runtime ended: "operation does not support
     unaligned accesses" (WebAssembly's trap for an atomic on an unaligned address) and `RuntimeError: unreachable` in
     `threads/_framework/dotnet.native.js`. Nineteen such runs, the same file and the 8-bit AV1 one, gave it once. The
     page's code has no atomics of its own there: .NET's threaded runtime (10.0.14), or the decoder imports it runs on
-    the main thread for a WebM (`JsDecoder`'s `Span` views).
-  - Where: a repro first (page-check's `resumedBrowser` in a loop), then .NET's issue tracker if it is the runtime's.
+    the main thread for a WebM (`JsDecoder`'s `Span` views). Seen since in whole page checks (2026-11-04, a cloud
+    session, the page's files those of main at #158): the same trap once on `vp9-320x240-25.webm` on threads; twice
+    the resumed 10-bit AV1 run on threads done, but none of its downloads within 10 s (`ShotsJson` and `ShotsHtml` from
+    the threaded runner not answering; no error on the page); once Chromium's renderer crashed during
+    `vp9-320x240-25.webm` on threads ("Target crashed"). The step alone, or the WebM steps alone, passed each time
+    (3 and 1 runs, page-check.mjs on the same published bundle), and a whole page check on main passed once: they came
+    only in `tools/check.sh page`, whose WebM steps run first, right after the publish.
+  - Where: a repro first (page-check's WebM steps after the rest, in a loop), then .NET's issue tracker if it is the
+    runtime's.
   - Status: Maybe (2026-11-04)
 
 - WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4
@@ -165,18 +172,6 @@ file out of `samples/reject/`, and passes the native check.
   - Where: a decision first (replacing the core's reader, against the 2026-11-02 choice), then `WebmInput` on the
     demuxer, held to the same CSVs on every WebM sample.
   - Status: Maybe (2026-11-04: ManagedCodecs 0.8.0 on nuget.org)
-
-- An AVI's JPEGs without Huffman tables
-  - Why: an MJPEG chunk may leave out its DHT segment (the AVI1 convention: the standard tables implied), which
-    FFmpeg's and ManagedCodecs' decoders supply but a browser's JPEG decoder doesn't; the page's picture and stills of
-    such a file (backlog-done "The picture of an AVI on the page") would then be missing (the stills say "didn't show").
-    ffmpeg's encoder writes the tables, so no sample has the case yet.
-  - Where: `make-samples.sh` (a sample with the DHT stripped, checked with a JPEG parser); the page inserting the
-    standard tables before the first SOS when a JPEG has none (bytes copied, no decoding).
-  - Done when: the page check shows that sample's picture and stills.
-  - Not: decoding in .NET for the picture.
-  - Status: Maybe (found 2026-10-31)
-
 
 - A Cinemetrics file
   - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's

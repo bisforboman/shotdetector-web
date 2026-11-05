@@ -6,7 +6,8 @@
 #           driven by tools/app-check.mjs), its CSVs, JSON and HTML against the native run's;
 #   page:   the page itself in Chromium (tools/page-check, Playwright): the published wwwroot served with the demo clip,
 #           each page isolated by its service worker, PAGE_SAMPLE picked on threads, on the page's worker and on two
-#           workers, samples/mjpeg-320x240-25.avi picked (its picture at the playhead and its stills the file's JPEGs),
+#           workers, samples/mjpeg-320x240-25.avi picked (its picture at the playhead and its stills the file's JPEGs;
+#           samples/mjpeg-nodht-320x240-25.avi too, its JPEGs without Huffman tables),
 #           then a rotated, a variable-rate and a 10-bit sample, each on threads and on two workers, an interlaced one deinterlaced
 #           (auto) on threads and on two workers, the demo on threads paused
 #           and resumed, then stopped while paused, shown again after a reload and resumed, then offline, split across
@@ -149,20 +150,23 @@ if [[ $page == true ]]; then
   sample=${PAGE_SAMPLE:-samples/with-audio-320x240-25.mp4}
   demo=samples/sintel_trailer-480p.mp4
   avi=samples/mjpeg-320x240-25.avi
+  # And an AVI whose JPEGs have no Huffman tables, which the browser's JPEG decoder supplies (decision
+  # 2026-11-04-jpegs-without-huffman-tables.md): its picture and stills as the first AVI's.
+  nodht=samples/mjpeg-nodht-320x240-25.avi
   more=(samples/rotated-90-320x240-25.mp4 samples/vfr-320x240.mp4 samples/yuv420p10-full-topleft-bt709-320x240-25.mp4)
   interlaced=samples/interlaced-tff-320x240-25.mp4
   # Every WebM sample, decoded by Chromium's own VideoDecoder (decision 2026-11-02-webm-browser-decoder.md).
   browser=()
   for f in samples/*.webm; do browser+=(--browser "$f"); done
   (( ${#browser[@]} > 0 )) || { echo "No WebM samples (tools/make-samples.sh)" >&2; exit 1; }
-  for f in "$sample" "$demo" "$avi" "${more[@]}" "$interlaced" samples/reject/hevc.mp4 samples/reject/vp8.webm; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
+  for f in "$sample" "$demo" "$avi" "$nodht" "${more[@]}" "$interlaced" samples/reject/hevc.mp4 samples/reject/vp8.webm; do [[ -f $f ]] || { echo "No such sample: $f (tools/make-samples.sh)" >&2; exit 1; }; done
   if [[ ! -d out/native ]]; then echo "No native results to compare with: run tools/check.sh native first." >&2; exit 1; fi
   if [[ $wasm == false ]]; then publish_app; fi
   rm -rf out/page
   status=0
   node tools/page-check/page-check.mjs "$publish/wwwroot" out/page "$sample" "$demo" "$avi" --native out/native --deinterlace "$interlaced" \
-    --refused samples/reject/hevc.mp4 --refused samples/reject/vp8.webm "${browser[@]}" "${more[@]}" || status=$?
-  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, an AVI's picture and stills from its JPEGs, a rotated, a variable-rate and a 10-bit video on threads and on two workers, an interlaced one deinterlaced on threads and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's, HEVC and VP8 refused with what reads them instead, every WebM sample decoded by Chromium's VideoDecoder on threads, the AV1 ones also split and stopped and resumed, to the native run's files" || echo "FAILED")."
+    --refused samples/reject/hevc.mp4 --refused samples/reject/vp8.webm "${browser[@]}" --avi "$nodht" "${more[@]}" || status=$?
+  summary="The page in Chromium (AOT: $aot): $([[ $status == 0 ]] && echo "isolated, picked on threads, on the page's worker and on two workers, an AVI's picture and stills from its JPEGs (one's without Huffman tables too), a rotated, a variable-rate and a 10-bit video on threads and on two workers, an interlaced one deinterlaced on threads and on two workers, the demo on threads paused and resumed and stopped while paused, resumed across a reload, then offline, split and resumed, in Firefox too unless skipped, the downloaded CSVs, JSON and HTML the native run's, HEVC and VP8 refused with what reads them instead, every WebM sample decoded by Chromium's VideoDecoder on threads, the AV1 ones also split and stopped and resumed, to the native run's files" || echo "FAILED")."
   echo "$summary"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then echo "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
   if [[ $status != 0 ]]; then exit 1; fi

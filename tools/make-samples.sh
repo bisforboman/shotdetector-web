@@ -207,6 +207,42 @@ got=$("$fp" -v error -show_entries stream=codec_tag_string,pix_fmt,nb_frames -of
 got+=" $(diff <("$fp" -v quiet -show_entries frame=pts -of csv=p=0 "$out/mjpeg-damaged-320x240-25.avi") \
   <("$fp" -v quiet -err_detect explode -show_entries frame=pts -of csv=p=0 "$out/mjpeg-damaged-320x240-25.avi") | grep '^<' || true)"
 [[ $got == 'dmb1,yuvj420p,114 < 39' ]] || { echo "mjpeg-dmb1, mjpeg-damaged: tag, pix_fmt, frames and the damaged frame are $got" >&2; exit 1; }
+# JPEGs without Huffman tables (the AVI1 convention: an MJPEG frame may leave out its DHT, the standard tables implied;
+# decision 2026-11-04-jpegs-without-huffman-tables.md): -huffman default writes the standard tables (the encoder's
+# default, optimal, writes its own, which can't be left out), each JPEG's DHT segments are cut (its markers walked to
+# the SOS, the scan kept to its EOI), and the JPEGs muxed into AVI again.
+enc -filter_complex "$(three 320x240 25 1.5),format=yuvj420p" -c:v mjpeg -huffman default -q:v 3 -f mjpeg "$out/nodht.mjpeg"
+python3 -I - "$out/nodht.mjpeg" "$out/nodht-stripped.mjpeg" <<'PY'
+import sys
+d, out, i = open(sys.argv[1], "rb").read(), bytearray(), 0
+while i < len(d):
+    assert d[i:i + 2] == b"\xff\xd8", f"no SOI at {i}"
+    out += d[i:i + 2]
+    i += 2
+    while True:
+        assert d[i] == 0xFF, f"no marker at {i}"
+        marker, length = d[i + 1], int.from_bytes(d[i + 2:i + 4], "big")
+        if marker == 0xC4:
+            i += 2 + length
+        elif marker == 0xDA:
+            end = d.index(b"\xff\xd9", i) + 2
+            out += d[i:end]
+            i = end
+            break
+        else:
+            out += d[i:i + 2 + length]
+            i += 2 + length
+open(sys.argv[2], "wb").write(out)
+PY
+enc -r 25 -f mjpeg -i "$out/nodht-stripped.mjpeg" -c:v copy -r 25 "$out/mjpeg-nodht-320x240-25.avi"
+# What it must be: no DHT left in the file, 114 frames at 25 fps, and FFmpeg's frames those of the JPEGs with the tables.
+got="$(python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().count(b"\xff\xc4"))' "$out/mjpeg-nodht-320x240-25.avi"),"
+got+=$("$fp" -v error -select_streams v:0 -count_packets -show_entries stream=codec_name,pix_fmt,avg_frame_rate,nb_read_packets -of csv=p=0 "$out/mjpeg-nodht-320x240-25.avi")
+[[ $got == '0,mjpeg,yuvj420p,25/1,114' ]] || { echo "mjpeg-nodht: DHTs, codec, pix_fmt, rate and packets are $got" >&2; exit 1; }
+cmp -s <("$ff" -v error -i "$out/nodht.mjpeg" -f framemd5 - | grep -v '^#' | cut -d, -f6) \
+  <("$ff" -v error -i "$out/mjpeg-nodht-320x240-25.avi" -f framemd5 - | grep -v '^#' | cut -d, -f6) \
+  || { echo "mjpeg-nodht: its frames aren't those of the JPEGs with their tables" >&2; exit 1; }
+rm "$out/nodht.mjpeg" "$out/nodht-stripped.mjpeg"
 
 # 10-bit 4:2:0 and 8-bit 4:2:2 H.264 (libx264's High 10 and High 4:2:2; backlog "10-bit 4:2:0 and 8-bit 4:2:2"), which
 # ShotDetector's frame source takes since 3.24.0, and 4:2:2 MJPEG (yuvj422p, most cameras'). 10-bit's conversion
