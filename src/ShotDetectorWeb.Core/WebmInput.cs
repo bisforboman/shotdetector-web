@@ -33,8 +33,9 @@ public readonly record struct EncodedPacket(byte[] Data, long Pts, bool Keyframe
 /// VP9 or AV1 in a WebM (or Matroska) file (<see cref="VideoInput"/>): described from its headers as FFmpeg's matroska
 /// demuxer and its vp9 and libdav1d decoders describe it (<see cref="MatroskaReader"/>, <see cref="Vp9Header"/>,
 /// <see cref="Av1Header"/>), its frames decoded by the host's decoder (<see cref="IHostDecoder"/>), each given the pts
-/// of its block. So far: 8-bit 4:2:0 and 4:2:2 and 10-bit 4:2:0, a DefaultDuration and a Segment Duration (FFmpeg's
-/// frame rate and duration), progressive, unrotated; anything else is refused when opened.
+/// of its block. So far: 8-bit 4:2:0 and 4:2:2 and 10-bit 4:2:0, a DefaultDuration (FFmpeg's frame rate), with a
+/// Segment Duration or without (a live recording's: no duration, as FFmpeg's), progressive, unrotated; anything else is
+/// refused when opened.
 /// </summary>
 public sealed class WebmInput : VideoInput
 {
@@ -66,8 +67,6 @@ public sealed class WebmInput : VideoInput
             throw new UnsupportedVideoException("The video is interlaced: not supported in WebM.");
         if (track.DefaultDuration is not long frameDuration || frameDuration <= 0)
             throw new UnsupportedVideoException("The WebM file's video track has no DefaultDuration (FFmpeg's frame rate then comes from the frames it probes): not supported yet.");
-        if (mkv.Duration is not double ticks || ticks <= 0)
-            throw new UnsupportedVideoException("The WebM file has no Duration (a live recording's): not supported yet.");
 
         // The blocks' timing, sizes and keyframes (FFmpeg's packets), their data not read.
         var timeBase = Reduce(mkv.TimestampScale, 1_000_000_000);
@@ -100,7 +99,8 @@ public sealed class WebmInput : VideoInput
         // 30000), the format's duration from the Segment's Duration (in microseconds, a double truncated).
         var rate = ReduceRate(1_000_000_000, frameDuration, 30000);
         var fps = new Fps(rate.Num, rate.Den);
-        long durationUs = (long)(ticks * mkv.TimestampScale * 1000 / 1_000_000);
+        // Without one (a live recording's, written as it went), FFmpeg's format has no duration either.
+        long? durationUs = mkv.Duration is double ticks && ticks > 0 ? (long)(ticks * mkv.TimestampScale * 1000 / 1_000_000) : null;
 
         Video = new YuvVideo
         {

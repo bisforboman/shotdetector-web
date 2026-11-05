@@ -458,7 +458,9 @@ got=$(for f in hevc.mp4 av1.mp4 vp8.webm h264.mkv; do "$fp" -v error -show_entri
 # VP9 and AV1 in WebM, decoded by the browser's own decoder on the page (decision 2026-11-02-webm-browser-decoder.md;
 # natively, NativeCheck's FfmpegDecoder stands in for it): three() as libvpx-vp9 untagged, BT.709 tagged at 29.97 fps
 # (FFmpeg's matroska time base, 1/1000, puts its frames off the 30000/1001 grid by under a millisecond), full range (the
-# range bit of VP9's header), profile 2 (10-bit) and profile 1 (4:2:2); libaom AV1 with Opus audio, and 10-bit.
+# range bit of VP9's header), profile 2 (10-bit) and profile 1 (4:2:2); libaom AV1 with Opus audio, and 10-bit. And a
+# VP9 written to a pipe, as a live recording is: no Segment Duration (nor Cues, the Segment's size unknown), so FFmpeg's
+# format has no duration.
 vp9=(-c:v libvpx-vp9 -b:v 400k -deadline good -cpu-used 4)
 av1=(-c:v libaom-av1 -cpu-used 8 -b:v 400k)
 enc -filter_complex "$(three 320x240 25 1.5),$untagged" "${vp9[@]}" -pix_fmt yuv420p "$out/vp9-320x240-25.webm"
@@ -470,13 +472,16 @@ enc -filter_complex "$(three 320x240 25 1.5)" "${vp9[@]}" -pix_fmt yuv422p "$out
 enc -filter_complex "$(three 320x240 25 1.5)" -f lavfi -i sine=d=4.5 "${av1[@]}" -pix_fmt yuv420p -c:a libopus \
   "$out/av1-opus-320x240-25.webm"
 enc -filter_complex "$(three 320x240 25 1.5)" "${av1[@]}" -pix_fmt yuv420p10le "$out/av1-yuv420p10-320x240-25.webm"
+enc -filter_complex "$(three 320x240 25 1.5)" "${vp9[@]}" -pix_fmt yuv420p -f webm - > "$out/vp9-live-320x240-25.webm"
 got=$(for f in vp9-320x240-25 vp9-bt709-640x360-2997 vp9-full-range-320x240-25 vp9-yuv420p10-320x240-25 vp9-yuv422p-320x240-25 \
-  av1-opus-320x240-25 av1-yuv420p10-320x240-25; do
+  av1-opus-320x240-25 av1-yuv420p10-320x240-25 vp9-live-320x240-25; do
   "$fp" -v error -select_streams v -show_entries stream=codec_name,pix_fmt,color_space,color_range,avg_frame_rate \
     -of csv=p=0 "$out/$f.webm"; done | tr '\n' ' ')
+got+=$("$fp" -v error -show_entries format=duration -of csv=p=0 "$out/vp9-live-320x240-25.webm")
 want='vp9,yuv420p,tv,unknown,25/1 vp9,yuv420p,tv,bt709,30000/1001 vp9,yuv420p,pc,bt470bg,25/1 vp9,yuv420p10le,tv,bt470bg,25/1 '
 want+='vp9,yuv422p,tv,bt470bg,25/1 av1,yuv420p,tv,bt470bg,25/1 av1,yuv420p10le,tv,bt470bg,25/1 '
-[[ $got == "$want" ]] || { echo "WebM samples: codec, pix_fmt, colour and rate are $got, not $want" >&2; exit 1; }
+want+='vp9,yuv420p,tv,bt470bg,25/1 N/A'
+[[ $got == "$want" ]] || { echo "WebM samples: codec, pix_fmt, colour and rate (and the live one's duration) are $got, not $want" >&2; exit 1; }
 # Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
 # and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
 # FFmpeg's encoder writes LC only).
