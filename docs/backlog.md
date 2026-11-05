@@ -177,12 +177,6 @@ file out of `samples/reject/`, and passes the native check.
     runtime's.
   - Status: Maybe (2026-11-04)
 
-- WebM without a DefaultDuration
-  - Why: `WebmInput` refuses a WebM whose video track has no DefaultDuration: FFmpeg's average rate then comes from the
-    frames it probes (avformat_find_stream_info's estimate), which the core would have to work out as FFmpeg does.
-  - Where: `WebmInput`, make-samples.sh (a sample without DefaultDuration, checked with ffprobe).
-  - Status: Maybe (2026-11-02, split 2026-11-04)
-
 - VP9 or AV1 in MP4
   - Why: VP9 and AV1 in MP4 (YouTube's) are refused as another codec in `Mp4Input`; the browser's decoder could take
     them as it takes WebM's, configured from the track's 'vpcC' or 'av1C'.

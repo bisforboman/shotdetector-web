@@ -482,6 +482,26 @@ want='vp9,yuv420p,tv,unknown,25/1 vp9,yuv420p,tv,bt709,30000/1001 vp9,yuv420p,pc
 want+='vp9,yuv422p,tv,bt470bg,25/1 av1,yuv420p,tv,bt470bg,25/1 av1,yuv420p10le,tv,bt470bg,25/1 '
 want+='vp9,yuv420p,tv,bt470bg,25/1 N/A'
 [[ $got == "$want" ]] || { echo "WebM samples: codec, pix_fmt, colour and rate (and the live one's duration) are $got, not $want" >&2; exit 1; }
+# Without a DefaultDuration (decision 2026-11-05-webm-without-default-duration.md): FFmpeg works the rate out from the
+# first 40 frames' timestamps. VP9 at 29.97 fps (millisecond timestamps 33 and 34 apart: its standard rates' fit), and
+# three() at 25 fps whose frames after the tenth last 50 ms (no average: FFmpeg's r_frame_rate, 25, is what the file
+# path reports). Each written with one, its DefaultDuration then made an EBML Void of the same size.
+enc -filter_complex "$(three 320x240 30000/1001 1.5)" "${vp9[@]}" -pix_fmt yuv420p "$out/vp9-nodefault-320x240-2997.webm"
+enc -filter_complex "$(three 320x240 25 2),setpts='if(lt(N,10),N*2,20+(N-10)*2.5)/50/TB'" -fps_mode vfr "${vp9[@]}" \
+  -pix_fmt yuv420p "$out/vfr-nodefault-320x240.webm"
+python3 -I - "$out/vp9-nodefault-320x240-2997.webm" "$out/vfr-nodefault-320x240.webm" <<'PY'
+import sys
+for path in sys.argv[1:]:
+    d = bytearray(open(path, "rb").read())
+    i = d.find(b"\x23\xe3\x83")
+    assert i > 0 and d.find(b"\x23\xe3\x83", i + 1) < 0 and d[i + 3] & 0x80, f"{path}: not one DefaultDuration"
+    total = 4 + (d[i + 3] & 0x7F)
+    d[i:i + total] = bytes([0xEC, 0x80 | (total - 2)]) + bytes(total - 2)
+    open(path, "wb").write(d)
+PY
+got=$(for f in vp9-nodefault-320x240-2997 vfr-nodefault-320x240; do
+  "$fp" -v error -select_streams v -show_entries stream=r_frame_rate,avg_frame_rate -of csv=p=0 "$out/$f.webm"; done | tr '\n' ' ')
+[[ $got == '30000/1001,30000/1001 25/1,0/0 ' ]] || { echo "WebM samples without a DefaultDuration: r_frame_rate, avg_frame_rate are $got" >&2; exit 1; }
 # Audio the measures leave out, each with a reason and not an error (NativeCheck's audio check): MP3 and Opus in MP4,
 # and AAC Main, which ManagedCodecs' decoder refuses (an AAC LC file with its AudioSpecificConfig's object type made 1:
 # FFmpeg's encoder writes LC only).

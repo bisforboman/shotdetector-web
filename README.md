@@ -46,8 +46,11 @@ rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`
 standard tables implied) are decoded as with them, by ManagedCodecs and, for the page's picture and stills, by the
 browser (libjpeg-turbo, Chromium's and Firefox's, supplies them; decision
 `docs/decisions/2026-11-04-jpegs-without-huffman-tables.md`; `samples/mjpeg-nodht-320x240-25.avi`). **And VP9 or AV1
-in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full range or not, with a DefaultDuration, with a Segment Duration or
-without one (a live recording's, as `samples/vp9-live-320x240-25.webm`: no duration, as FFmpeg says); decisions
+in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full range or not, with a DefaultDuration or without one (the rate
+FFmpeg works out from the first 40 frames' timestamps, `ProbedFrameRate`: its average, or its `r_frame_rate` where it
+has none, as the file path reports; decision `docs/decisions/2026-11-05-webm-without-default-duration.md`;
+`samples/vp9-nodefault-320x240-2997.webm`, `samples/vfr-nodefault-320x240.webm`), with a Segment Duration or without
+one (a live recording's, as `samples/vp9-live-320x240-25.webm`: no duration, as FFmpeg says); decisions
 `docs/decisions/2026-11-02-browser-decoder.md` and
 `2026-11-02-webm-browser-decoder.md`): read and described by the core as FFmpeg's matroska demuxer and its vp9 and
 libdav1d decoders describe it (`WebmInput`, `MatroskaReader`, `Vp9Header`, `Av1Header`), its frames decoded by the
@@ -1174,7 +1177,9 @@ rules for changing them (adding to the page among them).
 - `VideoInput.Damaged.cs`: `DamagedFrames(frames)`, the frames the decoder said were damaged (ManagedCodecs'
   `VideoFrame.IsDamaged`: a JPEG cut short), as the runs on the input decoded them, and `DamagedWarning`, the run's
   warning naming them (decision `2026-11-02-damaged-jpeg.md`).
-- `WebmInput.cs`, `MatroskaReader.cs` (the EBML header, Info, Tracks and the video's blocks) and `CodecHeaders.cs`
+- `ProbedFrameRate.cs`: FFmpeg's `r_frame_rate` and `avg_frame_rate` for a stream whose container gives none (a WebM
+  without a DefaultDuration), worked out as `avformat_find_stream_info` does from the packets it probes.
+- `WebmInput.cs`, `MatroskaReader.cs` (the EBML header, Info, Tracks and every track's blocks) and `CodecHeaders.cs`
   (`Vp9Header`'s key frame header, `Av1Header`'s sequence header): VP9 and AV1 in WebM (Status; decision
   `2026-11-02-webm-browser-decoder.md`), the frames from the host's `IHostDecoder` (the App's `JsDecoder`, FFmpeg in
   NativeCheck), each given its block's pts and its picture type.

@@ -21,7 +21,8 @@ public sealed class MatroskaReader
         MatrixCoefficients = 0x55B1, Range = 0x55B9, ChromaSitingHorz = 0x55B7, ChromaSitingVert = 0x55B8,
         Projection = 0x7670, ProjectionPoseYaw = 0x7673, ProjectionPosePitch = 0x7674, ProjectionPoseRoll = 0x7675,
         AudioId = 0xE1, SamplingFrequency = 0xB5, Channels = 0x9F, Cluster = 0x1F43B675, ClusterTimestamp = 0xE7,
-        SimpleBlock = 0xA3, BlockGroup = 0xA0, Block = 0xA1, ReferenceBlock = 0xFB;
+        SimpleBlock = 0xA3, BlockGroup = 0xA0, Block = 0xA1, ReferenceBlock = 0xFB, BlockDuration = 0x9B,
+        FrameRateId = 0x2383E3;
 
     // The Segment's children: an element of unknown size (a live stream's Cluster) ends where one of these starts.
     static readonly HashSet<uint> SegmentChildren =
@@ -57,6 +58,12 @@ public sealed class MatroskaReader
 
     /// <summary>A video block: its timestamp in ticks (the Cluster's plus the block's own), size, flag and data's place.</summary>
     public readonly record struct VideoBlock(long Timestamp, int Size, bool Keyframe, long Offset);
+
+    /// <summary>
+    /// A block of any track as FFmpeg's probing reads it (<see cref="Packets"/>): whether it is the video track's, its
+    /// timestamp, its size (its frames' data, the header left out) and whether its BlockGroup has a BlockDuration.
+    /// </summary>
+    public readonly record struct Packet(bool Video, long Timestamp, int Size, bool HasDuration);
 
     /// <summary>Reads the headers of the WebM or Matroska file in <paramref name="stream"/> (from its start).</summary>
     public static MatroskaReader Read(Stream stream)
@@ -130,7 +137,7 @@ public sealed class MatroskaReader
             long? defaultDuration = null;
             int? matrix = null, range = null, sitingH = null, sitingV = null;
             bool projection = false, encoded = false;
-            double? trackScale = null;
+            double? trackScale = null, frameRate = null;
             double samplingFrequency = 8000;
             foreach (var (childId, childSize, childAt) in Children(stream, at, at + size))
             {
@@ -151,6 +158,7 @@ public sealed class MatroskaReader
                                 case PixelWidth: width = (int)Unsigned(stream, vAt, vSize); break;
                                 case PixelHeight: height = (int)Unsigned(stream, vAt, vSize); break;
                                 case FlagInterlaced: interlaced = (int)Unsigned(stream, vAt, vSize); break;
+                                case FrameRateId: frameRate = Float(stream, vAt, vSize); break;
                                 case Projection:
                                     foreach (var (p, pSize, pAt) in Children(stream, vAt, vAt + vSize))
                                     {
@@ -195,6 +203,10 @@ public sealed class MatroskaReader
                     throw new UnsupportedVideoException("The video track is compressed or encrypted (ContentEncodings): not supported.");
                 if (trackScale is double scale && scale != 1)
                     throw new UnsupportedVideoException("The video track has a TrackTimestampScale: not supported.");
+                // FFmpeg's matroskadec: the deprecated FrameRate stands for a DefaultDuration the track hasn't (1e9 / it,
+                // a double made a whole number of nanoseconds).
+                if (defaultDuration is null or 0 && frameRate is double fr && fr > 0 && 1_000_000_000 / fr <= long.MaxValue)
+                    defaultDuration = (long)(1_000_000_000 / fr);
                 Video = new VideoTrack(number, codec, codecPrivate, defaultDuration, width, height, interlaced, matrix, range,
                     sitingH, sitingV, projection);
             }
@@ -210,6 +222,24 @@ public sealed class MatroskaReader
     /// other tracks' blocks skipped. Reads the block headers only; the data is read with <see cref="ReadData"/>.
     /// </summary>
     public IEnumerable<VideoBlock> Blocks(Stream stream)
+    {
+        foreach (var (block, _, _) in AllBlocks(stream))
+        {
+            if (block is { } video)
+                yield return video;
+        }
+    }
+
+    /// <summary>Every track's blocks in file order, as FFmpeg's probing reads them (its 5 MB counts them all).</summary>
+    public IEnumerable<Packet> Packets(Stream stream)
+    {
+        foreach (var (block, otherSize, hasDuration) in AllBlocks(stream))
+            yield return block is { } video ? new Packet(true, video.Timestamp, video.Size, hasDuration) : new Packet(false, 0, otherSize, hasDuration);
+    }
+
+    // The blocks in file order: the video track's as a VideoBlock, another track's by its size; and whether the block's
+    // BlockGroup has a BlockDuration.
+    IEnumerable<(VideoBlock? Video, int OtherSize, bool HasDuration)> AllBlocks(Stream stream)
     {
         long position = _segmentStart;
         while (position < _segmentEnd)
@@ -230,23 +260,28 @@ public sealed class MatroskaReader
                     }
                     else if (childId == SimpleBlock)
                     {
-                        if (BlockOf(stream, childAt, childSize, clusterTimestamp, simple: true, keyframe: false) is { } block)
-                            yield return block;
+                        var block = BlockOf(stream, childAt, childSize, clusterTimestamp, simple: true, keyframe: false, out int other);
+                        yield return (block, other, false);
                     }
                     else if (childId == BlockGroup)
                     {
                         long blockAt = -1, blockSize = 0;
-                        bool references = false;
+                        bool references = false, duration = false;
                         foreach (var (g, gSize, gAt) in Children(stream, childAt, childAt + childSize))
                         {
                             if (g == Block)
                                 (blockAt, blockSize) = (gAt, gSize);
                             else if (g == ReferenceBlock)
                                 references = true;
+                            else if (g == BlockDuration && Unsigned(stream, gAt, gSize) > 0)
+                                duration = true;
                         }
 
-                        if (blockAt >= 0 && BlockOf(stream, blockAt, blockSize, clusterTimestamp, simple: false, keyframe: !references) is { } block)
-                            yield return block;
+                        if (blockAt >= 0)
+                        {
+                            var block = BlockOf(stream, blockAt, blockSize, clusterTimestamp, simple: false, keyframe: !references, out int other);
+                            yield return (block, other, duration);
+                        }
                     }
                 }
             }
@@ -264,10 +299,11 @@ public sealed class MatroskaReader
         return data;
     }
 
-    VideoBlock? BlockOf(Stream stream, long at, long size, long clusterTimestamp, bool simple, bool keyframe)
+    VideoBlock? BlockOf(Stream stream, long at, long size, long clusterTimestamp, bool simple, bool keyframe, out int otherSize)
     {
         stream.Position = at;
         long track = VarInt(stream, out int length, keepMarker: false);
+        otherSize = (int)Math.Max(0, size - length - 3);
         if (track != Video.Number)
             return null;
         Span<byte> header = stackalloc byte[3];
