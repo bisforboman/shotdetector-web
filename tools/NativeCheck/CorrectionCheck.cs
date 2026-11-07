@@ -5,8 +5,9 @@
 // for byte: the scenes CSV, the shots as JSON and HTML, the editors' timeline files and the YouTube chapters; the shots
 // must start at the frames given and the last end where the run's did; and the run's own cuts given back
 // (DetectionResult.CutFrames) must give the run's own downloads. The same again for a run stopped half-way (the core's
-// frames ended there, as the page's Stop does; held to its own run only until ShotDetector ends a run that ends early
-// as the FFmpeg path does: backlog, "A stopped run's end"), and whole under the run with every detector,
+// frames ended there, as the page's Stop does, against the FFmpeg path stopped by its end time at the same frame: since
+// ShotDetector 3.29.0 both end it at the last frame's time plus a frame at the average rate, given every frame's
+// timestamp, YuvVideo.FrameTimestamps), and whole under the run with every detector,
 // deinterlaced (the options LoadScenes is given are the run's). The core's files, the run's cuts and the corrected
 // starts of the whole run go to --out: app-check.mjs gives the starts to the App's Correct and writes its downloads
 // beside them, which tools/check.sh compares; page-check.mjs corrects the run's cuts to them on the page.
@@ -43,9 +44,10 @@ internal static class CorrectionCheck
                 var ours = end is { } stop
                     ? input.DetectAsync(1, given => ValueTask.FromResult(given < stop), run).GetAwaiter().GetResult()
                     : ReferenceEquals(run, Options) ? detected : input.Detect(run);
-                // The FFmpeg path's run ends at the core's stopped frame (EndTime as a frame number: a time × the average
-                // rate, that frame at a constant rate).
-                var file = FilePath(sample, run with { EndTime = end?.ToString(System.Globalization.CultureInfo.InvariantCulture) }, libs);
+                // The FFmpeg path's run ends at the core's stopped frame: EndTime that frame's own time (its pts, the
+                // first frame not read), as ShotDetector's FrameInputTests stop it, to the microsecond below so that
+                // the frame itself isn't read (at a variable rate a frame number over the average rate is another frame).
+                var file = FilePath(sample, run with { EndTime = end is { } at ? EndTimeOf(input.Video, at) : null }, libs);
                 var edited = Edit([0, .. ours.CutFrames], ours.FrameCount);
                 string name = Path.Combine(outDir, Runs.BaseName(sample, written ? "corrected" : end is null ? "corrected-deinterlaced" : "corrected-stopped"));
                 if (written)
@@ -57,13 +59,9 @@ internal static class CorrectionCheck
                 var corrected = CorrectedCuts.Load(ours, edited, run);
                 var fileCorrected = CorrectedCuts.Load(file, edited, run);
                 var differ = new List<string>();
-                // A run that ends early ends its last shot otherwise on the two paths (ShotDetector 3.28.0): the FFmpeg path
-                // at its last frame's pts + 1 / the average rate, in the stream's time (vp9-bt709-*'s 2.235 s), the frame
-                // source at the frames read over the average rate (67 / 29.97 = 2.2356 s; at a variable rate, another
-                // time altogether). The owner chose to fix it in ShotDetector (backlog, "A stopped run's end"): until
-                // that release a stopped run isn't compared with the FFmpeg path, only held to its own run.
-                bool compared = end is null;
-                foreach (var (what, extension, a, b) in compared ? Downloads(corrected, fileCorrected, sample) : [])
+                if (end is { } stopped && file.FrameCount != stopped)
+                    differ.Add($"the FFmpeg path read {file.FrameCount} frames, not {stopped}");
+                foreach (var (what, extension, a, b) in Downloads(corrected, fileCorrected, sample))
                 {
                     // The default run's whole, which app-check.mjs writes too (tools/check.sh compares the folders); the
                     // others only where they differ, with the FFmpeg path's beside them.
@@ -84,7 +82,7 @@ internal static class CorrectionCheck
                 // keeps the run's cuts at a frame given.
                 if (!corrected.CutFrames.Distinct().SequenceEqual(edited.Where(s => s > 0)))
                     differ.Add($"shots start at {string.Join(",", corrected.CutFrames)}, not {string.Join(",", edited.Skip(1))}");
-                if (compared && !ours.CutFrames.SequenceEqual(file.CutFrames))
+                if (!ours.CutFrames.SequenceEqual(file.CutFrames))
                     differ.Add($"the run's cuts {string.Join(",", ours.CutFrames)}, the FFmpeg path's {string.Join(",", file.CutFrames)}");
                 FrameTime? length = corrected.Shots.Count > 0 ? corrected.Shots[^1].End : null;
                 FrameTime? runLength = ours.Shots.Count > 0 ? ours.Shots[^1].End : null;
@@ -103,8 +101,7 @@ internal static class CorrectionCheck
                 string given = back.Count == 0 ? "the run's" : $"DIFFERS: {string.Join(", ", back)}";
                 if (differ.Count > 0 || back.Count > 0)
                     failures++;
-                string how = compared ? "" : " (not compared with the FFmpeg path, which ends a stopped run otherwise: ShotDetector's)";
-                Console.WriteLine($"| {Path.GetFileName(sample)} | {label}{how} | {corrected.Shots.Count} | {first} | {rest} | {given} |");
+                Console.WriteLine($"| {Path.GetFileName(sample)} | {label} | {corrected.Shots.Count} | {first} | {rest} | {given} |");
             }
         }
 
@@ -134,6 +131,17 @@ internal static class CorrectionCheck
 
         foreach (int minimum in ChaptersCheck.Minimums)
             yield return ($"chapters {minimum} s", $"chapters-{minimum}.json", TimelineFiles.Chapters(a, minimum), TimelineFiles.Chapters(b, minimum));
+    }
+
+    /// <summary>
+    /// Frame <paramref name="frame"/>'s time from the video's start (its pts in <see cref="YuvVideo.FrameTimestamps"/>),
+    /// as an EndTime in seconds rounded down to six decimals: the file path then reads the frames before it, not it.
+    /// </summary>
+    static string EndTimeOf(YuvVideo video, int frame)
+    {
+        var tb = video.TimeBase!.Value;
+        double seconds = (video.FrameTimestamps![frame] - video.StartPts) * tb.Num / (double)tb.Den;
+        return (Math.Floor(seconds * 1_000_000) / 1_000_000).ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>The FFmpeg path's run of <paramref name="sample"/>, as NativeCheck's own (Program.cs): FFmpeg in-process.</summary>

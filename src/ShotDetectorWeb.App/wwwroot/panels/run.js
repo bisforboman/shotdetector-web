@@ -191,7 +191,7 @@ on('corrected', ({ video, result, edits }) => {
 async function shown(video, r, name, edits) {
   clear({ keepTitles: true });
   const rate = r.frameRate.num / r.frameRate.den, n = r.shots.length, cuts = Math.max(n - 1, 0);
-  const fps = `${Number(rate.toFixed(3))} fps${video.frameTimestamps ? ' on average' : ''}`;
+  const fps = `${Number(rate.toFixed(3))} fps${video.variableRate ? ' on average' : ''}`;
   if (r.stopped) {
     show([String(n), `${n === 1 ? 'shot' : 'shots'}, the last ending where the run stopped`],
       [String(cuts), cuts === 1 ? 'cut' : 'cuts'],

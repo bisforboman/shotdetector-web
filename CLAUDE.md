@@ -166,6 +166,10 @@ differ.
   `[JSImport]`'s `ArraySegment` there ended the runtime when the collector released it on another thread: use a `Span`
   view, valid for the call only. ManagedCodecs' `H264Decoder` has no Dispose (its threads end after an idle timeout):
   frames that end early flush it.
+- A stopped run ends its last shot at the last frame's time plus a frame at the average rate (the FFmpeg path stopped by
+  its end time), not at the frames read over that rate, only because the core gives `YuvVideo.FrameTimestamps` at every
+  rate (ShotDetector 3.29.0): without them a stop looks like the video's end. The page asks `Open`'s `variableRate`,
+  not whether `frameTimestamps` are there.
 - A stopped run is a file that ends there, for the detectors too: the adaptive ratio of the last frames is `None`, a
   cut FlashFilter's merge would decide on frames past the stop isn't there, and the threshold detector ends a fade-out
   the stop falls in with a cut (`PostProcess`), as at a file's end.

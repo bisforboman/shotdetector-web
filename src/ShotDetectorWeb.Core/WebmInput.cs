@@ -140,7 +140,7 @@ public sealed class WebmInput : VideoInput
             Duration = DurationOf(durationUs),
             Rotation = 0,
             FieldOrder = FrameReader.FieldOrder.Progressive,
-            FrameTimestamps = VariableRate(Packets, firstPts, timeBase, fps),
+            FrameTimestamps = FrameTimestampsOf(Packets),
             Codec = ffmpegCodec,
             Container = "matroska,webm",
         };

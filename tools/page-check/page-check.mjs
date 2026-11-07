@@ -707,12 +707,12 @@ async function frameTypes(page, what, file) {
     console.log(`${what}: the frame types' card: ${expected}, ffprobe's`);
 }
 
-// A variable-rate video's ranges lane (Open's frameTimestamps): the second band starts where its first frame's own pts
+// A variable-rate video's ranges lane (Open's variableRate): the second band starts where its first frame's own pts
 // puts it on the axis, from ffprobe's packets as the native check wrote them (the shown ones, sorted), not where its
 // number over the average rate would.
 async function rangesAtTheirTimes(page, what, file) {
   const video = JSON.parse(await page.textContent('#about pre'));
-  if (!video.frameTimestamps) return;
+  if (!video.variableRate) return;
   const native = join(nativeDir, `${stem(file)}.packets.txt`);
   if (!existsSync(native)) return fail(`${what}: no native ${native} (tools/check.sh native first)`);
   const times = lines(readFileSync(native, 'utf8')).filter(l => !/flags=[^|]*D/.test(l))

@@ -28,6 +28,28 @@ public abstract partial class VideoInput
     /// <summary>The video as FFmpeg's demuxer and decoder report it (average frame rate, time base, start pts, colour tags, frame count).</summary>
     public YuvVideo Video { get; private protected set; } = null!;
 
+    /// <summary>
+    /// Whether the frames don't come at the average rate: some frame is more than half a frame from where the rate puts
+    /// it from the first (ShotDetector's constant-rate check, VideoReader.CheckConstantRate). The page says "on average"
+    /// then and places frames by their own pts; <see cref="YuvVideo.FrameTimestamps"/> are given at every rate.
+    /// </summary>
+    public bool VariableRate
+    {
+        get
+        {
+            if (Video.FrameTimestamps is not { } pts || Video.TimeBase is not { } timeBase)
+                return false;
+            double seconds = timeBase.Num / (double)timeBase.Den, perSecond = Video.FrameRate.Num / (double)Video.FrameRate.Den;
+            for (int k = 0; k < pts.Count; k++)
+            {
+                if (!(Math.Abs(((pts[k] - Video.StartPts) * seconds) - (k / perSecond)) <= 0.5 / perSecond))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>The first audio track as FFmpeg's demuxer describes it (ffprobe's codec_name, sample_rate, channels); null without one.</summary>
     public AudioStream? Audio { get; private protected set; }
 
@@ -306,12 +328,12 @@ public abstract partial class VideoInput
 
     /// <summary>
     /// Every shown frame's pts in presentation order (the packets' that aren't discarded, sorted: what FFmpeg labels the
-    /// frames with) when the frames don't come at the average rate, for ShotDetector's
-    /// <see cref="YuvVideo.FrameTimestamps"/> (a variable frame rate, which it then takes as the file path does); null
-    /// when every frame is within half a frame of where the average rate puts it from the first, the constant-rate check
-    /// ShotDetector makes without them (VideoReader.CheckConstantRate), so a constant-rate video is described as before.
+    /// frames with), for ShotDetector's <see cref="YuvVideo.FrameTimestamps"/>, at any rate: at a variable rate it takes
+    /// them as the file path does, and since 3.29.0 a run whose frames end before the last of them (the page's Stop) ends
+    /// where the file path stopped at that frame ends it, at the frame's time plus one frame at the average rate
+    /// (shotdetector's decision 2026-11-03-stopped-frame-source-end.md: without them a stop looks like the video's end).
     /// </summary>
-    private protected static long[]? VariableRate(VideoPackets packets, long firstPts, FrameReader.Rational timeBase, Fps rate)
+    private protected static long[] FrameTimestampsOf(VideoPackets packets)
     {
         var pts = new List<long>(packets.Count);
         for (int i = 0; i < packets.Count; i++)
@@ -321,15 +343,7 @@ public abstract partial class VideoInput
         }
 
         pts.Sort();
-        double seconds = timeBase.Num / (double)timeBase.Den, perSecond = rate.Value;
-        for (int k = 0; k < pts.Count; k++)
-        {
-            double from = (pts[k] - firstPts) * seconds, expected = k / perSecond;
-            if (!(Math.Abs(from - expected) <= 0.5 / perSecond))
-                return [.. pts];
-        }
-
-        return null;
+        return [.. pts];
     }
 
     /// <summary>

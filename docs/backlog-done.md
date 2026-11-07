@@ -1860,3 +1860,45 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     of 258 files identical (the new samples refused under Node for want of a decoder, as a WebM's); page-check decodes
     the three in Chromium, 11 of 11 files each identical to the native run's. No real-world file, as for WebM: the
     real-world check runs under Node.
+
+- A stopped run's end at a variable rate (upstream)
+  - Why: with ShotDetector 3.28.0, frames that end early (the page's Stop) end the last shot at the frames read over
+    the average rate, where the FFmpeg path ends a run that ends early at the last frame's pts + 1 / average rate, in
+    the stream's time. At a variable rate that is another time altogether (`vfr-320x240.mp4` stopped at frame 75:
+    4.740 s against 3.5832 s); at a constant rate whose frames aren't exact in the stream's time base, a millisecond
+    or a few microseconds (`vp9-bt709-640x360-2997.webm` at frame 67: 2.236 s against 2.235 s; the 29.97 AVI's and
+    Sintel's editors' files). Sent to the shotdetector coordinator 2026-11-03; the owner chose to fix it in
+    ShotDetector (the frame source ends where the file path does).
+  - Where: the ShotDetector pin to the release with shotdetector#730, which ends it where the file path does only when
+    `YuvVideo.FrameTimestamps` is given (without them a stop looks like the video's end; the owner's choice, shotdetector's
+    decision 2026-11-03-stopped-frame-source-end.md): the core then gives every file's frame timestamps, at a constant
+    rate too (an AVI's, a WebM's), not only a variable rate's, and NativeCheck's description check follows;
+    `CorrectionCheck.cs` compares a stopped corrected run with the FFmpeg path's (`EndTime` at the stopped frame), which
+    it holds only to its own run until then.
+  - Done when: NativeCheck's stopped corrected runs agree with the FFmpeg path on every sample.
+  - Status: Done (2026-11-07, the owner's choice through AskUserQuestion: folded into "The packages of 2026-11-07", whose
+    bump made app-check fail on the variable-rate samples' stopped runs): ShotDetector 3.29.0; `Mp4Input`, `WebmInput`
+    and `AviInput` give every frame's pts at any rate, `Open` says `variableRate` for the page, which took the
+    timestamps' presence for one; NativeCheck's oracle takes FFmpeg's decoded frames' pts (after an edit list, not
+    every packet's) and compares them on every file; CorrectionCheck stops the FFmpeg path by its end time at the
+    stopped frame's own time and compares the downloads; app-check expects the last shot to end at the last frame
+    read's number. Native "All agree" on every sample, stopped corrected runs included; AOT wasm 5031 of 5031 files
+    identical (52 samples)
+
+- The packages of 2026-11-07
+  - Why: the owner asked on 2026-11-07 to bring the dependencies up to date, all in one PR: ShotDetector and FastYuv
+    3.28.0 to 3.30.0 (3.30.0 requires FrameReader 2.24.0 or later), FrameReader 2.22.0 to 2.25.0 (2.24.0 was never
+    published), ManagedCodecs 0.8.0 to 0.8.1 and Playwright 1.63.0 to 1.65.0. The bump on its own, so it shows any change
+    in the packages before a row's code changes the page; 3.29.0 and 3.30.0 release the fixes the Waiting rows
+    below waited on.
+  - Where: `Directory.Packages.props`, `tools/page-check/package.json` and its lockfile; README's Packages and
+    Licensing (FastYuv rebuilt at 3.30.0).
+  - Done when: native, wasm and the page agree on every sample on the new packages, and app-check's versions are the
+    pinned ones.
+  - Not: `YuvVideo.FileStartPts` and the reference tone in ranges, which the releases unblock: each a PR of its own.
+    `YuvVideo.FrameTimestamps` at every rate is in it (the owner's choice, 2026-11-07): without it app-check's stopped
+    runs on the variable-rate samples fail on 3.29.0 (backlog-done, "A stopped run's end at a variable rate").
+  - Status: Done (2026-11-07, the owner's choice through AskUserQuestion): the pins moved, `YuvVideo.FrameTimestamps`
+    at every rate with it (backlog-done, "A stopped run's end at a variable rate"). Native "All agree" on every sample;
+    AOT wasm 5031 of 5031 files identical (52 samples); the page check in Chromium passed (locally on the container's
+    Chromium 1243 under Playwright 1.65.0: its 1254 can't be downloaded in a cloud session; CI's is 1254)
