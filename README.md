@@ -201,8 +201,9 @@ but for the shots the page was told. ShotDetector 3.16.1 neither warns nor refus
 
 A stopped run is the run of a file that ends there. Its stats CSV is the whole run's up to there (a frame's stats
 depend only on the frames before it), but for the adaptive ratio of the last 2 frames, `None`, which waits for 2 frames
-after them; its shots are the whole run's up to the stop, the next one cut short there, but for a cut decided on frames
-past the stop (FlashFilter's merge decides one up to the minimum shot length late). The threshold detector would end a
+after them; its shots are the whole run's up to the stop, the next one cut short there (at the last frame's time plus a
+frame at the average rate, as the FFmpeg path ends a run stopped by its end time: ShotDetector 3.29.0, given every
+frame's timestamp), but for a cut decided on frames past the stop (FlashFilter's merge decides one up to the minimum shot length late). The threshold detector would end a
 fade-out the stop falls in with a cut, as at a file's end. `tools/app-check.mjs` checks this on every sample and run.
 
 Measured 2026-10-26 on a 4-core cloud VM: a pause takes 6 µs in Chromium's worker (2,000 in a row through
@@ -657,6 +658,7 @@ path's. ManagedCodecs doesn't expose all of it, so the library reads it itself. 
 | FrameCount | 'stts' sample count (FFmpeg's nb_frames; an edit list that ends early doesn't change it; null in a fragmented file with an empty 'moov', the 'moov' box's samples alone where it has some) |
 | TimeBase | 1 / the 'mdhd' timescale |
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
+| FrameTimestamps | every shown frame's pts, sorted (the packets an edit list leaves out not among them), at any rate: ShotDetector places a variable rate's frames by them, and since 3.29.0 ends a stopped run at the last frame's time plus a frame at the average rate, as the file path stopped there does. `VideoInput.VariableRate` (`Open`'s `variableRate`) says whether some frame is over half a frame off the average rate's grid, ShotDetector's own constant-rate check |
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); the SPS's chroma format and bit depth: yuv420p, yuv422p or yuv420p10le, full range yuvj420p or yuvj422p at 8 bits |
 | ChromaLocation | the SPS's VUI chroma_sample_loc_type_top_field (FFmpeg's location is it plus one), else left, FFmpeg's H.264 default; ShotDetector uses it for 10-bit only |
 | Each frame's ColorSpace, FullRange, ChromaLocation | the frame's own SPS's (ManagedCodecs' `VideoFrame`), given only where they say one and it differs from the video's (a tag the SPS doesn't carry stays the video's) |
@@ -670,6 +672,7 @@ In an AVI (`AviHeader` reads the 'strh' and 'strf' of each stream, which Managed
 | FrameRate, TimeBase | the video 'strh''s dwRate/dwScale, reduced (FFmpeg's avg_frame_rate is the time base's inverse) |
 | FrameCount | the video 'strh''s dwLength (FFmpeg's nb_frames); a file with fewer chunks is refused |
 | StartPts | the first packet's pts |
+| FrameTimestamps | every packet's pts (one a chunk), as in an MP4 |
 | ColorSpace, FullRange, PixelFormat, ChromaLocation | bt470bg, full range, yuvj420p or yuvj422p (the JPEG's sampling), center: FFmpeg's MJPEG decoder |
 | Duration | the longest stream's: the video's dwLength, and a VBR audio stream's (dwSampleSize 0: MP3, AAC); a PCM or ADPCM stream has none for FFmpeg |
 
@@ -861,8 +864,9 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   the default run's cuts corrected as a viewer would (the first removed, the last moved a frame later, two added a
   frame apart, frames as decoded), made into a result by the core (`CorrectedCuts.Load`: `LoadScenes` of the run) and
   by the same `LoadScenes` of the FFmpeg path's run (`Detect(path)`), whole, stopped half-way (the core's frames ended
-  there as Stop ends them; compared with the FFmpeg path once ShotDetector ends a run that ends early where that path
-  does, backlog "A stopped run's end at a variable rate"), and whole under the run with every detector, deinterlaced: the scenes
+  there as Stop ends them, against the FFmpeg path stopped by its end time at that frame's own time: since ShotDetector
+  3.29.0 both end it at the last frame's time plus a frame at the average rate), and whole under the run with every
+  detector, deinterlaced: the scenes
   CSV, the shots as JSON and HTML, the timeline files and the chapters byte for byte, the shots starting at the frames
   given and the last one ending where the run's did, and the run's own `CutFrames` given back giving the run's own
   downloads; the run's cuts, the corrected
