@@ -28,7 +28,8 @@ public static partial class Api
     /// Opens an MP4, an AVI or a WebM (its VP9 or AV1 decoded by the browser, <see cref="JsDecoder"/>) for
     /// <see cref="Detect"/>: its <see cref="YuvVideo"/> as JSON with the frames it shows
     /// (<see cref="VideoInput.ShownFrames"/>, what a whole run reads, where <c>frameCount</c> is FFmpeg's nb_frames: null in a
-    /// fragmented file, the track's samples past an edit list's end) as <c>frames</c>, and its audio track
+    /// fragmented file, the track's samples past an edit list's end) as <c>frames</c>, whether its rate varies
+    /// (<see cref="VideoInput.VariableRate"/>) as <c>variableRate</c>, and its audio track
     /// (<see cref="VideoInput.Audio"/>) as <c>audio</c>, <c>{ codec, sampleRate, channels }</c> or null without one, and
     /// who decodes it as <c>decodedBy</c> (<c>managedcodecs</c> or <c>browser</c>); or the
     /// library's exception (a damaged file's prefixed with <see cref="Damaged"/>). The file is a JavaScript <c>Blob</c> (the picked <c>File</c>), read
@@ -54,6 +55,9 @@ public static partial class Api
         _input = input;
         var json = JsonSerializer.SerializeToNode(input.Video, ApiJson.Default.YuvVideo)!.AsObject();
         json["frames"] = input.ShownFrames;
+        // Whether the rate varies (VideoInput.VariableRate): frameTimestamps are given at every rate (a stopped run ends
+        // at its last frame's time, ShotDetector 3.29.0), so the page asks this, not whether they are there.
+        json["variableRate"] = input.VariableRate;
         // Who decodes the frames: ManagedCodecs, or the browser (a WebM's VP9 or AV1, JsDecoder), which the page marks
         // and runs on its own worker only (decision 2026-11-02-webm-browser-decoder.md).
         json["decodedBy"] = input.DecodedByHost ? "browser" : "managedcodecs";

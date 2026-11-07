@@ -197,9 +197,9 @@ on('chose', ({ file: chosen }) => {
   if (url) URL.revokeObjectURL(url);
   source.src = url = URL.createObjectURL(chosen);
 });
-on('opened', ({ video: { frameRate: { num, den }, frameTimestamps, width, height } }) => {
+on('opened', ({ video: { frameRate: { num, den }, variableRate, width, height } }) => {
   // At a variable rate a frame lasts its own time: the middle as it is.
-  oneFrame = frameTimestamps ? 0 : den / num;
+  oneFrame = variableRate ? 0 : den / num;
   table.style.setProperty('--still-aspect', `${width} / ${height}`);
 });
 on('run', clear);

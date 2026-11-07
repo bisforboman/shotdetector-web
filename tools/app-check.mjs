@@ -469,12 +469,14 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterl
   const lag = window + Math.ceil(0.6 * rate) + 1;
   const kept = result.shots.slice(0, -1), last = result.shots.at(-1);
   const prefix = JSON.stringify(kept) === JSON.stringify(whole.shots.slice(0, kept.length));
-  const cutShort = last.startFrame === whole.shots[kept.length]?.startFrame && last.endFrame === n;
   // Where the stop is among the cuts: the last frame read's number, its stats row's Frame Number. A cut's number is the
   // frame's time at the average rate (scenedetect's), so at a variable rate it isn't the count of frames read: Elephants
-  // Dream's 5736th frame is number 5656, its cuts 5683 and 5721 past the stop. The last shot still ends at the count, n,
-  // as scenedetect ends a file's last shot at its frames read. At a constant rate the two are the same.
+  // Dream's 5736th frame is number 5656, its cuts 5683 and 5721 past the stop. The last shot ends there too: at the last
+  // frame's time plus a frame at the average rate, as the file path ends a run stopped by its end time (ShotDetector
+  // 3.29.0, given every frame's timestamp), not at the count read over the average rate. At a constant rate the two are
+  // the same, n.
   const stop = Number(ours.at(-1).split(',')[0]);
+  const cutShort = last.startFrame === whole.shots[kept.length]?.startFrame && last.endFrame === stop;
   const missed = cuts(whole.shots).filter(c => c > last.startFrame && c <= stop);
   if (!prefix || !cutShort || missed.some(c => c <= stop - lag)) {
     fail(`${name} at ${n}: shots ${JSON.stringify(result.shots.map(s => [s.startFrame, s.endFrame]))}, the whole ` +

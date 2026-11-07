@@ -65,7 +65,7 @@
 //                       the worker has started, as the footer's Versions, waits for it: startWorker)
 //   frameSeconds(video, frames) where frame number `frames` (counted from 0 as decoded: a range's, a span's) starts,
 //                       in seconds from the video's start: frames over the rate, or at a variable rate the frame's own
-//                       pts (Open's frameTimestamps), past the last frame on at the average rate
+//                       pts (Open's frameTimestamps, when its variableRate), past the last frame on at the average rate
 //   card(title, { place, mark, markTitle }) a card for the panel to fill, in its place: 'run' beside the video (the run
 //                       and what goes with it), 'below' under the timeline, full width (the shots), 'details' (the
 //                       default) in the grid of cards last. mark says whose numbers the card shows, a chip on its
@@ -1280,7 +1280,7 @@ function showPicture(jpeg, frame) {
 // frameSeconds (above): each variable-rate video's frames' times in seconds, worked out once.
 const frameTimes = new WeakMap();
 export function frameSeconds(video, frames) {
-  const ts = video.frameTimestamps, step = video.frameRate.den / video.frameRate.num;
+  const ts = video.variableRate ? video.frameTimestamps : null, step = video.frameRate.den / video.frameRate.num;
   if (!ts || ts.length === 0) return frames * step;
   let times = frameTimes.get(video);
   if (!times) {
@@ -1299,7 +1299,7 @@ const lengthOf = v => v.duration ?? v.frames * v.frameRate.den / v.frameRate.num
 // The toolbar's line on the file: its size, and once opened the description's first facts, the picture's size as it is
 // shown (a rotated video's upright).
 function facts(f, v) {
-  const rate = `${Number((v.frameRate.num / v.frameRate.den).toFixed(3))} fps${v.frameTimestamps ? ' on average' : ''}`;
+  const rate = `${Number((v.frameRate.num / v.frameRate.den).toFixed(3))} fps${v.variableRate ? ' on average' : ''}`;
   const [w, h] = Math.abs(v.rotation) % 180 === 90 ? [v.height, v.width] : [v.width, v.height];
   return [megabytes(f.size), `${w}×${h}`, rate, `${lengthOf(v).toFixed(1)} s`,
     v.audio ? v.audio.codec.toUpperCase() : 'no audio'].join(' · ');

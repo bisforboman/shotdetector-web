@@ -51,9 +51,9 @@ on('opened', ({ video: v }) => {
     ['Video', CODECS[v.codec] ?? v.codec, `codec: ${v.codec}`],
     ['Size', size(v), `width: ${v.width}, height: ${v.height} (as decoded)`],
     ['Rotation', rotation(v.rotation), `rotation: ${v.rotation} (degrees counterclockwise, ffprobe's)`],
-    ['Frame rate', v.frameTimestamps ? `Variable, ${Number(rate.toFixed(3))} fps on average` : `${Number(rate.toFixed(3))} fps`,
-      `frameRate: ${num}/${den} (FFmpeg's avg_frame_rate)${v.frameTimestamps ? '; frameTimestamps: every frame\'s pts, ' +
-        'as the frames are detected at their own times' : ''}`],
+    ['Frame rate', v.variableRate ? `Variable, ${Number(rate.toFixed(3))} fps on average` : `${Number(rate.toFixed(3))} fps`,
+      `frameRate: ${num}/${den} (FFmpeg's avg_frame_rate)${v.variableRate ? '; variableRate: the frames aren\'t at the average rate, ' +
+        'and are detected at their own times (frameTimestamps)' : ''}`],
     ['Scan', FIELD_ORDERS[v.fieldOrder]?.[0] ?? v.fieldOrder, `fieldOrder: ${v.fieldOrder} (ffprobe's field_order: ` +
       `${FIELD_ORDERS[v.fieldOrder]?.[1] ?? '?'}), what Deinterlace auto goes by`],
     ['Pixel format', PIXEL_FORMATS[v.pixelFormat] ?? v.pixelFormat, `pixelFormat: ${v.pixelFormat}`],
@@ -73,7 +73,7 @@ on('opened', ({ video: v }) => {
     dd.title = title;
     list.append(dt, dd);
   }
-  // Every frame's pts (a variable rate's) on one line, not one a line.
+  // Every frame's pts on one line, not one a line.
   raw.querySelector('pre').textContent = JSON.stringify(v, (key, value) => key === 'frameTimestamps' && value ?
     `[${value.length} pts: ${value.slice(0, 4).join(', ')}, …, ${value.at(-1)}]` : value, 2);
   section.hidden = false;

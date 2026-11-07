@@ -289,20 +289,12 @@ static List<string> Differences(YuvVideo ours, YuvVideo ffmpeg)
     Check("duration", ours.Duration, ffmpeg.Duration);
     Check("rotation", ours.Rotation, ffmpeg.Rotation);
     Check("field order", ours.FieldOrder, ffmpeg.FieldOrder);
-    // Every frame's pts where the rate varies (the core gives them only then): FFmpeg's packets' pts, sorted; where it
-    // gives none, FFmpeg's must be within half a frame of the average rate's grid, ShotDetector's check without them.
-    if (ours.FrameTimestamps is { } given)
-    {
-        if (ffmpeg.FrameTimestamps is not { } probed || !given.SequenceEqual(probed))
-            d.Add($"frame timestamps: {given.Count} given, not FFmpeg's {ffmpeg.FrameTimestamps?.Count} packets' pts");
-    }
-    else if (ffmpeg.FrameTimestamps is { Count: > 0 } probed)
-    {
-        double rate = ffmpeg.FrameRate.Num / (double)ffmpeg.FrameRate.Den, tb = ffmpeg.TimeBase!.Value.Num / (double)ffmpeg.TimeBase.Value.Den;
-        int off = Enumerable.Range(0, probed.Count).FirstOrDefault(k => !(Math.Abs(((probed[k] - probed[0]) * tb) - (k / rate)) <= 0.5 / rate), -1);
-        if (off >= 0)
-            d.Add($"frame timestamps: none given, while FFmpeg's frame {off} is off the average rate's grid");
-    }
+    // Every frame's pts, at any rate (the core gives them always, so that a stopped run ends where the file path's
+    // does: ShotDetector 3.29.0): FFmpeg's packets' pts, sorted.
+    if (ours.FrameTimestamps is not { } given)
+        d.Add("frame timestamps: none given");
+    else if (ffmpeg.FrameTimestamps is not { } probed || !given.SequenceEqual(probed))
+        d.Add($"frame timestamps: {given.Count} given, not FFmpeg's {ffmpeg.FrameTimestamps?.Count} packets' pts");
 
     Check("codec", ours.Codec, ffmpeg.Codec);
     Check("container", ours.Container, ffmpeg.Container);

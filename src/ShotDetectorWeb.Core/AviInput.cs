@@ -92,6 +92,7 @@ public sealed class AviInput : VideoInput
             StartPts = Math.Max(firstPts, 0),
             FrameCount = strh.Length,
             Duration = DurationOf(header.DurationUs),
+            FrameTimestamps = FrameTimestampsOf(Packets),
             Codec = "mjpeg",
             Container = "avi",
         };

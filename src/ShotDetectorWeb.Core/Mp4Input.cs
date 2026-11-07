@@ -18,7 +18,7 @@ namespace ShotDetectorWeb;
 /// </summary>
 /// <remarks>
 /// So far: 8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0 H.264 (High, High 4:2:2, High 10) in an MP4, fragmented or not, at a constant or variable frame rate (every frame's pts given
-/// up front, <see cref="YuvVideo.FrameTimestamps"/>, where the rate varies), upright or turned by
+/// up front, <see cref="YuvVideo.FrameTimestamps"/>), upright or turned by
 /// a quarter turn (<see cref="YuvVideo.Rotation"/>, the frames as decoded): progressive, or
 /// interlaced coded as MBAFF frames (its field order and each frame's flags described, for ShotDetector's
 /// <see cref="DetectionOptions.Deinterlace"/>; frames coded as field pictures refused); VP9 and AV1 as a WebM's are
@@ -137,7 +137,7 @@ public sealed class Mp4Input : VideoInput
             Duration = DurationOf(duration),
             Rotation = rotation,
             FieldOrder = fieldOrder,
-            FrameTimestamps = VariableRate(Packets, firstPts, timeBase, fps),
+            FrameTimestamps = FrameTimestampsOf(Packets),
             Codec = hosted ?? "h264",
             Container = "mov,mp4,m4a,3gp,3g2,mj2",
         };
