@@ -62,23 +62,6 @@ a refusal that says what to do first, then VP9 and AV1 through the browser's dec
 Both rows are done (backlog-done, #133 and #135); what they left is in Maybe ("WebM runs split, resumed and on
 threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "WebM on ManagedCodecs' Matroska demuxer").
 
-### ShotDetector 3.30.0, FrameReader 2.25.0, ManagedCodecs 0.8.1
-
-- The packages of 2026-11-07
-  - Why: the owner asked on 2026-11-07 to bring the dependencies up to date, all in one PR: ShotDetector and FastYuv
-    3.28.0 to 3.30.0 (3.30.0 requires FrameReader 2.24.0 or later), FrameReader 2.22.0 to 2.25.0 (2.24.0 was never
-    published), ManagedCodecs 0.8.0 to 0.8.1 and Playwright 1.63.0 to 1.65.0. The bump on its own, so it shows any change
-    in the packages before a row's code changes the page; 3.29.0 and 3.30.0 release the fixes the Waiting rows
-    below waited on.
-  - Where: `Directory.Packages.props`, `tools/page-check/package.json` and its lockfile; README's Packages and
-    Licensing (FastYuv rebuilt at 3.30.0).
-  - Done when: native, wasm and the page agree on every sample on the new packages, and app-check's versions are the
-    pinned ones.
-  - Not: `YuvVideo.FileStartPts` and the reference tone in ranges, which the releases unblock: each a PR of its own.
-    `YuvVideo.FrameTimestamps` at every rate is in it (the owner's choice, 2026-11-07): without it app-check's stopped
-    runs on the variable-rate samples fail on 3.29.0 (backlog-done, "A stopped run's end at a variable rate").
-  - Status: In progress (2026-11-07)
-
 ### The npm package (issue #92)
 
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
