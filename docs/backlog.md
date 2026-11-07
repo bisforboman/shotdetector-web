@@ -68,14 +68,15 @@ threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4",
   - Why: the owner asked on 2026-11-07 to bring the dependencies up to date, all in one PR: ShotDetector and FastYuv
     3.28.0 to 3.30.0 (3.30.0 requires FrameReader 2.24.0 or later), FrameReader 2.22.0 to 2.25.0 (2.24.0 was never
     published), ManagedCodecs 0.8.0 to 0.8.1 and Playwright 1.63.0 to 1.65.0. The bump on its own, so it shows any change
-    in the packages before a row's code changes the page; 3.29.0 and 3.30.0 release the fixes the three Waiting rows
-    below wait on.
+    in the packages before a row's code changes the page; 3.29.0 and 3.30.0 release the fixes the Waiting rows
+    below waited on.
   - Where: `Directory.Packages.props`, `tools/page-check/package.json` and its lockfile; README's Packages and
     Licensing (FastYuv rebuilt at 3.30.0).
   - Done when: native, wasm and the page agree on every sample on the new packages, and app-check's versions are the
     pinned ones.
-  - Not: the rows the releases unblock (`YuvVideo.FrameTimestamps` at every rate, `YuvVideo.FileStartPts`, the
-    reference tone in ranges): each a PR of its own.
+  - Not: `YuvVideo.FileStartPts` and the reference tone in ranges, which the releases unblock: each a PR of its own.
+    `YuvVideo.FrameTimestamps` at every rate is in it (the owner's choice, 2026-11-07): without it app-check's stopped
+    runs on the variable-rate samples fail on 3.29.0 (backlog-done, "A stopped run's end at a variable rate").
   - Status: In progress (2026-11-07)
 
 ### The npm package (issue #92)
@@ -96,24 +97,6 @@ publish").
   - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
   - Status: Waiting (2026-11-04): asked of the shotdetector coordinator, the trim in ranges; released in ShotDetector 3.30.0
     (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07": ready to start
-
-- A stopped run's end at a variable rate (upstream)
-  - Why: with ShotDetector 3.28.0, frames that end early (the page's Stop) end the last shot at the frames read over
-    the average rate, where the FFmpeg path ends a run that ends early at the last frame's pts + 1 / average rate, in
-    the stream's time. At a variable rate that is another time altogether (`vfr-320x240.mp4` stopped at frame 75:
-    4.740 s against 3.5832 s); at a constant rate whose frames aren't exact in the stream's time base, a millisecond
-    or a few microseconds (`vp9-bt709-640x360-2997.webm` at frame 67: 2.236 s against 2.235 s; the 29.97 AVI's and
-    Sintel's editors' files). Sent to the shotdetector coordinator 2026-11-03; the owner chose to fix it in
-    ShotDetector (the frame source ends where the file path does).
-  - Where: the ShotDetector pin to the release with shotdetector#730, which ends it where the file path does only when
-    `YuvVideo.FrameTimestamps` is given (without them a stop looks like the video's end; the owner's choice, shotdetector's
-    decision 2026-11-03-stopped-frame-source-end.md): the core then gives every file's frame timestamps, at a constant
-    rate too (an AVI's, a WebM's), not only a variable rate's, and NativeCheck's description check follows;
-    `CorrectionCheck.cs` compares a stopped corrected run with the FFmpeg path's (`EndTime` at the stopped frame), which
-    it holds only to its own run until then.
-  - Done when: NativeCheck's stopped corrected runs agree with the FFmpeg path on every sample.
-  - Status: Waiting (2026-11-03): on the ShotDetector release with the fix; released in 3.29.0 (shotdetector#730),
-    taken by "The packages of 2026-11-07": ready to start
 
 - The spans' times when another stream starts first (upstream)
   - Why: ShotDetector 3.28.0 times `BlackSpans` and `FreezeSpans` from the video stream's start; `ffmpeg -vf
