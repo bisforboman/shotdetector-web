@@ -62,6 +62,22 @@ a refusal that says what to do first, then VP9 and AV1 through the browser's dec
 Both rows are done (backlog-done, #133 and #135); what they left is in Maybe ("WebM runs split, resumed and on
 threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "WebM on ManagedCodecs' Matroska demuxer").
 
+### ShotDetector 3.30.0, FrameReader 2.25.0, ManagedCodecs 0.8.1
+
+- The packages of 2026-11-07
+  - Why: the owner asked on 2026-11-07 to bring the dependencies up to date, all in one PR: ShotDetector and FastYuv
+    3.28.0 to 3.30.0 (3.30.0 requires FrameReader 2.24.0 or later), FrameReader 2.22.0 to 2.25.0 (2.24.0 was never
+    published), ManagedCodecs 0.8.0 to 0.8.1 and Playwright 1.63.0 to 1.65.0. The bump on its own, so it shows any change
+    in the packages before a row's code changes the page; 3.29.0 and 3.30.0 release the fixes the three Waiting rows
+    below wait on.
+  - Where: `Directory.Packages.props`, `tools/page-check/package.json` and its lockfile; README's Packages and
+    Licensing (FastYuv rebuilt at 3.30.0).
+  - Done when: native, wasm and the page agree on every sample on the new packages, and app-check's versions are the
+    pinned ones.
+  - Not: the rows the releases unblock (`YuvVideo.FrameTimestamps` at every rate, `YuvVideo.FileStartPts`, the
+    reference tone in ranges): each a PR of its own.
+  - Status: In progress (2026-11-07)
+
 ### The npm package (issue #92)
 
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
@@ -78,7 +94,8 @@ publish").
     then an option on the page, off by default, the run waiting for the sound's worker's tone, `YuvVideo.ReferenceTone`
     set from it in `Api`; NativeCheck's run with `TrimReferenceTone` on the tone sample, whole, split and resumed.
   - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
-  - Status: Waiting (2026-11-04): asked of the shotdetector coordinator, the trim in ranges
+  - Status: Waiting (2026-11-04): asked of the shotdetector coordinator, the trim in ranges; released in ShotDetector 3.30.0
+    (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07": ready to start
 
 - A stopped run's end at a variable rate (upstream)
   - Why: with ShotDetector 3.28.0, frames that end early (the page's Stop) end the last shot at the frames read over
@@ -95,7 +112,8 @@ publish").
     `CorrectionCheck.cs` compares a stopped corrected run with the FFmpeg path's (`EndTime` at the stopped frame), which
     it holds only to its own run until then.
   - Done when: NativeCheck's stopped corrected runs agree with the FFmpeg path on every sample.
-  - Status: Waiting (2026-11-03): on the ShotDetector release with the fix
+  - Status: Waiting (2026-11-03): on the ShotDetector release with the fix; released in 3.29.0 (shotdetector#730),
+    taken by "The packages of 2026-11-07": ready to start
 
 - The spans' times when another stream starts first (upstream)
   - Why: ShotDetector 3.28.0 times `BlackSpans` and `FreezeSpans` from the video stream's start; `ffmpeg -vf
@@ -110,7 +128,8 @@ publish").
     fix needs one (`Mp4Input`'s spans already know every stream's start).
   - Done when: realworld.yml's PictureCheck agrees on `caminandes-fragmented.mp4`.
   - Status: Waiting (2026-11-05): on the ShotDetector release with the fix (the owner chose to fix it now: spans from
-    the file's start, as ffmpeg times them; likely a new optional `YuvVideo` value, the file's start, which the core then gives)
+    the file's start, as ffmpeg times them; likely a new optional `YuvVideo` value, the file's start, which the core then gives); released in 3.30.0
+    (`YuvVideo.FileStartPts`), taken by "The packages of 2026-11-07": ready to start
 
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but

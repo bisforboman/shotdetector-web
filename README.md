@@ -948,7 +948,7 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   page's path reaching FFmpeg's code), and if any FFmpeg assembly is loaded at all, the audio pass included
   (`LoadedAssemblies()`), interpreted and compiled ahead of time (`aot`, a few minutes more to build) alike. No FFmpeg
   library exists in the browser either way.
-- **page** (`tools/page-check/page-check.mjs`, Playwright 1.63.0 pinned by its lockfile, Chromium, and Firefox for a
+- **page** (`tools/page-check/page-check.mjs`, Playwright 1.65.0 pinned by its lockfile, Chromium, and Firefox for a
   resume across a reload): the page's own
   JavaScript (`app.js`, `worker.js`, `threads.js`, `sw.js`, the panels) in a browser, as a visitor drives it, and the
   only check of the threaded bundle (it doesn't run under Node). The published `wwwroot` is
@@ -1333,13 +1333,14 @@ decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`):
 
 ## Packages
 
-ShotDetector and ShotDetector.FastYuv (3.28.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
+ShotDetector and ShotDetector.FastYuv (3.30.0; 3.14.0 was the first with `Detect(YuvVideo, ...)`, 3.23.0 the first taking
 a rotation, a variable frame rate and deinterlacing there, 3.24.0 the first refusing a frame of another size than the
 video's, shotdetector#625, 3.25.0 the first with ranges that deinterlace, shotdetector#628, 3.26.0 the first saying where a range's final scores
 end, `RangeScores.EndFrame`, 3.27.0 the first whose hash detector gives x64's bits on browser-wasm, shotdetector#701;
-3.28.0's own additions the page doesn't use yet, docs/backlog.md),
-FrameReader (2.22.0),
-ManagedCodecs (0.8.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+3.29.0's end of a stopped run from `YuvVideo.FrameTimestamps`, 3.30.0's ranges with the reference-tone trim and spans from
+`YuvVideo.FileStartPts`, which the core doesn't give yet: rows of docs/backlog.md),
+FrameReader (2.25.0),
+ManagedCodecs (0.8.1: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
 under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
@@ -1350,7 +1351,7 @@ other AVI FourCCs FFmpeg reads as MJPEG, decodes a JPEG whose scan runs past its
 picture there is undefined, Status), and decodes 4:1:1 and 4:4:0 JPEG, which ShotDetector's frame source doesn't take
 yet; 0.7.0 adds JPEG thumbnails, which the page doesn't use; 0.8.0 ends a track's stream at the shorter of 'mdhd''s and
 the samples' durations, as FFmpeg does, ManagedCodecs#317, and adds a Matroska demuxer, which the core doesn't use yet:
-`MatroskaReader` reads a WebM)
+`MatroskaReader` reads a WebM; 0.8.1 decodes H.264 a little faster, the same frames)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
@@ -1370,12 +1371,12 @@ To use a changed FastYuv, build it from its source and publish the app against i
 published bundle doesn't work: the bundle is trimmed, `dotnet.js` holds each file's hash, and compiled ahead of time
 (as the page is) FastYuv's code is also in `dotnet.native.wasm`
 ([docs/decisions/2026-10-24-fastyuv-replaceable.md](docs/decisions/2026-10-24-fastyuv-replaceable.md)). Its source is
-in the shotdetector repository at the package's version (3.28.0, Directory.Packages.props):
+in the shotdetector repository at the package's version (3.30.0, Directory.Packages.props):
 
 ```
-git clone --branch v3.28.0 https://github.com/bisforboman/shotdetector
+git clone --branch v3.30.0 https://github.com/bisforboman/shotdetector
 # change shotdetector/src/ShotDetector.FastYuv, then:
-dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.28.0 -p:FrameReaderVersion=2.22.0
+dotnet build shotdetector/src/ShotDetector.FastYuv -c Release -p:ShotDetectorVersion=3.30.0 -p:FrameReaderVersion=2.25.0
 git clone https://github.com/bisforboman/shotdetector-web
 dotnet workload install wasm-tools
 dotnet publish shotdetector-web/src/ShotDetectorWeb.App -c Release -p:RunAOTCompilation=true \
