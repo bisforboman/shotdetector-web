@@ -93,6 +93,21 @@ for s in "$f" "$out/fragmented-moov-320x240-25.mp4"; do
 done
 [[ $got == '25/1,1024,N/A 25/1,1024,38 ' ]] || { echo "fragmented samples: avg_frame_rate, start_pts, nb_frames are $got" >&2; exit 1; }
 
+# The spans when another stream starts first (backlog "The spans' times when another stream starts first"): fragmented
+# as above, its video starting 0.08 s after its AAC (the file's start, format start_time 0), with 1 s of black and a 2.54 s
+# still picture. ffmpeg times blackdetect's and freezedetect's spans from the file's start (YuvVideo.FileStartPts):
+# black from 1.08 s, not 1 s from the video's start.
+f="$out/spans-fragmented-320x240-25.mp4"
+enc -filter_complex "testsrc2=s=320x240:r=25:d=1[a];color=black:s=320x240:r=25:d=1[k];mandelbrot=s=320x240:r=25,trim=duration=0.04,tpad=stop_mode=clone:stop_duration=2.5[b];testsrc2=s=320x240:r=25:d=1[c];[a][k][b][c]concat=n=4:v=1:a=0" \
+  -f lavfi -i sine=d=5.6 -c:v libx264 -pix_fmt yuv420p -c:a aac "$out/spans.tmp.mp4"
+enc -i "$out/spans.tmp.mp4" -c copy -movflags frag_keyframe+empty_moov "$f"
+rm "$out/spans.tmp.mp4"
+got="$("$fp" -v error -show_entries format=start_time -of csv=p=0 "$f") "
+got+="$("$fp" -v error -select_streams v:0 -show_entries stream=start_time -of csv=p=0 "$f") "
+got+=$("$ff" -hide_banner -nostats -i "$f" -map 0:v:0 -vf blackdetect=d=0,freezedetect -f null - 2>&1 | grep -o '\(black\|freeze\)_\(start\|end\):[ ]*[0-9.]*' | tr -d ' ' | tr '\n' ' ')
+[[ $got == '0.000000 0.080000 black_start:1.08 black_end:2.08 freeze_start:2.08 freeze_end:4.64 ' ]] \
+  || { echo "$f: format and video start, black and still are '$got'" >&2; exit 1; }
+
 # Interlaced (decision 2026-10-30-interlaced.md): three() at 50 fps woven into 25 fps frames of two fields each, coded as
 # MBAFF frames by libx264 (-flags +ilme+ildct), top field first and bottom field first; and libx264's fake-interlaced,
 # whose SPS allows field coding (frame_mbs_only_flag 0) while every picture is a progressive frame. Deinterlacing off
