@@ -81,6 +81,16 @@ publish").
   - Status: In progress (2026-11-09, the owner's choice through AskUserQuestion): the trim in ranges released in
     ShotDetector 3.30.0 (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07"
 
+- A stop in the leading reference tone, exactly (upstream)
+  - Why: a run leaving the reference tone out has no frames of its own before the leading tone ends, and
+    ShotDetector's `Merge` refuses a run stopped there ("StartTime is after the last frame"), as `Detect(path)` refuses a
+    file that ends in its tone. The page holds a Stop until two frames past the tone's end (`Api`'s `StopsFrom`), an
+    estimate of where ShotDetector starts the run (`ShotDetection.ToneStart`, internal).
+  - Where: ShotDetector's `ToneStart` public, or `Merge` giving a run stopped before its start (no shots); then `Api`'s
+    `StopsFrom` on it, or the hold dropped.
+  - Done when: app-check's tone run stopped in the leading tone gives what ShotDetector says, with no estimate.
+  - Status: Waiting (2026-11-09): asked of the shotdetector coordinator (the owner's choice through AskUserQuestion)
+
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
     npm's trusted publishing needs the package to exist on npmjs.com with this repository's `npm.yml` as its trusted

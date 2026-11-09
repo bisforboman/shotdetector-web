@@ -741,6 +741,23 @@ AOT bundle in headless Chromium (4-core cloud VM): 0.63 s on the Sintel trailer 
 two-hour MP4 (the trailer looped, 640x360 at 2.5 Mbit/s with 128 kbit/s AAC, 2.37 GB, 7,169 s of stereo 48 kHz audio),
 whose JSON is 13.5 KB. Under Node, the trailer's pass takes 0.46 s compiled ahead of time and 2.6 s interpreted.
 
+#### Leaving the reference tone out
+
+The page's Reference tone option (keep, the default, or leave out; decision
+[2026-11-04-reference-tone.md](docs/decisions/2026-11-04-reference-tone.md)) leaves line-up tone at the start and end
+out of the shots, as ShotDetector's `--trim-reference-tone`: the shots start after a tone that begins in the first
+5 s and end before one that ends in the last 5 s (`DetectionOptions.TrimReferenceTone`). Left out, a new run waits for
+the sound's worker (the status says so) and sends the tone it found as the request's `tone`, `[{ start, end, level }]`
+(times in seconds from the file's start, rounded back to ticks: the finder's are on a 20 ms grid); the App sets it as
+`YuvVideo.ReferenceTone` (`VideoInput.ReferenceTone`) on every export that reads a request, so a split run's workers
+and a resumed run trim as the whole run does (ShotDetector 3.30.0 takes the trim in ranges), and a stopped run keeps it
+in its options. The run still reads every frame: its answer's `frameCount` is the frames read from 0 (a whole run's,
+the video's), its shots and stats rows those between the tones. A Stop in the leading tone takes effect two frames
+past its end (`Api`'s `StopsFrom`), as a run stopped before its first frame has nothing ShotDetector's merge can show;
+ShotDetector's own start frame (`ToneStart`) isn't public, asked of shotdetector (backlog, Waiting). Only AAC in MP4 is
+measured: on other audio the tone is none and nothing is left out. Checked against `Detect(path)` with FFmpeg finding
+the tone (Checks, `ToneCheck.cs`).
+
 ### The picture
 
 ```csharp
@@ -864,6 +881,10 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   byte for byte, the shots told across the parts the whole run's and the picture measures joined the whole run's; and
   split into 4 ranges each stopped past 60%, the rest split into 4 again from the continuation's first frame, merged
   with the earlier ranges, against the whole run's too (`ResumeCheck.cs`);
+  on each sample whose sound has reference tone (`Mp4Audio`'s), the page's default run leaving it out
+  (`Runs.Tone`: `TrimReferenceTone`, the core given that tone) against `Detect(path)` with FFmpeg finding it: the CSVs,
+  shots as JSON and HTML, timeline files, chapters and the tone reported byte for byte; split into 4 ranges, stopped at a
+  third and two thirds and resumed, and split, stopped and resumed, each the whole run's (`ToneCheck.cs`);
   the default run's cuts corrected as a viewer would (the first removed, the last moved a frame later, two added a
   frame apart, frames as decoded), made into a result by the core (`CorrectedCuts.Load`: `LoadScenes` of the run) and
   by the same `LoadScenes` of the FFmpeg path's run (`Detect(path)`), whole, stopped half-way (the core's frames ended
@@ -980,7 +1001,8 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   (a quarter turn), `vfr-320x240.mp4` (a variable frame rate, its ranges and lanes at the frames' own times) and
   `yuv420p10-full-topleft-bt709-320x240-25.mp4` (10 bits: its picture card and lane in 10-bit values); `interlaced-tff-320x240-25.mp4` with
   Deinterlace auto, on threads and on two workers, its downloads
-  the native check's `deinterlace-auto` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
+  the native check's `deinterlace-auto` run's; `tone-cuts-320x240-25.mp4` with the Reference tone left out (the run
+  waiting for the sound's tone), on threads and on two workers, its downloads the native check's `tone` run's; "Try the demo", on threads, paused a quarter of the way in (the button reading Resume, the bar and
   the status unchanged for 2 s once the run has reached the pause it waits at) and resumed; the demo detected again,
   paused and stopped while paused (70 % in), a YouTube chapter titled, then the page reloaded and the demo picked
   again, which shows the stopped run kept in IndexedDB (`stopped`, its options in the form, Resume offered, its
@@ -1070,7 +1092,8 @@ The samples (tools/make-samples.sh) each isolate something the description must 
 High with B-frames (b-pyramid) and Baseline; 854x480 (cropped) and 720p; untagged, BT.709, BT.601 and full-range
 colour; a stream starting at 1.4 s (an empty edit); an edit list ending before the media; an audio track longer than
 the video; fades for detect-threshold; a still picture across ranges' starts (keyframes inside it); bars and tone (1 kHz at -20 dBFS, 3 s of silence, the tone again) for the audio
-measures; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does; 4:2:2;
+measures; tone around four shots, a keyframe a second (`tone-cuts`: tone 0-6 s and 13-19 s, cuts at 7, 9.4 and 12 s),
+for the tone left out in ranges; MJPEG in AVI (25 and 29.97 fps, no audio, PCM that doesn't count for the duration, MP3 that does; 4:2:2;
 `dmb1`; a damaged JPEG);
 10-bit 4:2:0 (no chroma location in the VUI, and topleft with full range and BT.709, its sources tagged BT.709 before
 the concat so that its colour bars stay BT.709's) and 8-bit 4:2:2 (limited and full range) H.264; files to refuse (AVIs: 4:4:4, 4:1:1 and 4:4:0 JPEG, a dropped frame, H.264; 10-bit 4:2:2 and 4:4:4
