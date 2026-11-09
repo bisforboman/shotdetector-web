@@ -5,11 +5,11 @@ namespace ShotDetectorWeb.Checks;
 
 /// <summary>
 /// The reference tone check (README, "Checks"; decision 2026-11-04-reference-tone.md): for each sample whose audio has
-/// reference tone as the core finds it (<see cref="Mp4Audio"/>, the page's sound), the run with every detector and
+/// reference tone as the core finds it (<see cref="Mp4Audio"/>, the page's sound), the page's default run with
 /// <see cref="DetectionOptions.TrimReferenceTone"/> (<see cref="Runs.Tone"/>), the core given that tone
 /// (<see cref="VideoInput.ReferenceTone"/>, as the page gives it), against ShotDetector's <c>Detect(path)</c> with FFmpeg
-/// finding the tone itself: the scene and stats CSVs, the shots as JSON and HTML and the tone the result reports must be
-/// equal byte for byte. Then the same run split into ranges at keyframes (at most 4) and merged; stopped past a third and
+/// finding the tone itself: the scene and stats CSVs, the shots as JSON and HTML, the editors' timeline files, the
+/// YouTube chapters and the tone the result reports must be equal byte for byte. Then the same run split into ranges at keyframes (at most 4) and merged; stopped past a third and
 /// two thirds on one range and resumed; and split into 4, each stopped past 60%, the rest split again: each the whole
 /// run's. Writes the run's files to the output folder for the wasm check.
 /// </summary>
@@ -67,6 +67,23 @@ internal static class ToneCheck
                     problems.Add("the shots' JSON or HTML DIFFERS");
                 if (!Segments(ours.ReferenceTone).SequenceEqual(Segments(file.ReferenceTone)))
                     problems.Add($"the tone reported {Shown(ours.ReferenceTone)}, the FFmpeg path's {Shown(file.ReferenceTone)}");
+                // The editors' files and the YouTube chapters, as the main check writes them for each run.
+                foreach (var (format, extension) in TimelineFiles.Formats)
+                {
+                    string timeline = TimelineFiles.Write(ours, format, name);
+                    File.WriteAllText($"{baseName}.{extension}", timeline);
+                    if (timeline != TimelineFiles.Write(file, format, name))
+                        problems.Add($"the {format} timeline DIFFERS");
+                }
+
+                foreach (int minimum in ChaptersCheck.Minimums)
+                {
+                    string chapters = TimelineFiles.Chapters(ours, minimum);
+                    File.WriteAllText($"{baseName}.chapters-{minimum}.json", chapters);
+                    if (chapters != TimelineFiles.Chapters(file, minimum))
+                        problems.Add($"the chapters at {minimum} s DIFFER");
+                }
+
                 if (problems.Count > 0)
                 {
                     File.WriteAllText(baseName + ".ffmpeg.scenes.csv", fileScenes);

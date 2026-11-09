@@ -46,11 +46,12 @@ internal static class Runs
     public static (string Name, DetectionOptions Options)[] Split => [Every, All.Single(r => r.Name == "deinterlace-on")];
 
     /// <summary>
-    /// The run with every detector leaving the reference tone out (<see cref="DetectionOptions.TrimReferenceTone"/>, the
-    /// page's option; decision 2026-11-04-reference-tone.md): only on the samples with tone (ToneCheck.cs), the core
-    /// given the tone its audio has (<see cref="VideoInput.ReferenceTone"/>).
+    /// The page's default run (the adaptive detector) leaving the reference tone out
+    /// (<see cref="DetectionOptions.TrimReferenceTone"/>, the page's Reference tone option; decision
+    /// 2026-11-04-reference-tone.md): only on the samples with tone (ToneCheck.cs), the core given the tone its audio has
+    /// (<see cref="VideoInput.ReferenceTone"/>), as the page gives it.
     /// </summary>
-    public static (string Name, DetectionOptions Options) Tone => ("tone", Every.Options with { TrimReferenceTone = true });
+    public static (string Name, DetectionOptions Options) Tone => ("tone", All[0].Options with { TrimReferenceTone = true });
 
     /// <summary>The scene list CSV (as scenedetect list-scenes writes it) and the stats CSV (scenedetect -s).</summary>
     public static (string Scenes, string Stats) Csvs(DetectionResult result) =>

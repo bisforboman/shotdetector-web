@@ -74,13 +74,18 @@ const RUNS = {
 // The runs that deinterlace (where the field order says so, for auto): yadif reads the frame after each, so a stopped
 // run's last frame is deinterlaced as a file's last (its own next), and its stats row differs from the whole run's.
 const DEINTERLACED = ['deinterlace-auto', 'deinterlace-on'];
+// tools/Shared/Runs.cs's Tone: the page's default run with the reference tone left out (decision
+// 2026-11-04-reference-tone.md), on the samples whose sound has tone (NativeCheck's ToneCheck), given the tone as the
+// page gives it: Audio()'s segments.
+const TONE_RUN = 'tone';
+const toneOptions = tone => ({ ...RUNS.adaptive, tone: tone.map(({ start, end, level }) => ({ start, end, level })) });
 
 // The most ranges a run is split into here, as the page splits a long video (app.js's MOST_WORKERS), and the runs split:
 // the page's default (one detector: the merge tells the shots as each cut is confirmed), all five detectors at once
 // (each detector's scores merged) and those deinterlaced (wider margins: ShotDetector's RangeFrames), not each detector
 // alone again, which would double the check's time. --light splits the first two only.
 const RANGES = 4;
-const SPLIT_RUNS = ['adaptive', 'all', 'deinterlace-on'];
+const SPLIT_RUNS = ['adaptive', 'all', 'deinterlace-on', TONE_RUN];
 const LIGHT_RUNS = ['adaptive', 'all'];
 // What a merge that fails says first (Api's NotMerged): the page then detects again with one worker.
 const NOT_MERGED = 'The ranges didn\'t merge: ';
@@ -218,7 +223,11 @@ for (const [i, sample] of samples.entries()) {
   }
   // Once: a run cancelled half-way fails as cancelled, keeps no result, and the next run goes on as if it hadn't been.
   if (i === 0 && !light) await checkCancel(sample, video);
-  for (const [run, options] of Object.entries(RUNS).filter(([run]) => !light || LIGHT_RUNS.includes(run))) {
+  // The tone the sound finds (Audio(), as the page's sound worker gives it): a sample with some also runs the tone run.
+  const tone = video.audio?.codec === 'aac' ? JSON.parse(Audio()).referenceTone : [];
+  const runs = Object.entries(RUNS).filter(([run]) => !light || LIGHT_RUNS.includes(run));
+  if (tone.length > 0 && !light) runs.push([TONE_RUN, toneOptions(tone)]);
+  for (const [run, options] of runs) {
     progress = [];
     told = [];
     toldAt = [];
@@ -269,7 +278,7 @@ for (const [i, sample] of samples.entries()) {
       await checkCorrections(sample, result, scenesCsv, statsCsv, shotFiles);
     }
     runPicture = Picture();
-    if (!light) await checkStop(sample, video, run, options, result, statsCsv);
+    if (!light && run !== TONE_RUN) await checkStop(sample, video, run, options, result, statsCsv);
     if (run === 'adaptive' && !light) await checkPause(sample, video, options, result, scenesCsv, statsCsv, shotFiles, i === 0);
     if (SPLIT_RUNS.includes(run)) await checkRanges(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
     if (SPLIT_RUNS.includes(run) && !light) await checkResume(sample, video, run, options, result, scenesCsv, statsCsv, shotFiles);
