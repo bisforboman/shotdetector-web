@@ -69,18 +69,6 @@ publish").
 
 ## Waiting
 
-- The reference tone left out of the detection
-  - Why: ShotDetector 3.25.0's `YuvVideo.ReferenceTone` and `DetectionOptions.TrimReferenceTone` leave a file's
-    leading tone (and the bars over it) out of the shots, as `Detect(path)` does with FFmpeg finding the tone; the page
-    measures the tone already (`Mp4Audio`, the sound's worker), alongside the run, not before it.
-  - Where: decision [2026-11-04-reference-tone.md](decisions/2026-11-04-reference-tone.md), the owner's 1A and 2A:
-    ShotDetector's ranges taking the trim first (3.28.0's is "not for ranges": `ScoreRange` refuses a time range),
-    then an option on the page, off by default, the run waiting for the sound's worker's tone, `YuvVideo.ReferenceTone`
-    set from it in `Api`; NativeCheck's run with `TrimReferenceTone` on the tone sample, whole, split and resumed.
-  - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
-  - Status: In progress (2026-11-09, the owner's choice through AskUserQuestion): the trim in ranges released in
-    ShotDetector 3.30.0 (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07"
-
 - A stop in the leading reference tone, exactly (upstream)
   - Why: a run leaving the reference tone out has no frames of its own before the leading tone ends, and
     ShotDetector's `Merge` refuses a run stopped there ("StartTime is after the last frame"), as `Detect(path)` refuses a
