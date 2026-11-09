@@ -12,7 +12,7 @@
 // against it exactly, on every run, split and resumed too; a deinterlaced run's are of its deinterlaced frames, and the
 // card says so. A stopped run kept before the page looked for them in every run says why there are none. The black
 // spans are ShotDetector's too (BlackSpans, decision 2026-11-04-black-spans-and-times.md), and both are timed from the
-// video stream's start, as ShotDetector and ffmpeg -vf blackdetect,freezedetect give them.
+// file's start (the earliest stream's), as ShotDetector and ffmpeg -vf blackdetect,freezedetect give them.
 import { call, card, frameSeconds, on } from '../app.js';
 import { lane, seek, timecode, x } from '../timeline.js';
 
@@ -37,7 +37,7 @@ const pictureLane = lane('Picture', track => {
   const { summary, video } = picture, seconds = f => frameSeconds(video, f);
   track.replaceChildren(svg(summary, seconds),
     ...summary.black.map(s => mark('black', s, seconds, `Black: ${timecode(seconds(s.firstFrame))} to ` +
-      `${timecode(seconds(s.endFrame))}, as blackdetect reports it from ${s.start} s to ${s.end} s (from the stream's start)`)),
+      `${timecode(seconds(s.endFrame))}, as blackdetect reports it from ${s.start} s to ${s.end} s (from the file's start)`)),
     ...summary.bars.map(s => mark('bars', s, seconds, `Colour bars: ${timecode(seconds(s.firstFrame))} to ` +
       `${timecode(seconds(s.endFrame))}`)),
     ...(summary.freeze.spans ?? []).map(s => mark('freeze', { ...s, endFrame: s.endFrame ?? summary.frames }, seconds,
@@ -183,7 +183,7 @@ function fill({ summary: p, video }) {
   const shorter = `${short} shorter, on the timeline`;
   if (long.length === 0) section.append(paragraph(`Black: none of 2 s or more${short > 0 ? `; ${shorter}` : ''}.`));
   for (const s of long) {
-    section.append(paragraph(`Black: ${at(s.firstFrame)} to ${at(s.endFrame)}`, `blackdetect: ${s.start} s to ${s.end} s from the stream's start`));
+    section.append(paragraph(`Black: ${at(s.firstFrame)} to ${at(s.endFrame)}`, `blackdetect: ${s.start} s to ${s.end} s from the file's start`));
   }
   if (long.length > 0 && short > 0) section.append(paragraph(`Shorter than 2 s: ${short}, on the timeline.`));
 
@@ -226,7 +226,7 @@ function fill({ summary: p, video }) {
   else if (spans.length === 0) section.append(paragraph('Still pictures: none of 2 s or more.'));
   for (const s of spans ?? []) {
     section.append(paragraph(`Still picture: ${at(s.firstFrame)} to ${s.endFrame === null ? 'the end' : at(s.endFrame)}`,
-      `freezedetect: from ${s.start} s${s.end === null ? ', still where the frames end (no freeze_end)' : ` to ${s.end} s`}, from the stream's start`));
+      `freezedetect: from ${s.start} s${s.end === null ? ', still where the frames end (no freeze_end)' : ` to ${s.end} s`}, from the file's start`));
   }
 }
 

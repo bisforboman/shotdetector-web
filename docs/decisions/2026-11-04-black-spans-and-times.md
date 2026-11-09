@@ -31,3 +31,10 @@ before #147 merged; its answers change two things.
   A run kept before (its options without `black`) resumes with `black: false`, its ranges scored without: its black spans
   are then the page's own measures', timed from the stream's start too.
 - `PictureFreeze.Of` no longer adds the stream's start.
+
+## Since (2026-11-09)
+
+The stream's start and the file's are the same only where the video starts first. ShotDetector 3.30.0 times both kinds
+of span from the file's start (`YuvVideo.FileStartPts`, the earliest stream's), as ffmpeg without `-copyts` does, and
+the core gives it (backlog-done, "The spans' times when another stream starts first"): the card says "from the file's
+start".

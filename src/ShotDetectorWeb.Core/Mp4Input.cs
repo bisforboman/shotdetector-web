@@ -83,7 +83,7 @@ public sealed class Mp4Input : VideoInput
         var timeBase = new FrameReader.Rational(1, checked((int)header.Timescale));
         var packets = new VideoPackets.Builder(timeBase, (int)Math.Min(header.SampleCount, Array.MaxLength));
         var samples = new SampleDurations();
-        long? duration = FormatDuration(demuxer, packets, samples);
+        var (duration, fileStartUs) = FormatDuration(demuxer, packets, samples);
         Packets = packets.Build();
         CodecHeader? picture = null;
         if (hosted is not null)
@@ -131,6 +131,10 @@ public sealed class Mp4Input : VideoInput
                 : ChromaLocationName(sps!.ChromaLocation),
             TimeBase = timeBase,
             StartPts = firstPts,
+            // FFmpeg's format start_time (the earliest stream's start, before the video's when the audio starts first) in
+            // the video's time base, as ffmpeg's command line subtracts it (its ts_offset, av_rescale_q's rounding): the
+            // black spans and still pictures count from it, as blackdetect and freezedetect print them.
+            FileStartPts = fileStartUs is long us ? Mp4Header.Rescale(us, timeBase.Den, 1_000_000L * timeBase.Num) : null,
             // FFmpeg's nb_frames is the 'stts' count alone: unknown with an empty 'moov', short of the fragments' with
             // samples in it (ShotDetector takes the length from the duration without it, as OpenCV).
             FrameCount = header.SampleCount > 0 ? header.SampleCount : null,
@@ -246,7 +250,8 @@ public sealed class Mp4Input : VideoInput
 
     /// <summary>
     /// FFmpeg's AVFormatContext.duration in microseconds (update_stream_timings): from the earliest stream start to the
-    /// latest stream end, video and audio, as the edit lists present them; null without packets. ShotDetector reports it
+    /// latest stream end, video and audio, as the edit lists present them; null without packets. With it, the format's
+    /// start_time in microseconds (the earliest stream start, rescaled from each stream's time base as FFmpeg does). ShotDetector reports it
     /// as <see cref="DetectedVideo.Duration"/> (through ffprobe's six decimals); with the frame count known it changes no
     /// result. Adds each video packet to <paramref name="packets"/> and its duration to <paramref name="samples"/> on the way.
     /// Each stream's end is its start plus FFmpeg's stream duration (ManagedCodecs' <see cref="VideoStreamInfo.Duration"/>
@@ -255,7 +260,7 @@ public sealed class Mp4Input : VideoInput
     /// packet's end, which can be later (at a variable rate a packet lasts its decode-order delta, not its frame's) or
     /// earlier (an edit list from media_time 0 before a composition offset discards the last packets inside it).
     /// </summary>
-    static long? FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples)
+    static (long? Duration, long? StartUs) FormatDuration(Mp4Demuxer demuxer, VideoPackets.Builder packets, SampleDurations samples)
     {
         var spans = new Dictionary<int, (long Start, long End, ManagedCodecs.Rational TimeBase)>();
         foreach (var packet in demuxer.ReadPacketInfo())
@@ -294,7 +299,7 @@ public sealed class Mp4Input : VideoInput
         }
 
         if (spans.Count == 0)
-            return null;
+            return (null, null);
         // Each stream ends where its stream's duration says, from its start (above): the video from its first shown frame,
         // the audio after the samples skipped. An audio track's 'mdhd' can be shorter than its packets (an Android
         // phone's: 196605 of 192 frames' 196608), which FFmpeg's end follows.
@@ -314,7 +319,7 @@ public sealed class Mp4Input : VideoInput
         }
 
         long duration = Math.Max(longest, last - first);
-        return duration > 0 ? duration : null;
+        return (duration > 0 ? duration : null, first);
     }
 
     /// <summary>

@@ -229,6 +229,7 @@ static YuvVideo Oracle(string path)
     var info = probe.Video!;
     string colorSpace, colorRange;
     string? chromaLocation;
+    long fileStart;
     // Every frame FFmpeg decodes, its pts: the frames' labels, without those an edit list leaves out (ShotDetector's
     // YuvVideo.FrameTimestamps, which the core gives at every rate).
     var timestamps = new List<long>();
@@ -240,6 +241,9 @@ static YuvVideo Oracle(string path)
         colorRange = decoder.ColorRange ?? info.ColorRange ?? "";
         // The decoder's, as the file path reads it (the first frame's; the stream's can be the container's).
         chromaLocation = decoder.ChromaLocation;
+        // The file's start in the video's time base, as the file path takes it (FrameReader's -StartOffset: ffmpeg's
+        // ts_offset, the format's start_time): the black spans and still pictures count from it.
+        fileStart = -decoder.StartOffset;
         do
             timestamps.Add(decoder.FramePts ?? long.MinValue);
         while (decoder.Next());
@@ -258,6 +262,7 @@ static YuvVideo Oracle(string path)
         ChromaLocation = chromaLocation,
         TimeBase = info.TimeBase,
         StartPts = info.StartPts ?? 0,
+        FileStartPts = fileStart,
         FrameCount = info.FrameCount,
         // As the file path takes the display matrix's angle (VideoReader): rounded, its remainder by 360.
         Rotation = info.Rotation is { } r ? (int)Math.Round(r) % 360 : 0,
@@ -289,6 +294,8 @@ static List<string> Differences(YuvVideo ours, YuvVideo ffmpeg)
     Check("chroma location", ours.ChromaLocation, ffmpeg.ChromaLocation);
     Check("time base", ours.TimeBase, ffmpeg.TimeBase);
     Check("start pts", ours.StartPts, ffmpeg.StartPts);
+    // Null is the video's start (ShotDetector's YuvVideo.FileStartPts), right for a file whose video starts first.
+    Check("file start pts", ours.FileStartPts ?? ours.StartPts, ffmpeg.FileStartPts ?? ffmpeg.StartPts);
     Check("frame count", ours.FrameCount, ffmpeg.FrameCount);
     Check("duration", ours.Duration, ffmpeg.Duration);
     Check("rotation", ours.Rotation, ffmpeg.Rotation);

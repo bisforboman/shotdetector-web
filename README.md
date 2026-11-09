@@ -658,6 +658,7 @@ path's. ManagedCodecs doesn't expose all of it, so the library reads it itself. 
 | FrameCount | 'stts' sample count (FFmpeg's nb_frames; an edit list that ends early doesn't change it; null in a fragmented file with an empty 'moov', the 'moov' box's samples alone where it has some) |
 | TimeBase | 1 / the 'mdhd' timescale |
 | StartPts | the first decoded frame's pts (display order, edit list applied: an empty edit makes it nonzero) |
+| FileStartPts | FFmpeg's format start_time: the earliest stream's start (the audio's after the samples its edit list skips), rescaled to the video's time base as ffmpeg's command line subtracts it; ShotDetector times the black spans and still pictures from it. NativeCheck compares it, the AVI's and the WebM's (not given: the video's start) too, with FrameReader's `-StartOffset` |
 | FrameTimestamps | every shown frame's pts, sorted (the packets an edit list leaves out not among them), at any rate: ShotDetector places a variable rate's frames by them, and since 3.29.0 ends a stopped run at the last frame's time plus a frame at the average rate, as the file path stopped there does. `VideoInput.VariableRate` (`Open`'s `variableRate`) says whether some frame is over half a frame off the average rate's grid, ShotDetector's own constant-rate check |
 | ColorSpace, FullRange, PixelFormat | the SPS's VUI where it has them, else the 'colr' box (as FFmpeg's h264 decoder); the SPS's chroma format and bit depth: yuv420p, yuv422p or yuv420p10le, full range yuvj420p or yuvj422p at 8 bits |
 | ChromaLocation | the SPS's VUI chroma_sample_loc_type_top_field (FFmpeg's location is it plus one), else left, FFmpeg's H.264 default; ShotDetector uses it for 10-bit only |
@@ -789,12 +790,14 @@ are those found by its stop, one still going there without an end. A stopped run
 without, resumes without (its options have no `freeze`: the page gives it `freeze: false`), and the card says why.
 The black spans are ShotDetector's too (`BlackDetect` with `d=0`, `BlackSpans`, on every run, split and resumed; a
 deinterlaced run's of its deinterlaced frames), each marked long (`long`) by blackdetect's own rule for its default 2 s
-(`PictureSummary.BlackOf`), and both kinds of span are timed as ShotDetector times them, from the video stream's start,
-as `ffmpeg -vf blackdetect,freezedetect` prints them without `-copyts` (a stream that starts at 0.08 s, as
-vfr-fragmented-320x240.mp4: its still at 5.6 s, not 5.68): decision
+(`PictureSummary.BlackOf`), and both kinds of span are timed as ShotDetector times them, from the file's start (the
+earliest stream's: `YuvVideo.FileStartPts`, which `Mp4Input` gives from FFmpeg's format `start_time`), as
+`ffmpeg -vf blackdetect,freezedetect` prints them without `-copyts` (a stream that starts at 0.08 s, as
+vfr-fragmented-320x240.mp4: its still at 5.6 s, not 5.68; caminandes-fragmented.mp4, whose video starts 1/24 s after
+its audio: its black from 0.0416667 s): decision
 [2026-11-04-black-spans-and-times.md](docs/decisions/2026-11-04-black-spans-and-times.md), the owner's choice. A run
 kept before (no `black` in its options: the page gives it `black: false`) resumes without, its black spans the page's
-own measures' (FrameReader's `PictureMeter`, the same counts), from the stream's start too.
+own measures' (FrameReader's `PictureMeter`, the same counts), from the file's start too.
 
 ## The npm package
 
@@ -897,7 +900,7 @@ tools/check.sh wasm samples/with-audio-320x240-25.mp4   # only the samples named
   its YAVG and BRNG to the digits it prints, `cropdetect=reset=1:skip=0`'s x1, x2, y1, y2, w, h, x and y equal;
   `cropdetect`'s crop with its defaults after the last frame; `blackdetect`'s spans at `d=0` and at its default 2 s,
   ShotDetector's `BlackSpans` (those the summary marks long at 2 s), their times to the digits it prints (a pass of
-  their own without `-copyts`: from the stream's start, as ShotDetector's); `freezedetect`'s still pictures with
+  their own without `-copyts`: from the file's start, as ShotDetector's); `freezedetect`'s still pictures with
   its defaults (ShotDetector's `FreezeSpans`), their `freeze_start` and `freeze_end` to the digits it prints (one still
   at the end has no end), and a run deinterlacing every frame's still pictures and black spans against the FFmpeg path's
   (FFmpeg's yadif), frames and times. The colour bars by their definition:
@@ -1327,7 +1330,7 @@ decisions `2026-10-25-one-page.md` and `2026-10-26-new-ui.md`):
   `2026-10-30-mjpeg-avi.md`: MJPEG in AVI, the common `VideoInput`, AVI audio described, the page's line;
   `2026-11-01-freeze-spans.md`: still pictures only in a run that reads every frame in order, the owner's A;
   `2026-11-03-spans-on-ranges.md`: ShotDetector's still pictures on every run, split and resumed, the page's black spans;
-  `2026-11-04-black-spans-and-times.md`: ShotDetector's black spans too, both timed from the stream's start;
+  `2026-11-04-black-spans-and-times.md`: ShotDetector's black spans too, both timed from the stream's start (from the file's start since ShotDetector 3.30.0);
   `2026-11-02-correcting-cuts.md`: correcting the cuts on the page, a corrected finished run kept, `LoadScenes` as it
   is; `2026-11-02-browser-decoder.md`: the files the page refuses, a refusal that says what to do, then VP9 and AV1
   through the browser's decoder, checked in Chromium; `2026-11-02-webm-browser-decoder.md`: how VP9 and AV1 in WebM are
@@ -1342,7 +1345,7 @@ a rotation, a variable frame rate and deinterlacing there, 3.24.0 the first refu
 video's, shotdetector#625, 3.25.0 the first with ranges that deinterlace, shotdetector#628, 3.26.0 the first saying where a range's final scores
 end, `RangeScores.EndFrame`, 3.27.0 the first whose hash detector gives x64's bits on browser-wasm, shotdetector#701;
 3.29.0's end of a stopped run from `YuvVideo.FrameTimestamps`, 3.30.0's ranges with the reference-tone trim and spans from
-`YuvVideo.FileStartPts`, which the core doesn't give yet: rows of docs/backlog.md),
+`YuvVideo.FileStartPts`, which `Mp4Input` gives; the trim is a row of docs/backlog.md),
 FrameReader (2.25.0),
 ManagedCodecs (0.8.1: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on

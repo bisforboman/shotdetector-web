@@ -8,14 +8,14 @@
 //   skip=2, round=16) after the last frame, its crop equal;
 // - blackdetect with d=0 and with its default 2 s: ShotDetector's black spans (BlackSpans, decision
 //   2026-11-04-black-spans-and-times.md), the 2 s ones those the summary marks long, their times to the digits FFmpeg
-//   prints (without -copyts: from the video stream's start, as ShotDetector times them);
+//   prints (without -copyts: from the file's start, the earliest stream's, as ShotDetector times them);
 // - the colour bars, which no FFmpeg filter finds, by their definition: on the samples whose last shot is smptehdbars
 //   (make-samples.sh's three(), the interlaced ones woven, the rotated ones upright, the
 //   variable-rate ones at their own timestamps, the 10-bit ones in 10-bit levels), one span, the last shot's frames (from the default run's last cut; decoded frame 100 on for
 //   the variable-rate ones, whose cuts are numbered by time at the average rate); on the fades sample
 //   (smptebars fading in for 0.3 s), one span to the end, starting within the fade; on the others, none;
 // - freezedetect with its defaults: ShotDetector's still pictures (FreezeSpans, decision 2026-11-03-spans-on-ranges.md),
-//   their freeze_start and freeze_end to the digits FFmpeg prints (from the stream's start too; one still at the end has
+//   their freeze_start and freeze_end to the digits FFmpeg prints (from the file's start too; one still at the end has
 //   no freeze_end); and a run deinterlacing (Deinterlace On), whose still pictures and black spans are of its
 //   deinterlaced frames, against the FFmpeg path's (Detect(path): FFmpeg's yadif), frames and times.
 // And the run split into ranges as the page splits it (at most 4), each measured by its own meter while it is scored:
@@ -159,7 +159,7 @@ static class PictureCheck
     static DetectionOptions Spans => new() { FreezeDetect = new FreezeDetectOptions(), BlackDetect = new BlackDetectOptions { MinDuration = TimeSpan.Zero } };
 
     /// <summary>
-    /// The still pictures against freezedetect's, both from the stream's start (ffmpeg without -copyts; ShotDetector's).
+    /// The still pictures against freezedetect's, both from the file's start (ffmpeg without -copyts; ShotDetector's).
     /// </summary>
     static string Freeze(PictureFreeze ours, List<FreezeLine> theirs, List<string> problems)
     {
@@ -333,8 +333,8 @@ static class PictureCheck
     /// <summary>
     /// Two passes of FFmpeg 8.1 (the ffmpeg beside the libraries) over the video: signalstats and the per-frame cropdetect
     /// printed by metadata=print and cropdetect with its defaults in the log, -copyts keeping the stream's own timestamps;
-    /// then blackdetect at d=0 and at its default and freezedetect, without -copyts (their times from the stream's start,
-    /// as ShotDetector's). -reinit_filter 0 keeps one graph, configured from the first
+    /// then blackdetect at d=0 and at its default and freezedetect, without -copyts (their times from the file's start, the
+    /// earliest stream's, as ShotDetector's). -reinit_filter 0 keeps one graph, configured from the first
     /// frame, when a frame's tags change (tags-change-*.mp4): ffmpeg would otherwise build the graph again there, which
     /// starts the metadata file and the filters' state over, and the meter measures every frame with the video's range.
     /// </summary>
@@ -350,8 +350,9 @@ static class PictureCheck
             string graph = $"signalstats=stat=brng,cropdetect=reset=1:skip=0,metadata=mode=print:file={metadata},cropdetect";
             string log = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-copyts", "-reinit_filter", "0", "-apply_cropping", "codec", "-i", sample,
                 "-map", "0:v:0", "-vf", graph, "-f", "null", "-");
-            // The spans without -copyts: ffmpeg's times from the video stream's start, as ShotDetector's (a fragmented
-            // stream starting at 0.08 s: its still at 5.6 s, not 5.68).
+            // The spans without -copyts: ffmpeg's times from the file's start (the earliest stream's), as ShotDetector's
+            // (a fragmented stream starting at 0.08 s: its still at 5.6 s, not 5.68; caminandes-fragmented.mp4's video
+            // 1/24 s after its audio: its black from 0.0416667 s).
             string spansLog = Run(Path.Combine(libs, "ffmpeg"), "-hide_banner", "-nostats", "-nostdin", "-reinit_filter", "0", "-apply_cropping", "codec", "-i", sample,
                 "-map", "0:v:0", "-vf", "blackdetect=d=0,blackdetect,freezedetect", "-f", "null", "-");
 
