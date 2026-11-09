@@ -89,7 +89,10 @@ publish").
   - Where: ShotDetector's `ToneStart` public, or `Merge` giving a run stopped before its start (no shots); then `Api`'s
     `StopsFrom` on it, or the hold dropped.
   - Done when: app-check's tone run stopped in the leading tone gives what ShotDetector says, with no estimate.
-  - Status: Waiting (2026-11-09): asked of the shotdetector coordinator (the owner's choice through AskUserQuestion)
+  - Status: Waiting (2026-11-09): asked of the shotdetector coordinator (the owner's choice through AskUserQuestion);
+    the owner chose a public `ShotDetection.ToneStart(YuvVideo, DetectionOptions?)` (shotdetector#770, its decision
+    2026-11-09-tone-start-public.md; `Merge` unchanged: a run stopped one frame past it merges), in the next ShotDetector
+    release: then `StopsFrom` is `ToneStart` + 1
 
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but

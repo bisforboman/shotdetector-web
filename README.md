@@ -754,7 +754,7 @@ and a resumed run trim as the whole run does (ShotDetector 3.30.0 takes the trim
 in its options. The run still reads every frame: its answer's `frameCount` is the frames read from 0 (a whole run's,
 the video's), its shots and stats rows those between the tones. A Stop in the leading tone takes effect two frames
 past its end (`Api`'s `StopsFrom`), as a run stopped before its first frame has nothing ShotDetector's merge can show;
-ShotDetector's own start frame (`ToneStart`) isn't public, asked of shotdetector (backlog, Waiting). Only AAC in MP4 is
+ShotDetector's own start frame (`ToneStart`) is public from its next release (shotdetector#770; backlog, Waiting). Only AAC in MP4 is
 measured: on other audio the tone is none and nothing is left out. Checked against `Detect(path)` with FFmpeg finding
 the tone (Checks, `ToneCheck.cs`).
 
