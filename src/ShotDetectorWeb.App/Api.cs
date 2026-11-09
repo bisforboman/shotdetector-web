@@ -193,8 +193,11 @@ public static partial class Api
     {
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
-        input.ReferenceTone = request.ToneSegments();
-        _stopsFrom = StopsFrom(input, input.ReferenceTone);
+        // The video replaced only when the tone changes: a run that keeps the tone runs on the video as opened.
+        var tone = request.ToneSegments();
+        if (tone is not null || input.ReferenceTone is not null)
+            input.ReferenceTone = tone;
+        _stopsFrom = StopsFrom(input, tone);
         return request;
     }
 

@@ -474,19 +474,20 @@ async function start(how = 'detect') {
 // With the reference tone left out (decision 2026-11-04-reference-tone.md), a new run waits for the sound's tone,
 // which it sends: the request's tone (Api's DetectRequest), kept with a stopped run's options, so a resume doesn't wait.
 async function detect(resumed = null) {
-  const run = resumed?.options ?? options(), heard = listen(), video = opened;
+  const run = resumed?.options ?? options(), video = opened;
   if (!resumed && toneChoice.value === 'out') {
     setState('opening');
     progress.removeAttribute('value');
     say('Waiting for the sound to find the reference tone…',
       'The run leaves out the line-up tone the sound finds at the start and end; it starts once the sound has been read.');
-    const audio = await heard;
+    const audio = await listen();
     if (opened !== video || state !== 'opening') return; // a new file, or stopped while waiting
     run.tone = (audio?.referenceTone ?? []).map(({ start, end, level }) => ({ start, end, level }));
   }
   setState('detecting');
   if (resumed) setForm(resumed.options);
   const plan = await ranges(opened, run, resumed?.from ?? 0);
+  listen();
   await go(run, plan, null, resumed);
 }
 
