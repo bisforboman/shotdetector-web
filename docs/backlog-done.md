@@ -1921,4 +1921,5 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     FrameReader's `-StartOffset` on every file; a new sample, `spans-fragmented-320x240-25.mp4` (video 0.08 s after its
     AAC, black and a still picture), on which NativeCheck fails without it. realworld.sh's check on
     `caminandes-fragmented.mp4` "All agree", PictureCheck's black from 0.042 s; native "All agree" on every sample (53);
-    AOT wasm 5160 of 5160 files identical
+    AOT wasm 5160 of 5160 files identical (53 samples); the page check in Chromium passed (locally on the container's
+    Chromium 1243 under Playwright 1.65.0, Firefox left out)
