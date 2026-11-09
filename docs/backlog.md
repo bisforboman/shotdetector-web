@@ -78,8 +78,8 @@ publish").
     then an option on the page, off by default, the run waiting for the sound's worker's tone, `YuvVideo.ReferenceTone`
     set from it in `Api`; NativeCheck's run with `TrimReferenceTone` on the tone sample, whole, split and resumed.
   - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
-  - Status: Waiting (2026-11-04): asked of the shotdetector coordinator, the trim in ranges; released in ShotDetector 3.30.0
-    (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07": ready to start
+  - Status: In progress (2026-11-09, the owner's choice through AskUserQuestion): the trim in ranges released in
+    ShotDetector 3.30.0 (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07"
 
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
