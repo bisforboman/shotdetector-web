@@ -350,6 +350,17 @@ if ! awk -v l="$level" -v g="$gap" 'BEGIN { split(g, x, " "); exit !(l > -23.06 
   echo "$s: the tone's RMS level is ${level:-?} dB, the gap (end, length) is ${gap:-not found}." >&2; exit 1
 fi
 
+# The reference tone left out of the detection in ranges (decision 2026-11-04-reference-tone.md): 6 s of the tone above,
+# 7 s of programme (low noise), 6 s of the tone again, under 19 s of four shots cut at 7, 9.4 and 12 s, a keyframe
+# every second, so that a split run's first range lies wholly inside the leading tone and the last inside the trailing
+# one. Trimmed (ShotDetector's TrimReferenceTone), the detection runs from 6 s to 13 s, its cuts at 7, 9.4 and 12 s.
+s="$out/tone-cuts-320x240-25.mp4"
+enc -filter_complex "testsrc2=s=320x240:r=25:d=7[v0];mandelbrot=s=320x240:r=25,trim=duration=2.4[v1];testsrc=s=320x240:r=25:d=2.6[v2];cellauto=s=320x240:r=25,trim=duration=7[v3];[v0][v1][v2][v3]concat=n=4:v=1:a=0[v];$tone[a];anoisesrc=r=48000:a=0.02:d=7:seed=1[b];$tone[c];[a][b][c]concat=n=3:v=0:a=1,pan=stereo|c0=c0|c1=c0[s]" \
+  -map '[v]' -map '[s]' -c:v libx264 -pix_fmt yuv420p -x264-params keyint=25:min-keyint=25:scenecut=0 -c:a aac "$s"
+got=$("$fp" -v error -select_streams a -show_entries stream=codec_name,sample_rate,channels,duration -of csv=p=0 "$s")
+got+=" $("$fp" -v error -select_streams v -show_entries frame=key_frame -of csv=p=0 "$s" | grep -c '^1')"
+[[ $got == 'aac,48000,2,19.000000 19' ]] || { echo "$s: the audio and the keyframes are '$got'" >&2; exit 1; }
+
 # The same, fragmented (the streams copied, frag_keyframe+empty_moov+default_base_moof, as realworld.sh's
 # caminandes-fragmented.mp4): no edit list takes the AAC priming out, so the first audio packet is decoded whole and
 # keeps it as a longer duration (3840, its 1024 samples then a gap of 2816): FFmpeg's silencedetect times the silence by
