@@ -142,7 +142,7 @@ public static partial class Api
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
         return Answered(input, options, result, ranges,
             PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result),
-            earlier.Damaged.Concat(input.DamagedFrames(result.FrameCount)));
+            earlier.Damaged.Concat(input.DamagedFrames(Read(result, ranges, options))));
     }
 
     /// <summary>
@@ -156,21 +156,33 @@ public static partial class Api
     static string Answered(VideoInput input, DetectionOptions options, DetectionResult result, IReadOnlyList<RangeScores> ranges,
         PictureMeasures? picture, PictureFreeze freeze, IEnumerable<int> damaged)
     {
-        var read = damaged.Where(f => f < result.FrameCount).Distinct().Order().ToArray();
-        _warnings = VideoInput.DamagedWarning(read, result.FrameCount) is { } warning ? [.. result.Warnings, warning] : result.Warnings;
+        int frames = _read = Read(result, ranges, options);
+        var read = damaged.Where(f => f < frames).Distinct().Order().ToArray();
+        _warnings = VideoInput.DamagedWarning(read, frames) is { } warning ? [.. result.Warnings, warning] : result.Warnings;
         _result = result;
         _corrected = null;
-        _picture = picture?.Take(result.FrameCount);
+        _picture = picture?.Take(frames);
         _freeze = freeze;
         _black = _picture is null ? null : PictureSummary.BlackOf(result, _picture, input.Video);
         _kept = new KeptRun(ranges, _picture, read);
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.CutFrames, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
-                result.FrameCount < input.ShownFrames, _warnings),
+            new DetectResponse(shots.RootElement, result.CutFrames, frames, result.Video.FrameRate, result.Video.Duration,
+                frames < input.ShownFrames, _warnings),
             ApiJson.Default.DetectResponse);
     }
+
+    /// <summary>The frames the last run read from frame 0 (<see cref="Read"/>), which its answer gives as <c>frameCount</c>.</summary>
+    static int _read;
+
+    /// <summary>
+    /// The frames a run read from frame 0: the result's <see cref="DetectionResult.FrameCount"/>, but for a run leaving the
+    /// reference tone out, whose frames are its own from <see cref="DetectionResult.FirstFrame"/>, after the leading tone,
+    /// to the trailing tone's start, while its ranges read on to the video's end or the stop: theirs.
+    /// </summary>
+    static int Read(DetectionResult result, IReadOnlyList<RangeScores> ranges, DetectionOptions options) =>
+        options.TrimReferenceTone && ranges.Count > 0 ? ranges[^1].FirstFrame + ranges[^1].FrameCount : result.FrameCount;
 
     /// <summary>
     /// The page's options JSON (<see cref="DetectRequest"/>) for a run on <paramref name="input"/>, whose
@@ -372,8 +384,10 @@ sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
 sealed class RunCancelledException(OperationCanceledException inner) : Exception("The run was cancelled.", inner);
 
 /// <summary>
-/// What <see cref="Api.Detect"/> returns. Stopped: the run was stopped (<see cref="Api.Stop"/>) and its frames ended at
-/// <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is still the file's.
+/// What <see cref="Api.Detect"/> returns. FrameCount: the frames the run read from frame 0 (a run leaving the reference
+/// tone out reads them all, its shots those between the tones). Stopped: the run was stopped (<see cref="Api.Stop"/>) and
+/// its frames ended at <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is
+/// still the file's.
 /// CutFrames: the frames the shots after the first start on, counted from 0 as decoded
 /// (<see cref="DetectionResult.CutFrames"/>), which the page's corrections are in.
 /// Warnings: <see cref="DetectionResult.Warnings"/>' sentences as ShotDetector words them (empty when there are none),

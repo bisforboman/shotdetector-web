@@ -36,15 +36,18 @@ public static partial class Api
         var run = Result;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
         var starts = JsonSerializer.Deserialize(startsJson, CorrectionsJson.Default.Int32Array);
-        bool stopped = run.FrameCount < input.ShownFrames;
+        // The frames the run read from 0 (Answered's): a run leaving the reference tone out has its shots between the
+        // tones, and LoadScenes leaves a cut outside them out.
+        int read = _read;
+        bool stopped = read < input.ShownFrames;
         if (starts is null)
         {
             _corrected = null;
         }
         else
         {
-            if (starts.Any(s => s < 0 || s >= run.FrameCount))
-                throw new ArgumentOutOfRangeException(nameof(startsJson), $"A shot starts outside the {run.FrameCount} frames read.");
+            if (starts.Any(s => s < 0 || s >= read))
+                throw new ArgumentOutOfRangeException(nameof(startsJson), $"A shot starts outside the {read} frames read.");
             if (!starts.Contains(0))
                 throw new ArgumentException("The first shot starts at frame 0.", nameof(startsJson));
             _corrected = CorrectedCuts.Load(run, starts, _keptOptions ?? new DetectionOptions());
@@ -53,7 +56,7 @@ public static partial class Api
         var shown = Shown;
         using var shots = JsonDocument.Parse(Shots.Json(shown.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, shown.CutFrames, run.FrameCount, run.Video.FrameRate, run.Video.Duration,
+            new DetectResponse(shots.RootElement, shown.CutFrames, read, run.Video.FrameRate, run.Video.Duration,
                 stopped, _warnings),
             ApiJson.Default.DetectResponse);
     }
