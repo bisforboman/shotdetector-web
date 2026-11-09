@@ -29,6 +29,19 @@ public abstract partial class VideoInput
     public YuvVideo Video { get; private protected set; } = null!;
 
     /// <summary>
+    /// The reference tone in the file's audio as the caller found it (<see cref="Mp4Audio"/>'s
+    /// <see cref="AudioMeasures.ReferenceTone"/>, FrameReader's <c>ReferenceToneFinder</c>), for a run with
+    /// <see cref="DetectionOptions.TrimReferenceTone"/>: <see cref="Video"/>'s <see cref="YuvVideo.ReferenceTone"/> from now
+    /// on, timed from the file's start as <see cref="YuvVideo.FileStartPts"/> says (decision 2026-11-04-reference-tone.md).
+    /// Null: none given (the default), as opened.
+    /// </summary>
+    public IReadOnlyList<FrameReader.ToneSegment>? ReferenceTone
+    {
+        get => Video.ReferenceTone;
+        set => Video = Video with { ReferenceTone = value };
+    }
+
+    /// <summary>
     /// Whether the frames don't come at the average rate: some frame is more than half a frame from where the rate puts
     /// it from the first (ShotDetector's constant-rate check, VideoReader.CheckConstantRate). The page says "on average"
     /// then and places frames by their own pts; <see cref="YuvVideo.FrameTimestamps"/> are given at every rate.
