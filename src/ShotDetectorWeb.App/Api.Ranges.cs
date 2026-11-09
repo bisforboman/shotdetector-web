@@ -39,8 +39,7 @@ public static partial class Api
     public static string Ranges(string optionsJson, int count, int from)
     {
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
-            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var request = Requested(input, optionsJson);
         var ranges = input.Ranges(request.ToOptions(), count, from).Select(r => new RangeResponse(r.FirstFrame, r.EndFrame)).ToArray();
         return JsonSerializer.Serialize(new RangesResponse(input.ShownFrames, ranges), RangesJson.Default.RangesResponse);
     }
@@ -62,8 +61,7 @@ public static partial class Api
         _kept = null;
         _rangeBytes = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
-            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var request = Requested(input, optionsJson);
         var range = input.Ranges(request.ToOptions(), count, from)[index];
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
@@ -129,8 +127,7 @@ public static partial class Api
         _black = null;
         _kept = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
-            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var request = Requested(input, optionsJson);
         DetectionResult result;
         IReadOnlyList<RangeScores> merged;
         var pictures = new List<PictureMeasures>();

@@ -95,8 +95,7 @@ public static partial class Api
         _kept = null;
         _toldInFirstRange = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
-            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var request = Requested(input, optionsJson);
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
         var go = input.Continue(earlier.Scores, request.ToOptions());
@@ -171,6 +170,19 @@ public static partial class Api
             new DetectResponse(shots.RootElement, result.CutFrames, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
                 result.FrameCount < input.ShownFrames, _warnings),
             ApiJson.Default.DetectResponse);
+    }
+
+    /// <summary>
+    /// The page's options JSON (<see cref="DetectRequest"/>) for a run on <paramref name="input"/>, whose
+    /// <see cref="VideoInput.ReferenceTone"/> it sets: the request's tone, or none (each run says, a split run's worker and
+    /// a resumed run's too).
+    /// </summary>
+    static DetectRequest Requested(VideoInput input, string optionsJson)
+    {
+        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
+            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        input.ReferenceTone = request.ToneSegments();
+        return request;
     }
 
     /// <summary>The last run's warnings, as its answer gave them (<see cref="Answered"/>).</summary>
@@ -308,6 +320,22 @@ sealed record DetectRequest
     /// </summary>
     public bool? Black { get; init; }
 
+    /// <summary>
+    /// The reference tone to leave out (<see cref="DetectionOptions.TrimReferenceTone"/>; decision
+    /// 2026-11-04-reference-tone.md): the segments the sound found (<see cref="Api.Audio"/>'s <c>referenceTone</c>, times in
+    /// seconds from the file's start), given when the page's option is on, every one, even none. Null: the option off.
+    /// </summary>
+    public IReadOnlyList<ToneRequest>? Tone { get; init; }
+
+    /// <summary>
+    /// <see cref="Tone"/> as FrameReader's segments, for <see cref="YuvVideo.ReferenceTone"/>: each time rounded to the
+    /// nearest tick (the finder's are on a 20 ms grid; <see cref="TimeSpan.FromSeconds(double)"/> can land a tick short).
+    /// </summary>
+    public IReadOnlyList<ToneSegment>? ToneSegments() =>
+        Tone?.Select(t => new ToneSegment(Ticks(t.Start), Ticks(t.End), t.Level)).ToArray();
+
+    static TimeSpan Ticks(double seconds) => TimeSpan.FromTicks((long)Math.Round(seconds * TimeSpan.TicksPerSecond));
+
     public DetectionOptions ToOptions(IProgress<DetectionProgress>? progress = null, IProgress<Shot>? onShot = null)
     {
         var options = new DetectionOptions
@@ -320,6 +348,7 @@ sealed record DetectRequest
             OnShot = onShot,
             FreezeDetect = Freeze == false ? null : new FreezeDetectOptions(),
             BlackDetect = Black == false ? null : new BlackDetectOptions { MinDuration = TimeSpan.Zero },
+            TrimReferenceTone = Tone is not null,
         };
         if (MinSceneLength is not null)
             options = options with { MinSceneLength = MinSceneLength };
@@ -332,6 +361,9 @@ sealed record DetectRequest
         return options;
     }
 }
+
+/// <summary>A segment of reference tone as the sound gave it (<see cref="ToneSegment"/>, times in seconds), for <see cref="DetectRequest.Tone"/>.</summary>
+sealed record ToneRequest(double Start, double End, double Level);
 
 /// <summary>One detector of a run with several.</summary>
 sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
