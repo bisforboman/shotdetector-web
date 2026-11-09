@@ -76,7 +76,7 @@ public static partial class Api
         RangeScores? scores = null;
         try
         {
-            scores = await DamagedPrefixed(() => input.ScoreRangeAsync(range, PauseEvery, Between, options, run.Token, picture));
+            scores = await DamagedPrefixed(() => input.ScoreRangeAsync(range, PauseEvery, n => Between(n, range.From), options, run.Token, picture));
         }
         catch (ShotDetectionException) when (_stopped)
         {

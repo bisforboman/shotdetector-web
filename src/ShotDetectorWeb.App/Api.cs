@@ -113,7 +113,7 @@ public static partial class Api
                 {
                     try
                     {
-                        scored.Add(await input.ScoreRangeAsync(go.Earlier, rest, PauseEvery, Between, options, run.Token, picture));
+                        scored.Add(await input.ScoreRangeAsync(go.Earlier, rest, PauseEvery, n => Between(n, rest.From), options, run.Token, picture));
                     }
                     catch (ShotDetectionException) when (_stopped && scored.Count > 0)
                     {
@@ -194,6 +194,7 @@ public static partial class Api
         var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
             ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
         input.ReferenceTone = request.ToneSegments();
+        _stopsFrom = StopsFrom(input, input.ReferenceTone);
         return request;
     }
 
@@ -229,11 +230,42 @@ public static partial class Api
     // Set by Stop on the JavaScript thread, read between frames by the run (on the thread pool with threads, Host).
     static volatile bool _stopping, _stopped;
 
-    static async ValueTask<bool> Between(int framesRead)
+    // framesRead: counted from the range's From (from), as the pause tells the worker; a stop waits for _stopsFrom,
+    // counted from frame 0.
+    static async ValueTask<bool> Between(int framesRead, int from)
     {
         await Host.Call(() => Pause(framesRead));
-        _stopped = _stopping;
-        return !_stopping;
+        _stopped = _stopping && from + framesRead >= _stopsFrom;
+        return !_stopped;
+    }
+
+    /// <summary>
+    /// The first frame a run can stop at (frames read from 0): 0, but for a run leaving the reference tone out, past the
+    /// leading tone (<see cref="StopsFrom"/>), so that the stopped run has frames of its own, which ShotDetector's merge
+    /// needs. Set by each request (<see cref="Requested"/>).
+    /// </summary>
+    static int _stopsFrom;
+
+    /// <summary>
+    /// Where a stop can take effect on <paramref name="input"/> leaving out <paramref name="tone"/>: two frames past the
+    /// first whose time (from the file's start, as the tone's) reaches the end of a tone that starts in the first 5 s,
+    /// where ShotDetector starts the run (its ToneStart, not public: asked of the shotdetector coordinator, 2026-11-09);
+    /// 0 without one.
+    /// </summary>
+    static int StopsFrom(VideoInput input, IReadOnlyList<FrameReader.ToneSegment>? tone)
+    {
+        var video = input.Video;
+        if (tone?.FirstOrDefault(t => t.Start < TimeSpan.FromSeconds(5)) is not { } leading
+            || video.FrameTimestamps is not { } pts || video.TimeBase is not { } tb)
+            return 0;
+        long origin = video.FileStartPts ?? video.StartPts;
+        for (int k = 0; k < pts.Count; k++)
+        {
+            if ((pts[k] - origin) * (double)tb.Num / tb.Den >= leading.End.TotalSeconds)
+                return Math.Min(k + 2, input.ShownFrames);
+        }
+
+        return input.ShownFrames;
     }
 
     /// <summary>The last <see cref="Detect"/>'s result, for the exports that show more of it.</summary>

@@ -156,6 +156,7 @@ let pausedFor = 0;      // how long it has been paused, in ms, before the pause 
 let pausedSince = 0;    // when the pause going on started
 let framesDone = 0;     // frames the current run has done, as its last progress report said
 let framesExpected = 0; // and how many it expects (0 when unknown)
+let leadingTone = null; // the end (s) of the reference tone the current run leaves out at the start, null without
 let sound = null;       // { video, audio }: the YuvVideo whose sound is measured (Audio once per opened file), and its promise
 let running = null;     // the current run's Detect call (a promise), while it goes
 let runner = null;      // what runs it, one worker: the page's worker, or the threaded runner (threads.js)
@@ -502,6 +503,9 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   // before it stay. Split, the merge tells them all.
   const before = resumed && !plan ? resumed.shots.slice(0, -1) : [];
   const keptBytes = resumed ? new Uint8Array(await resumed.blob.arrayBuffer()) : null;
+  // A tone left out at the start (ShotDetector's: one that starts in the first 5 s): a stop waits for its end (Api's
+  // StopsFrom), as a run stopped before its first frame has nothing to show.
+  leadingTone = run.tone?.find(t => t.start < 5)?.end ?? null;
   emit('run', { video: opened, options: run, ranges: plan?.ranges ?? null, fallback, from });
   clearShots();
   for (const shot of before) {
@@ -1018,17 +1022,22 @@ async function stop() {
   // Stopped while paused: the worker's 'stop' also lets the held run go on, to end at the pause it waits at.
   if (state === 'paused') pausedFor += performance.now() - pausedSince;
   setState('stopping');
+  // In the reference tone left out at the start: the run stops once it is past it (Api's StopsFrom), which can take
+  // longer than a pause, so the worker isn't given up on meanwhile.
+  const inTone = leadingTone !== null && frameSeconds(opened, framesDone) < leadingTone;
   if (split) {
     // Every worker ends its range at its next pause; splitRun merges what they scored from the start.
-    say(`Stopping ${split.done.length} workers at ${count(framesDone)} frames…`);
+    say(inTone ? `Stopping ${split.done.length} workers once past the reference tone (${leadingTone.toFixed(2)} s)…`
+      : `Stopping ${split.done.length} workers at ${count(framesDone)} frames…`);
     for (const w of [worker, ...helpers]) w.postMessage({ type: 'stop' });
     split.stop();
     return;
   }
-  say(`Stopping at frame ${count(framesDone)}…`);
+  say(inTone ? `Stopping once past the reference tone (${leadingTone.toFixed(2)} s)…` : `Stopping at frame ${count(framesDone)}…`,
+    inTone ? 'The run leaves the tone out, so it has no frames of its own before its end: it stops at its first ones.' : '');
   const run = running, video = opened, w = runner ?? worker;
   w.postMessage({ type: 'stop' });
-  if (await answered(run) || running !== run) return;
+  if (inTone || await answered(run) || running !== run) return;
   running = null;
   const onThreads = w === threaded;
   replaceRunner(w);
