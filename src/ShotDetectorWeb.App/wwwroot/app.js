@@ -128,6 +128,7 @@ const DEFAULT_WINDOW = 2, DEFAULT_MIN_CONTENT = 15;
 const $ = id => document.getElementById(id);
 const form = $('form'), fileInput = $('file'), drop = $('drop'), dropText = $('drop-text');
 const detector = $('detector'), threshold = $('threshold'), minLength = $('min-length'), deinterlace = $('deinterlace');
+const toneChoice = $('tone');
 const windowInput = $('window'), minContent = $('min-content');
 const detectButton = $('detect'), pauseButton = $('pause'), stopButton = $('stop');
 const resumeButton = $('resume'), forgetButton = $('forget');
@@ -155,7 +156,7 @@ let pausedFor = 0;      // how long it has been paused, in ms, before the pause 
 let pausedSince = 0;    // when the pause going on started
 let framesDone = 0;     // frames the current run has done, as its last progress report said
 let framesExpected = 0; // and how many it expects (0 when unknown)
-let measured = null;    // the YuvVideo whose sound the panels have been told (Audio once per opened file)
+let sound = null;       // { video, audio }: the YuvVideo whose sound is measured (Audio once per opened file), and its promise
 let running = null;     // the current run's Detect call (a promise), while it goes
 let runner = null;      // what runs it, one worker: the page's worker, or the threaded runner (threads.js)
 let threaded = null;    // the threaded runner, once a run has needed it
@@ -469,11 +470,22 @@ async function start(how = 'detect') {
 // first time; or the rest of a stopped run (resumed: the kept record), with the options it ran with, split as a run of
 // the rest's length would be. Stop (stop) ends it early with the result for the frames read, which is shown as a
 // finished run's is; a new file (choose) abandons it.
+// With the reference tone left out (decision 2026-11-04-reference-tone.md), a new run waits for the sound's tone,
+// which it sends: the request's tone (Api's DetectRequest), kept with a stopped run's options, so a resume doesn't wait.
 async function detect(resumed = null) {
+  const run = resumed?.options ?? options(), heard = listen(), video = opened;
+  if (!resumed && toneChoice.value === 'out') {
+    setState('opening');
+    progress.removeAttribute('value');
+    say('Waiting for the sound to find the reference tone…',
+      'The run leaves out the line-up tone the sound finds at the start and end; it starts once the sound has been read.');
+    const audio = await heard;
+    if (opened !== video || state !== 'opening') return; // a new file, or stopped while waiting
+    run.tone = (audio?.referenceTone ?? []).map(({ start, end, level }) => ({ start, end, level }));
+  }
   setState('detecting');
   if (resumed) setForm(resumed.options);
-  const run = resumed?.options ?? options(), plan = await ranges(opened, run, resumed?.from ?? 0);
-  listen();
+  const plan = await ranges(opened, run, resumed?.from ?? 0);
   await go(run, plan, null, resumed);
 }
 
@@ -699,6 +711,7 @@ function setForm(run) {
   windowInput.value = run.frameWindow ?? DEFAULT_WINDOW;
   minContent.value = run.minContentVal ?? DEFAULT_MIN_CONTENT;
   deinterlace.value = run.deinterlace ?? 'off';
+  toneChoice.value = run.tone ? 'out' : 'keep';
 }
 
 // A run on one worker: Api's Detect's JSON, with threads (how many the decoder had). On threads where the page can
@@ -881,9 +894,14 @@ async function answered(call) {
 // The file's sound, measured once per opened file in a worker of its own alongside its first run (decision
 // 2026-10-26-workers.md, "The audio pass"): one pass over the audio packets, which leaves detection's results as they
 // are. Not the page's error state if it fails: the run's results stand, and the panels say why there is no sound.
-async function listen() {
-  if (measured === opened) return;
-  const video = measured = opened, quiet = () => {};
+function listen() {
+  if (sound?.video !== opened) sound = { video: opened, audio: measure(opened) };
+  return sound.audio;
+}
+
+// The sound's measures (Api's Audio) for video, told to the panels ('audio'); null if a new file took the worker away.
+async function measure(video) {
+  const quiet = () => {};
   const w = newWorker({ progress: quiet, shot: quiet, failed: quiet });
   listening = { worker: w };
   let audio;
@@ -891,15 +909,16 @@ async function listen() {
     await callOn(w, 'Open', file);
     audio = JSON.parse(await callOn(w, 'Audio'));
   } catch (e) {
-    if (e.name === 'AbortError') return;
+    if (e.name === 'AbortError') return null;
     audio = { notMeasured: e.message, track: null, waveform: null, referenceTone: [], silences: [], peaks: [], loudness: null };
   } finally {
     end(w);
     if (listening?.worker === w) listening = null;
   }
-  if (opened !== video) return;
+  if (opened !== video) return audio;
   if ((state === 'done' || state === 'stopped') && shown) say(shown.text, shown.title);
   emit('audio', { video, audio });
+  return audio;
 }
 
 // How long the run will take, from the frame count and picture size: this browser's own rate from its last run on one
