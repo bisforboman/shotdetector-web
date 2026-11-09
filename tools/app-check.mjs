@@ -452,7 +452,11 @@ function checkStopped(name, video, result, statsCsv, whole, wholeStats, deinterl
   const header = ours[0].split(',');
   const ratios = header.flatMap((h, i) => /^adaptive_ratio.*\(w=(\d+)\)$/.test(h) ? [i] : []);
   const window = ratios.length > 0 ? Number(/\(w=(\d+)\)$/.exec(header[ratios[0]])[1]) : 0;
-  const skipped = whole.frameCount - (theirs.length - 1); // 0 or 1: data row i (from 1) is frame i - 1 + skipped
+  // 0 or 1: data row i (from 1) is frame i - 1 + skipped. A run leaving the reference tone out (the tone run) has rows
+  // only for the frames between the tones, though it reads them all: from its first row's (at the tone samples' constant
+  // rate, its frame number is its place).
+  const counted = whole.frameCount - (theirs.length - 1);
+  const skipped = counted > 1 ? Number(theirs[1].split(',')[0]) - 1 : counted;
   const rows = Math.min(theirs.length, n - skipped + 1);
   const wrong = [];
   for (let i = 0; i < Math.max(ours.length, rows); i++) {
