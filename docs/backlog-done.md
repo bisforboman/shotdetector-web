@@ -1902,3 +1902,23 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     at every rate with it (backlog-done, "A stopped run's end at a variable rate"). Native "All agree" on every sample;
     AOT wasm 5031 of 5031 files identical (52 samples); the page check in Chromium passed (locally on the container's
     Chromium 1243 under Playwright 1.65.0: its 1254 can't be downloaded in a cloud session; CI's is 1254)
+
+- The spans' times when another stream starts first (upstream)
+  - Why: ShotDetector 3.28.0 times `BlackSpans` and `FreezeSpans` from the video stream's start; `ffmpeg -vf
+    blackdetect,freezedetect` (without `-copyts`) times them from the file's start, the earliest stream's (format
+    `start_time`). Decision 2026-11-04-black-spans-and-times.md took the two for the same; they are on every sample,
+    whose file starts with its video, but not on `caminandes-fragmented.mp4` (realworld), whose video starts at
+    1000/24000 and audio at 0: every black span and still picture comes out one frame (1/24 s) early (0-1.958333
+    against FFmpeg's 0.0416667-2). The core agrees with the FFmpeg path (`Detect(path)`) there, frames and times: the
+    nightly's "Real world (fragmented)" job fails on PictureCheck since 2026-11-05 (run 41994804094). Sent to the
+    shotdetector coordinator 2026-11-05; the owner chose to leave the nightly red and change no check until the release.
+  - Where: the ShotDetector pin to the release with the fix; the core's description gives it the file's start if the
+    fix needs one (`Mp4Input`'s spans already know every stream's start).
+  - Done when: realworld.yml's PictureCheck agrees on `caminandes-fragmented.mp4`.
+  - Status: Done (2026-11-09, the owner's choice through AskUserQuestion, 2026-11-08): ShotDetector 3.30.0's
+    `YuvVideo.FileStartPts`, which `Mp4Input` gives from FFmpeg's format `start_time` (worked out already for the
+    format duration), rescaled to the video's time base as ffmpeg's `ts_offset`; NativeCheck compares it with
+    FrameReader's `-StartOffset` on every file; a new sample, `spans-fragmented-320x240-25.mp4` (video 0.08 s after its
+    AAC, black and a still picture), on which NativeCheck fails without it. realworld.sh's check on
+    `caminandes-fragmented.mp4` "All agree", PictureCheck's black from 0.042 s; native "All agree" on every sample (53);
+    AOT wasm 5160 of 5160 files identical
