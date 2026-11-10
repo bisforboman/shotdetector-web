@@ -95,8 +95,7 @@ public static partial class Api
         _kept = null;
         _toldInFirstRange = null;
         var input = _input ?? throw new InvalidOperationException("Open a file first.");
-        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
-            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        var request = Requested(input, optionsJson);
         _stopping = _stopped = false;
         using var run = _run = new CancellationTokenSource();
         var go = input.Continue(earlier.Scores, request.ToOptions());
@@ -114,7 +113,7 @@ public static partial class Api
                 {
                     try
                     {
-                        scored.Add(await input.ScoreRangeAsync(go.Earlier, rest, PauseEvery, Between, options, run.Token, picture));
+                        scored.Add(await input.ScoreRangeAsync(go.Earlier, rest, PauseEvery, n => Between(n, rest.From), options, run.Token, picture));
                     }
                     catch (ShotDetectionException) when (_stopped && scored.Count > 0)
                     {
@@ -143,7 +142,7 @@ public static partial class Api
         var earlierPicture = go.Earlier.Count == 0 ? null : earlier.Picture?.Take(go.Rest?.FirstFrame ?? int.MaxValue);
         return Answered(input, options, result, ranges,
             PictureMeasures.Join(new[] { earlierPicture, picture?.Measures }.OfType<PictureMeasures>()), PictureFreeze.Of(result),
-            earlier.Damaged.Concat(input.DamagedFrames(result.FrameCount)));
+            earlier.Damaged.Concat(input.DamagedFrames(Read(result, ranges, options))));
     }
 
     /// <summary>
@@ -157,20 +156,49 @@ public static partial class Api
     static string Answered(VideoInput input, DetectionOptions options, DetectionResult result, IReadOnlyList<RangeScores> ranges,
         PictureMeasures? picture, PictureFreeze freeze, IEnumerable<int> damaged)
     {
-        var read = damaged.Where(f => f < result.FrameCount).Distinct().Order().ToArray();
-        _warnings = VideoInput.DamagedWarning(read, result.FrameCount) is { } warning ? [.. result.Warnings, warning] : result.Warnings;
+        int frames = _read = Read(result, ranges, options);
+        var read = damaged.Where(f => f < frames).Distinct().Order().ToArray();
+        _warnings = VideoInput.DamagedWarning(read, frames) is { } warning ? [.. result.Warnings, warning] : result.Warnings;
         _result = result;
         _corrected = null;
-        _picture = picture?.Take(result.FrameCount);
+        _picture = picture?.Take(frames);
         _freeze = freeze;
         _black = _picture is null ? null : PictureSummary.BlackOf(result, _picture, input.Video);
         _kept = new KeptRun(ranges, _picture, read);
         _keptOptions = options;
         using var shots = JsonDocument.Parse(Shots.Json(result.Shots));
         return JsonSerializer.Serialize(
-            new DetectResponse(shots.RootElement, result.CutFrames, result.FrameCount, result.Video.FrameRate, result.Video.Duration,
-                result.FrameCount < input.ShownFrames, _warnings),
+            new DetectResponse(shots.RootElement, result.CutFrames, frames, result.Video.FrameRate, result.Video.Duration,
+                frames < input.ShownFrames, _warnings),
             ApiJson.Default.DetectResponse);
+    }
+
+    /// <summary>The frames the last run read from frame 0 (<see cref="Read"/>), which its answer gives as <c>frameCount</c>.</summary>
+    static int _read;
+
+    /// <summary>
+    /// The frames a run read from frame 0: the result's <see cref="DetectionResult.FrameCount"/>, but for a run leaving the
+    /// reference tone out, whose frames are its own from <see cref="DetectionResult.FirstFrame"/>, after the leading tone,
+    /// to the trailing tone's start, while its ranges read on to the video's end or the stop: theirs.
+    /// </summary>
+    static int Read(DetectionResult result, IReadOnlyList<RangeScores> ranges, DetectionOptions options) =>
+        options.TrimReferenceTone && ranges.Count > 0 ? ranges[^1].FirstFrame + ranges[^1].FrameCount : result.FrameCount;
+
+    /// <summary>
+    /// The page's options JSON (<see cref="DetectRequest"/>) for a run on <paramref name="input"/>, whose
+    /// <see cref="VideoInput.ReferenceTone"/> it sets: the request's tone, or none (each run says, a split run's worker and
+    /// a resumed run's too).
+    /// </summary>
+    static DetectRequest Requested(VideoInput input, string optionsJson)
+    {
+        var request = JsonSerializer.Deserialize(optionsJson, ApiJson.Default.DetectRequest)
+            ?? throw new ArgumentException("The options are null.", nameof(optionsJson));
+        // The video replaced only when the tone changes: a run that keeps the tone runs on the video as opened.
+        var tone = request.ToneSegments();
+        if (tone is not null || input.ReferenceTone is not null)
+            input.ReferenceTone = tone;
+        _stopsFrom = StopsFrom(input, tone);
+        return request;
     }
 
     /// <summary>The last run's warnings, as its answer gave them (<see cref="Answered"/>).</summary>
@@ -205,11 +233,42 @@ public static partial class Api
     // Set by Stop on the JavaScript thread, read between frames by the run (on the thread pool with threads, Host).
     static volatile bool _stopping, _stopped;
 
-    static async ValueTask<bool> Between(int framesRead)
+    // framesRead: counted from the range's From (from), as the pause tells the worker; a stop waits for _stopsFrom,
+    // counted from frame 0.
+    static async ValueTask<bool> Between(int framesRead, int from)
     {
         await Host.Call(() => Pause(framesRead));
-        _stopped = _stopping;
-        return !_stopping;
+        _stopped = _stopping && from + framesRead >= _stopsFrom;
+        return !_stopped;
+    }
+
+    /// <summary>
+    /// The first frame a run can stop at (frames read from 0): 0, but for a run leaving the reference tone out, past the
+    /// leading tone (<see cref="StopsFrom"/>), so that the stopped run has frames of its own, which ShotDetector's merge
+    /// needs. Set by each request (<see cref="Requested"/>).
+    /// </summary>
+    static int _stopsFrom;
+
+    /// <summary>
+    /// Where a stop can take effect on <paramref name="input"/> leaving out <paramref name="tone"/>: two frames past the
+    /// first whose time (from the file's start, as the tone's) reaches the end of a tone that starts in the first 5 s,
+    /// where ShotDetector starts the run (its ToneStart, not public: asked of the shotdetector coordinator, 2026-11-09);
+    /// 0 without one.
+    /// </summary>
+    static int StopsFrom(VideoInput input, IReadOnlyList<FrameReader.ToneSegment>? tone)
+    {
+        var video = input.Video;
+        if (tone?.FirstOrDefault(t => t.Start < TimeSpan.FromSeconds(5)) is not { } leading
+            || video.FrameTimestamps is not { } pts || video.TimeBase is not { } tb)
+            return 0;
+        long origin = video.FileStartPts ?? video.StartPts;
+        for (int k = 0; k < pts.Count; k++)
+        {
+            if ((pts[k] - origin) * (double)tb.Num / tb.Den >= leading.End.TotalSeconds)
+                return Math.Min(k + 2, input.ShownFrames);
+        }
+
+        return input.ShownFrames;
     }
 
     /// <summary>The last <see cref="Detect"/>'s result, for the exports that show more of it.</summary>
@@ -308,6 +367,22 @@ sealed record DetectRequest
     /// </summary>
     public bool? Black { get; init; }
 
+    /// <summary>
+    /// The reference tone to leave out (<see cref="DetectionOptions.TrimReferenceTone"/>; decision
+    /// 2026-11-04-reference-tone.md): the segments the sound found (<see cref="Api.Audio"/>'s <c>referenceTone</c>, times in
+    /// seconds from the file's start), given when the page's option is on, every one, even none. Null: the option off.
+    /// </summary>
+    public IReadOnlyList<ToneRequest>? Tone { get; init; }
+
+    /// <summary>
+    /// <see cref="Tone"/> as FrameReader's segments, for <see cref="YuvVideo.ReferenceTone"/>: each time rounded to the
+    /// nearest tick (the finder's are on a 20 ms grid; <see cref="TimeSpan.FromSeconds(double)"/> can land a tick short).
+    /// </summary>
+    public IReadOnlyList<ToneSegment>? ToneSegments() =>
+        Tone?.Select(t => new ToneSegment(Ticks(t.Start), Ticks(t.End), t.Level)).ToArray();
+
+    static TimeSpan Ticks(double seconds) => TimeSpan.FromTicks((long)Math.Round(seconds * TimeSpan.TicksPerSecond));
+
     public DetectionOptions ToOptions(IProgress<DetectionProgress>? progress = null, IProgress<Shot>? onShot = null)
     {
         var options = new DetectionOptions
@@ -320,6 +395,7 @@ sealed record DetectRequest
             OnShot = onShot,
             FreezeDetect = Freeze == false ? null : new FreezeDetectOptions(),
             BlackDetect = Black == false ? null : new BlackDetectOptions { MinDuration = TimeSpan.Zero },
+            TrimReferenceTone = Tone is not null,
         };
         if (MinSceneLength is not null)
             options = options with { MinSceneLength = MinSceneLength };
@@ -333,6 +409,9 @@ sealed record DetectRequest
     }
 }
 
+/// <summary>A segment of reference tone as the sound gave it (<see cref="ToneSegment"/>, times in seconds), for <see cref="DetectRequest.Tone"/>.</summary>
+sealed record ToneRequest(double Start, double End, double Level);
+
 /// <summary>One detector of a run with several.</summary>
 sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
 
@@ -340,8 +419,10 @@ sealed record DetectorRequest(DetectorKind Kind, double? Threshold = null);
 sealed class RunCancelledException(OperationCanceledException inner) : Exception("The run was cancelled.", inner);
 
 /// <summary>
-/// What <see cref="Api.Detect"/> returns. Stopped: the run was stopped (<see cref="Api.Stop"/>) and its frames ended at
-/// <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is still the file's.
+/// What <see cref="Api.Detect"/> returns. FrameCount: the frames the run read from frame 0 (a run leaving the reference
+/// tone out reads them all, its shots those between the tones). Stopped: the run was stopped (<see cref="Api.Stop"/>) and
+/// its frames ended at <c>FrameCount</c>, so the shots and CSVs are the ones for that part of the video; Duration is
+/// still the file's.
 /// CutFrames: the frames the shots after the first start on, counted from 0 as decoded
 /// (<see cref="DetectionResult.CutFrames"/>), which the page's corrections are in.
 /// Warnings: <see cref="DetectionResult.Warnings"/>' sentences as ShotDetector words them (empty when there are none),

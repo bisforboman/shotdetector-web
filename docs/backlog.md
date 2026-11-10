@@ -69,17 +69,18 @@ publish").
 
 ## Waiting
 
-- The reference tone left out of the detection
-  - Why: ShotDetector 3.25.0's `YuvVideo.ReferenceTone` and `DetectionOptions.TrimReferenceTone` leave a file's
-    leading tone (and the bars over it) out of the shots, as `Detect(path)` does with FFmpeg finding the tone; the page
-    measures the tone already (`Mp4Audio`, the sound's worker), alongside the run, not before it.
-  - Where: decision [2026-11-04-reference-tone.md](decisions/2026-11-04-reference-tone.md), the owner's 1A and 2A:
-    ShotDetector's ranges taking the trim first (3.28.0's is "not for ranges": `ScoreRange` refuses a time range),
-    then an option on the page, off by default, the run waiting for the sound's worker's tone, `YuvVideo.ReferenceTone`
-    set from it in `Api`; NativeCheck's run with `TrimReferenceTone` on the tone sample, whole, split and resumed.
-  - Done when: the native and wasm checks pass on the tone sample with the option on, byte for byte.
-  - Status: Waiting (2026-11-04): asked of the shotdetector coordinator, the trim in ranges; released in ShotDetector 3.30.0
-    (ranges take `TrimReferenceTone`), taken by "The packages of 2026-11-07": ready to start
+- A stop in the leading reference tone, exactly (upstream)
+  - Why: a run leaving the reference tone out has no frames of its own before the leading tone ends, and
+    ShotDetector's `Merge` refuses a run stopped there ("StartTime is after the last frame"), as `Detect(path)` refuses a
+    file that ends in its tone. The page holds a Stop until two frames past the tone's end (`Api`'s `StopsFrom`), an
+    estimate of where ShotDetector starts the run (`ShotDetection.ToneStart`, internal).
+  - Where: ShotDetector's `ToneStart` public, or `Merge` giving a run stopped before its start (no shots); then `Api`'s
+    `StopsFrom` on it, or the hold dropped.
+  - Done when: app-check's tone run stopped in the leading tone gives what ShotDetector says, with no estimate.
+  - Status: Waiting (2026-11-09): asked of the shotdetector coordinator (the owner's choice through AskUserQuestion);
+    the owner chose a public `ShotDetection.ToneStart(YuvVideo, DetectionOptions?)` (shotdetector#770, its decision
+    2026-11-09-tone-start-public.md; `Merge` unchanged: a run stopped one frame past it merges), in the next ShotDetector
+    release: then `StopsFrom` is `ToneStart` + 1
 
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but

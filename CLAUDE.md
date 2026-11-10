@@ -178,3 +178,8 @@ differ.
   a variable rate). A corrected list is ShotDetector 3.28.0's `LoadScenes(DetectionResult, cutFrames, options)`,
   which keeps the run's frame times and length; `LoadScenes` of a scene list (scenedetect's) times a cut at frame /
   average rate and ends at nb_frames.
+- A run leaving the reference tone out (`TrimReferenceTone`, the request's `tone`) reads every frame, but ShotDetector's
+  `DetectionResult.FrameCount` counts only those between the tones: `Api`'s answer gives the frames read from 0 (the
+  ranges' end) as `frameCount`, which `stopped`, the picture, the damaged frames and the corrections' bounds use. A stop
+  before the run's first frame has nothing `Merge` can give (it throws): `Api` holds it until past the leading tone
+  (`StopsFrom`, an estimate of ShotDetector's internal `ToneStart`).

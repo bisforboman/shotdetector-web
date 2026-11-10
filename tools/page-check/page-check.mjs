@@ -59,7 +59,7 @@
 // Any error on the page, in its workers or a failed request fails the check.
 //
 // Usage: node tools/page-check/page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native>
-//   [--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm|file.mp4>]... [--avi <file.avi>]... [<more.mp4>...]
+//   [--deinterlace <interlaced.mp4>] [--tone <toned.mp4>] [--refused <file>]... [--browser <file.webm|file.mp4>]... [--avi <file.avi>]... [<more.mp4>...]
 //   Playwright from tools/page-check/node_modules (npm ci there; its Chromium: npx playwright install chromium), or
 //   else wherever require finds it (a cloud session's pre-installed one). <out> gets the downloaded files.
 import { createServer } from 'node:http';
@@ -69,14 +69,17 @@ import { createRequire } from 'node:module';
 import { basename, extname, join, normalize, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
-const at = args.indexOf('--native'), di = args.indexOf('--deinterlace');
-if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length)) {
+const at = args.indexOf('--native'), di = args.indexOf('--deinterlace'), ti = args.indexOf('--tone');
+if (at < 0 || args.length < 7 || (di >= 0 && di + 1 >= args.length) || (ti >= 0 && ti + 1 >= args.length)) {
   console.error('Usage: node page-check.mjs <wwwroot> <out> <sample.mp4> <demo.mp4> <sample.avi> --native <out/native> ' +
-    '[--deinterlace <interlaced.mp4>] [--refused <file>]... [--browser <file.webm|file.mp4>]... [--avi <file.avi>]... [<more.mp4>...]');
+    '[--deinterlace <interlaced.mp4>] [--tone <toned.mp4>] [--refused <file>]... [--browser <file.webm|file.mp4>]... [--avi <file.avi>]... [<more.mp4>...]');
   process.exit(2);
 }
 const nativeDir = resolve(args[at + 1]);
 const interlaced = di >= 0 ? resolve(args[di + 1]) : null;
+// --tone <file>: a video with reference tone, picked with the tone left out (decision 2026-11-04-reference-tone.md),
+// compared with the native check's tone run (ToneCheck).
+const toned = ti >= 0 ? resolve(args[ti + 1]) : null;
 // --refused <file>, any number of times: a file the page refuses, with what reads it instead under the message.
 const refusedAt = args.flatMap((a, i) => a === '--refused' ? [i, i + 1] : []);
 const refusedFiles = refusedAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
@@ -87,10 +90,10 @@ const browserFiles = browserAt.filter((_, k) => k % 2 === 1).map(i => resolve(ar
 const aviAt = args.flatMap((a, i) => a === '--avi' ? [i, i + 1] : []);
 const aviFiles = aviAt.filter((_, k) => k % 2 === 1).map(i => resolve(args[i]));
 const [root, outDir, sample, demo, avi, ...more] = args
-  .filter((_, i) => ![at, at + 1, ...(di >= 0 ? [di, di + 1] : []), ...refusedAt, ...browserAt, ...aviAt].includes(i)).map(a => resolve(a));
+  .filter((_, i) => ![at, at + 1, ...(di >= 0 ? [di, di + 1] : []), ...(ti >= 0 ? [ti, ti + 1] : []), ...refusedAt, ...browserAt, ...aviAt].includes(i)).map(a => resolve(a));
 // The file each run's name (as the page saw it) is, for the native check's files of it.
 const FILES = { 'sintel-trailer.mp4': demo, [basename(sample)]: sample, [basename(avi)]: avi,
-  ...Object.fromEntries([...more, ...browserFiles, ...aviFiles, ...(interlaced ? [interlaced] : [])].map(m => [basename(m), m])) };
+  ...Object.fromEntries([...more, ...browserFiles, ...aviFiles, ...(interlaced ? [interlaced] : []), ...(toned ? [toned] : [])].map(m => [basename(m), m])) };
 const stem = file => basename(file, extname(file));
 mkdirSync(outDir, { recursive: true });
 
@@ -837,13 +840,15 @@ function pdfRead(b) {
   return { pages, boxes, images, placed: [...s.matchAll(/\/Im\d+ Do/g)].length };
 }
 
-// deinterlace: the Deinterlace option picked ('auto', 'on'), compared with the native check's deinterlace-<it> run.
-async function picked(query, what, file = sample, deinterlace = null) {
+// deinterlace: the Deinterlace option picked ('auto', 'on'), compared with the native check's deinterlace-<it> run; tone:
+// the reference tone left out, compared with its tone run (the default detector, the tone the page's sound found).
+async function picked(query, what, file = sample, deinterlace = null, tone = false) {
   const { context, page, errors } = await open(query);
   await page.setInputFiles('#file', file);
   if (deinterlace) await page.selectOption('#deinterlace', deinterlace);
+  if (tone) await page.selectOption('#tone', 'out');
   await page.click('#detect');
-  const run = deinterlace ? `deinterlace-${deinterlace}` : await page.inputValue('#detector');
+  const run = deinterlace ? `deinterlace-${deinterlace}` : tone ? 'tone' : await page.inputValue('#detector');
   const status = await finished(page, what);
   if (status !== null) {
     const split = query.includes('workers=');
@@ -857,7 +862,7 @@ async function picked(query, what, file = sample, deinterlace = null) {
     await compare(page, what, basename(file), run);
     await picture(page, what, file, split);
     await frameTypes(page, what, file);
-    if (query === '' && !deinterlace) await contactSheet(page, what, file);
+    if (query === '' && !deinterlace && !tone) await contactSheet(page, what, file);
     if (file === sample && !split) {
       await shotLengths(page, what, file, run);
       await corrections(page, what, file, run, query === '');
@@ -1303,6 +1308,10 @@ try {
   if (interlaced) {
     await picked('', `${basename(interlaced)}, deinterlaced, picked`, interlaced, 'auto');
     await picked('?workers=2', `${basename(interlaced)}, deinterlaced, on two workers`, interlaced, 'auto');
+  }
+  if (toned) {
+    await picked('', `${basename(toned)}, the reference tone left out, picked`, toned, null, true);
+    await picked('?workers=2', `${basename(toned)}, the reference tone left out, on two workers`, toned, null, true);
   }
 
   const what = 'the demo';
