@@ -67,6 +67,19 @@ threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4",
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
 publish").
 
+### ManagedCodecs 0.13.0 and FrameReader 2.26.0
+
+- The bump
+  - Why: main pinned ManagedCodecs 0.8.1 and FrameReader 2.25.0 while 0.13.0 and 2.26.0 were on nuget.org; their
+    H.264, MJPEG and AAC decoders run faster, and AAC's IMDCT is single precision (output within FFmpeg's tolerance),
+    an AVI's audio comes as packets (the core skips them), and FrameReader's `LoudnessMeter` changes only its loudest
+    momentary and short-term figures, which the core doesn't use.
+  - Where: Directory.Packages.props; README, "Packages".
+  - Done when: every check passes on the new versions (CI's all tier: the CSVs byte for byte, the measures within
+    their tolerance, app-check's pins).
+  - Not: the formats ManagedCodecs now reads (H.264 in AVI, MXF, MP3, PCM); each would be a widening of its own.
+  - Status: In progress (2026-11-12, the owner's choice through AskUserQuestion)
+
 ## Waiting
 
 - A stop in the leading reference tone, exactly (upstream)
