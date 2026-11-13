@@ -1,6 +1,6 @@
 # shotdetector-web
 
-Shot detection entirely in the browser: ManagedCodecs decodes H.264 in MP4 and MJPEG in AVI, ShotDetector.FastYuv
+Shot detection entirely in the browser: ManagedCodecs decodes H.264 in MP4 and MJPEG and H.264 in AVI, ShotDetector.FastYuv
 converts, ShotDetector detects through `ShotDetection.Detect(YuvVideo, IEnumerable<YuvFrame>, ...)`. Repo:
 `github.com/bisforboman/shotdetector-web`, MIT. The owner's decisions behind it are in shotdetector's
 docs/decisions/2026-10-24-managedcodecs-showcase.md.

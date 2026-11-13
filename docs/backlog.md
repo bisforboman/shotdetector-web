@@ -87,6 +87,17 @@ The bump is done (backlog-done, #167).
 
 ## Waiting
 
+- H.264 with B-frames in AVI (upstream)
+  - Why: FFmpeg gives an AVI's H.264 frames no pts, and ShotDetector's file path labels each as OpenCV does (its pts,
+    else its packet's dts, else 0): with B-frames the frames come a reorder delay after their packets and the last ones
+    have neither, so they are labelled at 0, out of order, which `YuvVideo.FrameTimestamps` refuses ("must rise").
+    `AviInput` refuses such a stream (decision [2026-11-13-h264-avi.md](decisions/2026-11-13-h264-avi.md)); libx264's
+    default writes it.
+  - Where: ShotDetector (how a file's frames without pts are labelled, and `YuvVideo` saying it); then `AviInput`'s
+    refusal dropped, `samples/reject/h264-bframes.avi` a sample.
+  - Done when: the native, wasm and page checks pass on H.264 with B-frames in AVI.
+  - Status: Waiting (2026-11-13): to ask of the shotdetector coordinator (the owner's choice through AskUserQuestion)
+
 - A stop in the leading reference tone, exactly (upstream)
   - Why: a run leaving the reference tone out has no frames of its own before the leading tone ends, and
     ShotDetector's `Merge` refuses a run stopped there ("StartTime is after the last frame"), as `Detect(path)` refuses a
@@ -158,6 +169,13 @@ Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) ta
 a frame of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
+
+- The picture of an H.264 AVI on the page
+  - Why: no browser plays an AVI, and an H.264 AVI's packets aren't JPEGs the page can show (as it shows MJPEG's): the
+    page shows no picture and no stills for it, only the line under the player.
+  - Where: app.js's unplayable picture; WebCodecs' `VideoDecoder` taking the Annex B packets from `Packets`' offsets
+    (from the keyframe before the playhead), or the core's own frames.
+  - Status: Maybe (2026-11-13, found by "H.264 in AVI")
 
 - A threaded WebM run's intermittent failures (an unaligned atomic, a crash, a result that doesn't come)
   - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
