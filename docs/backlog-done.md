@@ -1941,3 +1941,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     NativeCheck's `ToneCheck` against `Detect(path)` whole, split, stopped and resumed: "All agree" on every sample (54);
     AOT wasm 5328 of 5328 files identical; the page check in Chromium passed, the tone sample with the tone left out on
     threads and on two workers (locally on the container's Chromium 1243 under Playwright 1.65.0, Firefox left out)
+
+- ManagedCodecs 0.13.0 and FrameReader 2.26.0: the bump
+  - Why: main pinned ManagedCodecs 0.8.1 and FrameReader 2.25.0 while 0.13.0 and 2.26.0 were on nuget.org; their
+    H.264, MJPEG and AAC decoders run faster, and AAC's IMDCT is single precision (output within FFmpeg's tolerance),
+    an AVI's audio comes as packets (the core skips them), and FrameReader's `LoudnessMeter` changes only its loudest
+    momentary and short-term figures, which the core doesn't use.
+  - Where: Directory.Packages.props; README, "Packages".
+  - Done when: every check passes on the new versions (CI's all tier: the CSVs byte for byte, the measures within
+    their tolerance, app-check's pins).
+  - Not: the formats ManagedCodecs now reads (H.264 in AVI, MXF, MP3, PCM); each would be a widening of its own.
+  - Status: Done (2026-11-13, #167: native's CSVs the same on every sample in the session; CI's all tier green)

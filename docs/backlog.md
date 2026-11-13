@@ -68,6 +68,10 @@ ManagedCodecs' Matroska demuxer", decision 2026-11-13).
 Built (backlog-done, "The npm package"); its first publish waits on the owner (Waiting, "The npm package's first
 publish").
 
+### ManagedCodecs 0.13.0 and FrameReader 2.26.0
+
+The bump is done (backlog-done, #167).
+
 ## Waiting
 
 - A stop in the leading reference tone, exactly (upstream)
