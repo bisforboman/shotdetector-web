@@ -6,7 +6,7 @@ namespace ShotDetectorWeb.Checks;
 /// <summary>
 /// The packet check (README, "Checks"): for each sample, <see cref="VideoInput.Packets"/> against
 /// <c>ffprobe -show_packets -select_streams v:0</c> (the ffprobe beside SHOTDETECTOR_FFMPEG_LIBS, as BtbN's shared build
-/// has it, else the one on PATH): the same packets in the same order, each with the same pts, pts_time, size and K and D
+/// has it, else the one on PATH): the same packets in the same order, each with the same pts, pts_time (dts where it has none), size and K and D
 /// flags, exactly; and an AVI's offsets (<see cref="VideoPackets.Offsets"/>, where the page cuts each JPEG from the file):
 /// the bytes there hash to ffprobe's <c>data_hash</c> of the packet (SHA-256), every packet. ffprobe's lines go to <c>&lt;sample&gt;.packets.txt</c> in the output folder, which the wasm check
 /// compares the App's <c>Packets()</c> with.
@@ -74,7 +74,7 @@ internal static class PacketCheck
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        foreach (string arg in (string[])["-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts,pts_time,size,flags,data_hash", "-show_data_hash", "SHA256", "-of", "compact=p=0:nk=0", sample])
+        foreach (string arg in (string[])["-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts,pts_time,dts,dts_time,size,flags,data_hash", "-show_data_hash", "SHA256", "-of", "compact=p=0:nk=0", sample])
             start.ArgumentList.Add(arg);
         using var process = Process.Start(start)!;
         var error = process.StandardError.ReadToEndAsync();
@@ -88,7 +88,10 @@ internal static class PacketCheck
         foreach (string line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var fields = line.Split('|').Select(f => f.Split('=', 2)).ToDictionary(f => f[0], f => f.Length > 1 ? f[1] : "");
-            packets.Add([fields["pts"], fields["pts_time"], fields["size"], fields["flags"], fields["data_hash"]]);
+            // A packet without a pts (an AVI's H.264: FFmpeg's AVI demuxer gives only dts) is timed by its dts, as ShotDetector's
+            // file path labels such frames (OpenCV's rule) and the core gives them (decision 2026-11-13-h264-avi.md).
+            bool noPts = fields["pts"] == "N/A";
+            packets.Add([noPts ? fields["dts"] : fields["pts"], noPts ? fields["dts_time"] : fields["pts_time"], fields["size"], fields["flags"], fields["data_hash"]]);
         }
 
         return packets;

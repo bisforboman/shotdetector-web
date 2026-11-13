@@ -259,6 +259,16 @@ cmp -s <("$ff" -v error -i "$out/nodht.mjpeg" -f framemd5 - | grep -v '^#' | cut
   || { echo "mjpeg-nodht: its frames aren't those of the JPEGs with their tables" >&2; exit 1; }
 rm "$out/nodht.mjpeg" "$out/nodht-stripped.mjpeg"
 
+# H.264 in AVI without B-frames (decision 2026-11-13-h264-avi.md): an Annex B stream, its SPS in band, packets and frames
+# without a pts (FFmpeg's AVI demuxer gives only dts), every frame shown in decoding order (has_b_frames 0), which
+# ShotDetector's file path labels by its packet's dts. With B-frames it is refused (reject/h264-bframes.avi, below).
+enc -filter_complex "$(three 320x240 25 1.5)" -c:v libx264 -bf 0 -pix_fmt yuv420p "$out/h264-320x240-25.avi"
+got=$("$fp" -v error -select_streams v:0 -show_entries stream=codec_name,codec_tag_string,has_b_frames,pix_fmt,avg_frame_rate,nb_frames:format=duration -of csv=p=0 "$out/h264-320x240-25.avi" | tr '\n' ' ')
+got+=$("$fp" -v error -select_streams v:0 -show_entries packet=pts,dts -of csv=p=0 "$out/h264-320x240-25.avi" | sed -n 2p),
+got+=$("$fp" -v error -select_streams v:0 -show_entries frame=pts,pkt_dts -of csv=p=0 "$out/h264-320x240-25.avi" | sed -n 2p)
+want='h264,H264,0,yuv420p,25/1,114 4.560000 N/A,1,N/A,1'
+[[ $got == "$want" ]] || { echo "h264-320x240-25.avi: codec, tag, has_b_frames, pix_fmt, rate, nb_frames, duration, packet and frame times are '$got', not '$want'" >&2; exit 1; }
+
 # 10-bit 4:2:0 and 8-bit 4:2:2 H.264 (libx264's High 10 and High 4:2:2; backlog "10-bit 4:2:0 and 8-bit 4:2:2"), which
 # ShotDetector's frame source takes since 3.24.0, and 4:2:2 MJPEG (yuvj422p, most cameras'). 10-bit's conversion
 # interpolates the chroma from where its samples sit (YuvVideo.ChromaLocation): one with no chroma location in its VUI
@@ -443,7 +453,8 @@ got=$("$fp" -v error -show_entries frame=width,height -of csv=p=0 "$out/reject/s
 # sampling factors rewritten (Y 2x2 to 4x1; Cb and Cr 1x2 to 2x1), the same blocks to an MCU and, at 320x240, the same
 # MCUs (the picture scrambled, the stream valid: FFmpeg decodes it without a warning); an AVI
 # with an empty video chunk, a dropped frame (the muxer writes one after the first frame when it shifts MP3's priming),
-# which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 in AVI.
+# which FFmpeg counts and ManagedCodecs doesn't (ManagedCodecs#226); H.264 with B-frames in AVI (libx264's default;
+# decision 2026-11-13-h264-avi.md) and MPEG-4 Part 2 in AVI (another codec).
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj444p -c:v mjpeg "$out/reject/mjpeg-444.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj420p -c:v mjpeg "$out/reject/mjpeg-411.avi"
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=1,format=yuvj422p -c:v mjpeg "$out/reject/mjpeg-440.avi"
@@ -463,7 +474,11 @@ for path, changes in ((sys.argv[1], {11: (0x22, 0x41)}), (sys.argv[2], {14: (0x1
     open(path, "wb").write(d)
 PY
 enc -f lavfi -i testsrc2=s=320x240:r=25:d=2,format=yuvj420p -f lavfi -i sine=d=3 -c:v mjpeg -c:a libmp3lame "$out/reject/mjpeg-dropped-frame.avi"
-enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/h264.avi"
+rm -f "$out/reject/h264.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v libx264 -pix_fmt yuv420p "$out/reject/h264-bframes.avi"
+enc -f lavfi -i testsrc2=s=320x240:r=25:d=1 -c:v mpeg4 "$out/reject/mpeg4.avi"
+[[ $("$fp" -v error -select_streams v:0 -show_entries stream=codec_name,has_b_frames -of csv=p=0 "$out/reject/h264-bframes.avi")$("$fp" -v error -show_entries stream=codec_name -of csv=p=0 "$out/reject/mpeg4.avi") == h264,2mpeg4 ]] ||
+  { echo "h264-bframes.avi, mpeg4.avi: not H.264 with B-frames and MPEG-4 Part 2" >&2; exit 1; }
 got=$(for f in mjpeg-444 mjpeg-411 mjpeg-440; do "$fp" -v error -show_entries stream=pix_fmt -of csv=p=0 "$out/reject/$f.avi"; done | tr '\n' ' ')
 [[ -z $("$ff" -v warning -i "$out/reject/mjpeg-411.avi" -i "$out/reject/mjpeg-440.avi" -map 0 -map 1 -f null - 2>&1) ]] ||
   { echo "mjpeg-411, mjpeg-440: FFmpeg warns as it decodes them" >&2; exit 1; }

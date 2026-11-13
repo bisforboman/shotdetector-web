@@ -341,7 +341,7 @@ for (const file of noAac) {
 // named as FFmpeg names it (NativeCheck's RefusalNames, kept the same; backlog "A refusal that says what to do").
 const REFUSAL_NAMES = {
   'hevc.mp4': "FFmpeg's hevc", 'vp8.webm': "FFmpeg's vp8", 'h264.mkv': 'H.264 in Matroska', 'mpeg4.mp4': "FFmpeg's mpeg4",
-  'h264.avi': "FFmpeg's h264",
+  'mpeg4.avi': "FFmpeg's mpeg4", 'h264-bframes.avi': 'H.264 with B-frames',
 };
 for (const file of rejects) {
   let opened = false;
@@ -663,8 +663,10 @@ function checkPackets(sample) {
   for (let i = 0; i < Math.min(pts.length, theirs.length); i++) {
     const t = theirs[i];
     const check = (what, ours, ffprobe) => { if (ours !== ffprobe) differences.push(`packet ${i}: ${what} ${ours} vs ffprobe's ${ffprobe}`); };
-    check('pts', String(pts[i]), t.pts);
-    check('pts_time', (pts[i] * (num / den)).toFixed(6), t.pts_time);
+    // A packet without a pts (an AVI's H.264) by its dts, as NativeCheck's packet check takes it.
+    const noPts = t.pts === 'N/A';
+    check('pts', String(pts[i]), noPts ? t.dts : t.pts);
+    check('pts_time', (pts[i] * (num / den)).toFixed(6), noPts ? t.dts_time : t.pts_time);
     check('size', String(sizes[i]), t.size);
     check('K', isKey.has(i) ? 'K' : '_', t.flags[0]);
     check('D', isDiscarded.has(i) ? 'D' : '_', t.flags[1]);

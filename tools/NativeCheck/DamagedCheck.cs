@@ -16,7 +16,7 @@ static class DamagedCheck
     /// <summary>
     /// The frames (0-based, display order) FFmpeg's decoder finds damaged: those ffprobe drops with <c>-err_detect
     /// explode</c> (a JPEG whose scan runs past its data fails then, where FFmpeg otherwise logs an overread and gives
-    /// the frame), against its frames without it, by pts. ffprobe decodes and prints on one thread, so the answer is the
+    /// the frame), against its frames without it, by pts (by the packet's dts where a frame has none). ffprobe decodes and prints on one thread, so the answer is the
     /// same every time (ffmpeg's log lines, from its decoder's and its filters' threads, interleave as they come).
     /// </summary>
     public static IReadOnlyList<int> Ffmpeg(string libs, string sample)
@@ -41,14 +41,16 @@ static class DamagedCheck
             ffprobe = "ffprobe";
         var start = new ProcessStartInfo(ffprobe) { RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (string a in (string[])["-v", "quiet", .. explode ? ["-err_detect", "explode"] : Array.Empty<string>(),
-                     "-select_streams", "v:0", "-show_entries", "frame=pts", "-of", "csv=p=0", sample])
+                     "-select_streams", "v:0", "-show_entries", "frame=pts,pkt_dts", "-of", "csv=p=0", sample])
             start.ArgumentList.Add(a);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("ffprobe didn't start.");
         var stderr = process.StandardError.ReadToEndAsync();
         string output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
         _ = stderr.Result;
-        var pts = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        // A frame without a pts (an AVI's H.264) by its packet's dts, as ShotDetector's file path labels it.
+        var pts = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split(',') is [var p, var dts, ..] && p == "N/A" ? dts : line.Split(',')[0]).ToList();
         pts.Sort((a, b) => long.Parse(a, CultureInfo.InvariantCulture).CompareTo(long.Parse(b, CultureInfo.InvariantCulture)));
         return pts;
     }

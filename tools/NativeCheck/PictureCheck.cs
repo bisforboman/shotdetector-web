@@ -226,6 +226,7 @@ static class PictureCheck
             name.StartsWith("edit-zero-", StringComparison.Ordinal) ||
             name.StartsWith("with-audio-", StringComparison.Ordinal) || name.StartsWith("fragmented-", StringComparison.Ordinal) ||
             name.StartsWith("interlaced-", StringComparison.Ordinal) || name.StartsWith("mjpeg-", StringComparison.Ordinal) ||
+            name.StartsWith("h264-", StringComparison.Ordinal) ||
             name.StartsWith("rotated-", StringComparison.Ordinal) || name.StartsWith("vfr-", StringComparison.Ordinal) ||
             name.StartsWith("yuv422p-", StringComparison.Ordinal) || name.StartsWith("yuvj422p-", StringComparison.Ordinal) ||
             name.StartsWith("yuv420p10-", StringComparison.Ordinal) || name.StartsWith("odd-height-", StringComparison.Ordinal) ||

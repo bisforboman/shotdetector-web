@@ -891,7 +891,7 @@ async function pickedRefused(file) {
     }));
     const hevc = /FFmpeg's hevc/.test(shown.message);
     console.log(`${what}: ${shown.message}`);
-    if (!/this page reads H\.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM and MP4 so far/.test(shown.message))
+    if (!/this page reads H\.264 in MP4, MJPEG and H\.264 in AVI, and VP9 and AV1 in WebM and MP4 so far/.test(shown.message))
       fail(`${what}: the message isn't the core's refusal: ${shown.message}`);
     if (!shown.refused || !shown.link.startsWith('https://github.com/bisforboman/shotdetector'))
       fail(`${what}: no line under the message pointing to the shotdetect command (${JSON.stringify(shown)})`);
