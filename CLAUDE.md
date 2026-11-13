@@ -121,6 +121,9 @@ differ.
 
 ## Gotchas
 
+- `global.json` pins SDK 10 (10.0.100, `rollForward` `latestFeature`): GitHub's ubuntu-24.04 image (20261111 on) ships
+  SDK 11.0.100, which `dotnet` otherwise picks over setup-dotnet's 10.0.x, and whose `dotnet workload install
+  wasm-tools` is SDK 11's: the net10 App's AOT publish then wants `wasm-tools-net10` (NETSDK1147).
 - `dotnet workload list` can show wasm-tools installed with no packs in `~/.dotnet/packs` (NETSDK1147 on build):
   `dotnet workload install wasm-tools` again installs them.
 - ShotDetector's file path reports `DetectedVideo.Duration` from ffprobe's format duration text (six decimals), to the
