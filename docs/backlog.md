@@ -91,6 +91,28 @@ publish").
   - Done when: `npm view shotdetector-web` shows 0.1.0 with provenance.
   - Status: Waiting (2026-11-02): the owner's npm setup
 
+- The threaded runtime deadlocks the page's main thread, now and then (upstream: .NET's emscripten)
+  - Why: a run on threads sometimes never answers: the page's main thread spins at 100% for good, answering nothing
+    (not even DevTools). Caught on 2026-11-13 (a cloud session, Chromium 153, the interpreted bundle, .NET 10.0.15): 4
+    in about 330 pages of page-check's steps, each at a fresh page's first threaded call (`Open`), a WebM or not. Its
+    wasm stack (gdb along V8's frame pointers, named from `--perf-basic-prof` and the build's
+    `dotnet.native.js.symbols`): a `[JSImport]`'s promise settles, the runtime posts the task's completion to a .NET
+    thread (`mono_wasm_invoke_jsexport_async_post`, `emscripten_proxy_async`), `do_proxy` holds the proxying queue's
+    mutex while `get_or_add_tasks_for_thread` reallocates for a thread it hasn't posted to yet, `dlmalloc` finds its
+    lock taken, and the main thread's futex wait (a spin: the main thread can't block) yields into
+    `emscripten_proxy_execute_queue`, which locks the same mutex: the thread waits for itself. Emscripten fixed it
+    (emscripten-core/emscripten#24565, in 4.0.11; #28186, 2026-11-10); .NET 10's runtime is built with emscripten
+    3.1.56. It looks like dotnet/runtime#106788 (open, "Awaiting a `Task` returned by a `[JSImport]` method sometimes
+    causes a deadlock"). Not the page's code, and not the WebM decoder's imports (`JsDecoder`). The row's earlier
+    "result that doesn't come" was the page's own (a resumed run built its card twice: backlog-done). Not seen here:
+    the unaligned-access trap (WebAssembly's trap for an atomic at an unaligned address; also open in .NET's own tests,
+    dotnet/runtime#96191) and the renderer crash, both seen on 2026-11-04 on Playwright's own Chromium, which this
+    session's network couldn't fetch (cdn.playwright.dev).
+  - Where: upstream (the owner posts the cause on dotnet/runtime#106788); then the .NET bump that builds its runtime
+    with emscripten's fix. Nothing to work around here: it is the runtime's first post to each new thread.
+  - Done when: a .NET runtime pack with emscripten's fix, and page-check's steps on threads in a loop without a hang.
+  - Status: Waiting (2026-11-13): the owner's post upstream, then a .NET release with the fix
+
 The asks filed upstream on 2026-10-24 all shipped on 2026-10-25:
 [shotdetector#492](https://github.com/bisforboman/shotdetector/issues/492) and
 [#493](https://github.com/bisforboman/shotdetector/issues/493) in ShotDetector 3.15.0 (`DetectAsync` over an
@@ -126,23 +148,6 @@ Widening the scope. ShotDetector's frame-source API (`Detect(YuvVideo, ...)`) ta
 a frame of another size refused (#625). What it still lacks is in its `docs/frame-source-parity.md` (issues #628 to #630): a
 row that needs a change there names it. Every widening adds a sample that isolates it to `tools/make-samples.sh`, moves the matching
 file out of `samples/reject/`, and passes the native check.
-
-- A threaded WebM run's intermittent failures (an unaligned atomic, a crash, a result that doesn't come)
-  - Why: page-check's held, stopped and resumed run of `av1-yuv420p10-320x240-25.webm` on threads (2026-11-04, the
-    interpreted publish) gave the native run's files, then the threaded runtime ended: "operation does not support
-    unaligned accesses" (WebAssembly's trap for an atomic on an unaligned address) and `RuntimeError: unreachable` in
-    `threads/_framework/dotnet.native.js`. Nineteen such runs, the same file and the 8-bit AV1 one, gave it once. The
-    page's code has no atomics of its own there: .NET's threaded runtime (10.0.14), or the decoder imports it runs on
-    the main thread for a WebM (`JsDecoder`'s `Span` views). Seen since in whole page checks (2026-11-04, a cloud
-    session, the page's files those of main at #158): the same trap once on `vp9-320x240-25.webm` on threads; twice
-    the resumed 10-bit AV1 run on threads done, but none of its downloads within 10 s (`ShotsJson` and `ShotsHtml` from
-    the threaded runner not answering; no error on the page); once Chromium's renderer crashed during
-    `vp9-320x240-25.webm` on threads ("Target crashed"). The step alone, or the WebM steps alone, passed each time
-    (3 and 1 runs, page-check.mjs on the same published bundle), and a whole page check on main passed once: they came
-    only in `tools/check.sh page`, whose WebM steps run first, right after the publish.
-  - Where: a repro first (page-check's WebM steps after the rest, in a loop), then .NET's issue tracker if it is the
-    runtime's.
-  - Status: Maybe (2026-11-04)
 
 - WebM on ManagedCodecs' Matroska demuxer
   - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs had a

@@ -165,7 +165,9 @@ differ.
   `FileReaderSync` there), and refuses a synchronous one from inside a synchronous export. Hence `Host.cs`. A
   `[JSImport]`'s `ArraySegment` there ended the runtime when the collector released it on another thread: use a `Span`
   view, valid for the call only. ManagedCodecs' `H264Decoder` has no Dispose (its threads end after an idle timeout):
-  frames that end early flush it.
+  frames that end early flush it. Now and then it deadlocks the page's main thread (100% CPU, DevTools unanswered),
+  in emscripten 3.1.56's proxying queue, which emscripten has fixed (backlog, Waiting, "The threaded runtime deadlocks
+  the page's main thread"): a threaded page check that hangs with no error is that, not the change at hand.
 - A stopped run ends its last shot at the last frame's time plus a frame at the average rate (the FFmpeg path stopped by
   its end time), not at the frames read over that rate, only because the core gives `YuvVideo.FrameTimestamps` at every
   rate (ShotDetector 3.29.0): without them a stop looks like the video's end. The page asks `Open`'s `variableRate`,
