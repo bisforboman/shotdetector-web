@@ -60,7 +60,8 @@ The owner's queue of 2026-11-01: the bump first (done, #124), then freeze spans 
 The owner's choice of 2026-11-02 ([decisions/2026-11-02-browser-decoder.md](decisions/2026-11-02-browser-decoder.md)):
 a refusal that says what to do first, then VP9 and AV1 through the browser's decoder, held to the FFmpeg path's CSVs.
 Both rows are done (backlog-done, #133 and #135); what they left is in Maybe ("WebM runs split, resumed and on
-threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4", "WebM on ManagedCodecs' Matroska demuxer").
+threads", "WebM without a DefaultDuration or a Duration, and VP9 or AV1 in MP4"), and in Waiting ("WebM on
+ManagedCodecs' Matroska demuxer", decision 2026-11-13).
 
 ### The npm package (issue #92)
 
@@ -81,6 +82,20 @@ publish").
     the owner chose a public `ShotDetection.ToneStart(YuvVideo, DetectionOptions?)` (shotdetector#770, its decision
     2026-11-09-tone-start-public.md; `Merge` unchanged: a run stopped one frame past it merges), in the next ShotDetector
     release: then `StopsFrom` is `ToneStart` + 1
+
+- WebM on ManagedCodecs' Matroska demuxer (upstream)
+  - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs had a
+    Matroska demuxer. `MatroskaDemuxer` 0.13.0 gives the same video packets on every WebM sample, but lacks the
+    DefaultDuration exactly, FrameRate, FlagInterlaced, a projection's yaw and pitch, a fractional Duration and the
+    other tracks' sizes FFmpeg's probe counts, and on a two-hour WebM allocates 190 MB at each opening (35 MB kept,
+    both tracks in 64-byte entries) where the reader allocates 8.8 MB
+    ([decisions/2026-11-13-webm-matroska-demuxer.md](decisions/2026-11-13-webm-matroska-demuxer.md)).
+  - Where: one ManagedCodecs issue with the decision's six asks (filed by the owner or its coordinator: this
+    repository's sessions can't reach ManagedCodecs); then `WebmInput` on the demuxer, `MatroskaReader` removed.
+  - Done when: every WebM sample and refusal gives the same CSVs and description natively and on the page, with no
+    Matroska parsing of the core's own, and a two-hour WebM's opening keeps the heap near the reader's.
+  - Status: Waiting (2026-11-13, the owner's choice through AskUserQuestion: keep the reader, ask upstream): the
+    ManagedCodecs issue, to be filed
 
 - The npm package's first publish
   - Why: the package is built and checked, and CI runs `npm publish --dry-run` (backlog-done, "The npm package"), but
@@ -143,13 +158,6 @@ file out of `samples/reject/`, and passes the native check.
   - Where: a repro first (page-check's WebM steps after the rest, in a loop), then .NET's issue tracker if it is the
     runtime's.
   - Status: Maybe (2026-11-04)
-
-- WebM on ManagedCodecs' Matroska demuxer
-  - Why: `MatroskaReader` is the core's own minimal reader (the owner's choice, 2026-11-02), until ManagedCodecs had a
-    Matroska demuxer; 0.8.0 has one (`MatroskaDemuxer`, with `Ebml`), which the core doesn't use yet.
-  - Where: a decision first (replacing the core's reader, against the 2026-11-02 choice), then `WebmInput` on the
-    demuxer, held to the same CSVs on every WebM sample.
-  - Status: Maybe (2026-11-04: ManagedCodecs 0.8.0 on nuget.org)
 
 - A Cinemetrics file
   - Why: issue #91 asked for the shot lengths in a format Cinemetrics' database or tools take. Its current tool's
