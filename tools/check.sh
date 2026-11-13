@@ -146,9 +146,8 @@ fi
 if [[ $page == true ]]; then
   # A short sample with audio and keyframes enough for two ranges, the demo clip as pages.yml makes it, and an AVI (its
   # picture the file's own JPEGs); then what those don't have, each picked on threads and on two workers: a rotated
-  # video, a variable frame rate, a 10-bit one (its picture in 10-bit values), H.264 in AVI (no picture: decision 2026-11-13-h264-avi.md);
-  # and an interlaced video with Deinterlace
-  # auto.
+  # video, a variable frame rate, a 10-bit one (its picture in 10-bit values), H.264 in AVI (no picture, its contact
+  # sheet saying so: decision 2026-11-13-h264-avi.md); and an interlaced video with Deinterlace auto.
   sample=${PAGE_SAMPLE:-samples/with-audio-320x240-25.mp4}
   demo=samples/sintel_trailer-480p.mp4
   avi=samples/mjpeg-320x240-25.avi

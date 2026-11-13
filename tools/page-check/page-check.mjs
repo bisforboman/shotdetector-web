@@ -742,6 +742,16 @@ function report(what, errors) {
 // then with three stills a shot, two columns and no header as a Letter PDF. Each a valid file (the PNG's chunks to
 // IEND, the size its link says; the PDF's cross-reference table pointing at its objects, every image a whole JPEG, its
 // pages of the paper chosen) with a still per shot drawn: the links' data-stills, the PDF's images placed.
+async function noStills(page, what) {
+  const shots = await page.locator('#shots tbody tr').count();
+  await page.locator('#sheet-make').click();
+  const want = `${shots} ${shots === 1 ? 'still' : 'stills'} this browser didn't show`;
+  const said = await page.waitForFunction(w => document.getElementById('sheet-status').textContent === w, want, { timeout: 120000 })
+    .then(() => true, () => false);
+  if (!said) fail(`${what}: the contact sheet doesn't say "${want}": ${await page.textContent('#sheet-status').catch(() => '')}`);
+  else console.log(`${what}: the contact sheet says "${want}", as no browser shows an H.264 AVI's picture`);
+}
+
 async function contactSheet(page, what, file) {
   const shots = await page.locator('#shots tbody tr').count(), name = stem(file);
   const made = (stills, paper) => page.waitForFunction(([want, pdf]) => {
@@ -862,7 +872,10 @@ async function picked(query, what, file = sample, deinterlace = null, tone = fal
     await compare(page, what, basename(file), run);
     await picture(page, what, file, split);
     await frameTypes(page, what, file);
-    if (query === '' && !deinterlace && !tone) await contactSheet(page, what, file);
+    // An H.264 AVI has no picture on the page (decision 2026-11-13-h264-avi.md; backlog "The picture of an H.264 AVI on
+    // the page"): its contact sheet says the browser showed none of its stills.
+    if (query === '' && !deinterlace && !tone && extname(file).toLowerCase() === '.avi') await noStills(page, what);
+    else if (query === '' && !deinterlace && !tone) await contactSheet(page, what, file);
     if (file === sample && !split) {
       await shotLengths(page, what, file, run);
       await corrections(page, what, file, run, query === '');
