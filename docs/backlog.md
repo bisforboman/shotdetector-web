@@ -96,7 +96,8 @@ The bump is done (backlog-done, #167).
   - Where: ShotDetector (how a file's frames without pts are labelled, and `YuvVideo` saying it); then `AviInput`'s
     refusal dropped, `samples/reject/h264-bframes.avi` a sample.
   - Done when: the native, wasm and page checks pass on H.264 with B-frames in AVI.
-  - Status: Waiting (2026-11-13): to ask of the shotdetector coordinator (the owner's choice through AskUserQuestion)
+  - Status: Waiting (2026-11-13): the owner asks the shotdetector coordinator (the owner's choice through
+    AskUserQuestion)
 
 - A stop in the leading reference tone, exactly (upstream)
   - Why: a run leaving the reference tone out has no frames of its own before the leading tone ends, and
