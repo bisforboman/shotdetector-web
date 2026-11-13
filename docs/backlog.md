@@ -72,6 +72,19 @@ publish").
 
 The bump is done (backlog-done, #167).
 
+- H.264 in AVI
+  - Why: `AviInput` refuses any AVI video but MJPEG (`Refusal.AviCodec`), while ManagedCodecs decodes H.264 in AVI
+    since 0.11.0 (an Annex B stream, frames timed by the packets' decoding-order times as FFmpeg's, seeking by 'idx1'
+    keyframes); ffmpeg's `-c:v libx264` into `.avi` and older capture tools write it.
+  - Where: `AviInput` (the SPS from the first packet's Annex B NAL units through `SpsInfo`, `H264Decoder`, the field
+    order as `Mp4Input`'s), `Refusal`; NativeCheck's oracle, packet and damaged-frame checks (FFmpeg gives such frames
+    and packets no pts); tools/make-samples.sh; README, Status. Depends on "The bump" above (ManagedCodecs 0.13.0).
+    Decision [2026-11-13-h264-avi.md](decisions/2026-11-13-h264-avi.md): B-frames.
+  - Done when: a sample isolating it (checked with ffprobe) moves from `reject/` to the samples, and native, wasm and
+    page checks pass on it; tools/realworld.sh has no H.264 AVI to move from refused to same.
+  - Not: other AVI codecs, MXF, or the audio ManagedCodecs now gives in AVI.
+  - Status: In progress (2026-11-13)
+
 ## Waiting
 
 - A stop in the leading reference tone, exactly (upstream)
