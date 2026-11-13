@@ -1952,3 +1952,19 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     their tolerance, app-check's pins).
   - Not: the formats ManagedCodecs now reads (H.264 in AVI, MXF, MP3, PCM); each would be a widening of its own.
   - Status: Done (2026-11-13, #167: native's CSVs the same on every sample in the session; CI's all tier green)
+
+- H.264 in AVI
+  - Why: `AviInput` refuses any AVI video but MJPEG (`Refusal.AviCodec`), while ManagedCodecs decodes H.264 in AVI
+    since 0.11.0 (an Annex B stream, frames timed by the packets' decoding-order times as FFmpeg's, seeking by 'idx1'
+    keyframes); ffmpeg's `-c:v libx264` into `.avi` and older capture tools write it.
+  - Where: `AviInput` (the SPS from the first packet's Annex B NAL units through `SpsInfo`, `H264Decoder`, the field
+    order as `Mp4Input`'s), `Refusal`; NativeCheck's oracle, packet and damaged-frame checks (FFmpeg gives such frames
+    and packets no pts); tools/make-samples.sh; README, Status. On ManagedCodecs 0.13.0 (the bump, #167).
+    Decision [2026-11-13-h264-avi.md](decisions/2026-11-13-h264-avi.md): B-frames.
+  - Done when: a sample isolating it (checked with ffprobe) moves from `reject/` to the samples, and native, wasm and
+    page checks pass on it; tools/realworld.sh has no H.264 AVI to move from refused to same.
+  - Not: other AVI codecs, MXF, or the audio ManagedCodecs now gives in AVI.
+  - Status: Done (2026-11-13, #169, the owner's choice A: without B-frames; with them refused, Waiting on ShotDetector).
+    `samples/h264-320x240-25.avi`: native "All agree" on every sample; wasm 129 of 129 files identical; the page check
+    on threads and on two workers, every download the native run's, the contact sheet saying no still was shown (no
+    picture: Maybe, "The picture of an H.264 AVI on the page"; locally on the container's Chromium, Firefox left out)

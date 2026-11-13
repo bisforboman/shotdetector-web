@@ -35,7 +35,8 @@ var RefusalNames = new Dictionary<string, string>
     ["vp8.webm"] = "FFmpeg's vp8",
     ["h264.mkv"] = "H.264 in Matroska",
     ["mpeg4.mp4"] = "FFmpeg's mpeg4",
-    ["h264.avi"] = "FFmpeg's h264",
+    ["mpeg4.avi"] = "FFmpeg's mpeg4",
+    ["h264-bframes.avi"] = "H.264 with B-frames",
 };
 var list = samples;
 for (int i = 0; i < args.Length; i++)
@@ -246,7 +247,9 @@ static YuvVideo Oracle(string path)
         // ts_offset, the format's start_time): the black spans and still pictures count from it.
         fileStart = -decoder.StartOffset;
         do
-            timestamps.Add(decoder.FramePts ?? long.MinValue);
+            // A frame without a pts (an AVI's H.264, FFmpeg's AVI demuxer giving only dts) by its packet's dts, as the file
+            // path labels it (OpenCV's rule, decision 2026-11-13-h264-avi.md).
+            timestamps.Add(decoder.FramePts ?? decoder.FramePacketDts ?? long.MinValue);
         while (decoder.Next());
     }
 

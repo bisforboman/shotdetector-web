@@ -45,7 +45,13 @@ rows that read it left out (decision `docs/decisions/2026-11-02-damaged-jpeg.md`
 `samples/mjpeg-damaged-320x240-25.avi`). JPEGs without Huffman tables (an MJPEG frame may leave its DHT out, the
 standard tables implied) are decoded as with them, by ManagedCodecs and, for the page's picture and stills, by the
 browser (libjpeg-turbo, Chromium's and Firefox's, supplies them; decision
-`docs/decisions/2026-11-04-jpegs-without-huffman-tables.md`; `samples/mjpeg-nodht-320x240-25.avi`). **And VP9 or AV1
+`docs/decisions/2026-11-04-jpegs-without-huffman-tables.md`; `samples/mjpeg-nodht-320x240-25.avi`). **And H.264 in an
+AVI without B-frames** (ManagedCodecs' Annex B stream, its SPS in band; formats and colours as in an MP4; decision
+`docs/decisions/2026-11-13-h264-avi.md`; `samples/h264-320x240-25.avi`): FFmpeg gives its packets and frames no pts,
+and ShotDetector's file path labels each frame by its packet's dts (OpenCV's rule), which the core gives where every frame
+is shown in decoding order; with B-frames the last frames have neither and are labelled at 0, which `YuvVideo` can't say,
+so such a stream is refused (`samples/reject/h264-bframes.avi`). No browser plays an AVI and its frames aren't JPEGs:
+the page shows no picture for it, only the line under the player. **And VP9 or AV1
 in WebM** (8-bit 4:2:0 or 4:2:2 and 10-bit 4:2:0, full range or not, with a DefaultDuration or without one (the rate
 FFmpeg works out from the first 40 frames' timestamps, `ProbedFrameRate`: its average, or its `r_frame_rate` where it
 has none, as the file path reports; decision `docs/decisions/2026-11-05-webm-without-default-duration.md`;
@@ -70,11 +76,11 @@ described, not measured. Anything else is refused when the file is opened, with 
 and ShotDetector's frame source doesn't take yet), greyscale, 10-bit 4:2:2 or more than
 10 bits, a rotation that isn't a quarter turn, an AVI that drops frames or an OpenDML AVI over 1 GB; decision
 `docs/decisions/2026-10-30-scope-widening.md`). Another codec or container is named as a viewer and FFmpeg name it
-(`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4, MJPEG in AVI,
-and VP9 and AV1 in WebM and MP4 so far.", "The video is VP8 (FFmpeg's vp8; 'V_VP8'): ..."), and the page says under a refusal
+(`Refusal`: "The video is HEVC (H.265, FFmpeg's hevc; 'hvc1'), not H.264: this page reads H.264 in MP4, MJPEG and
+H.264 in AVI, and VP9 and AV1 in WebM and MP4 so far.", "The video is VP8 (FFmpeg's vp8; 'V_VP8'): ..."), and the page says under a refusal
 what reads the file instead: ShotDetector's `shotdetect` command, and for HEVC an iPhone's Most Compatible format
 (decision `docs/decisions/2026-11-02-browser-decoder.md`; `samples/reject/hevc.mp4`, `vp8.webm`,
-`h264.mkv`). A frame size that changes midway is refused by
+`h264.mkv`, `mpeg4.avi`). A frame size that changes midway is refused by
 the run, the core's frames saying so before ShotDetector would read the frame at the video's size (as ShotDetector itself
 refuses one since 3.24.0, shotdetector#625; `Detect(path)` scales it): `samples/reject/size-change.mp4`. A colour
 matrix, range or chroma location that changes midway in band (a splice: a later SPS with other VUI tags) is followed

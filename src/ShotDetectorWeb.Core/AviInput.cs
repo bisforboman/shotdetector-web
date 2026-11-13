@@ -1,20 +1,25 @@
 using ManagedCodecs;
 using ManagedCodecs.Containers;
+using ManagedCodecs.H264;
 using ManagedCodecs.Mjpeg;
 using ShotDetector;
 
 namespace ShotDetectorWeb;
 
 /// <summary>
-/// An MJPEG video in an AVI file (<see cref="VideoInput"/>): described from its headers (<see cref="AviHeader"/>) and
-/// ManagedCodecs' <see cref="AviDemuxer"/>, decoded by its <see cref="MjpegDecoder"/>, which is bit-exact with FFmpeg's
-/// (decision 2026-10-30-mjpeg-avi.md).
+/// An MJPEG or H.264 video in an AVI file (<see cref="VideoInput"/>): described from its headers (<see cref="AviHeader"/>,
+/// an H.264 stream's SPS through <see cref="SpsInfo"/>) and ManagedCodecs' <see cref="AviDemuxer"/>, decoded by its
+/// <see cref="MjpegDecoder"/> or <see cref="H264Decoder"/>, bit-exact with FFmpeg's (decisions 2026-10-30-mjpeg-avi.md,
+/// 2026-11-13-h264-avi.md).
 /// </summary>
 /// <remarks>
 /// So far: baseline or extended Huffman JPEG at 4:2:0 or 4:2:2 (FFmpeg's yuvj420p, yuvj422p), every frame a chunk of
 /// its own; anything else throws <see cref="UnsupportedVideoException"/> when opened: 4:4:4, 4:1:1, 4:4:0 and greyscale
 /// JPEG (ShotDetector's frame source takes 4:2:0 and 4:2:2 only), and a file whose video chunks are fewer than its header says (a dropped frame, or an OpenDML file over
-/// 1 GB, whose later parts ManagedCodecs doesn't read). Audio streams are described, not decoded.
+/// 1 GB, whose later parts ManagedCodecs doesn't read). H.264 as in an MP4 (8-bit 4:2:0 and 4:2:2, 10-bit 4:2:0, frames
+/// not field pictures), without B-frames only: FFmpeg gives an AVI's H.264 frames no pts, and ShotDetector's file path
+/// labels a frame then by its packet's dts, which <see cref="YuvVideo"/> can't say for frames shown out of decoding
+/// order. Audio streams are described, not decoded.
 /// </remarks>
 public sealed class AviInput : VideoInput
 {
@@ -26,13 +31,38 @@ public sealed class AviInput : VideoInput
         stream.Position = 0;
         using var demuxer = new AviDemuxer(stream, leaveOpen: true);
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The AVI file has no video stream.");
-        if (info.Codec != CodecIds.Mjpeg)
-            throw new UnsupportedVideoException($"The video is {Refusal.AviCodec(info.Codec)}, not MJPEG: {Refusal.Scope}");
+        _h264 = info.Codec == CodecIds.H264;
+        if (info.Codec != CodecIds.Mjpeg && !_h264)
+            throw new UnsupportedVideoException($"The video is {Refusal.AviCodec(info.Codec)}, not MJPEG or H.264: {Refusal.Scope}");
         var strh = header.Video ?? throw new UnsupportedVideoException("The AVI file has no video stream.");
 
-        // The first frame's size and format: a JPEG's chroma subsampling is its own, frame by frame.
-        var (width, height, format) = FirstFrame(demuxer, info);
-        if (format is not (PixelFormat.Yuv420P or PixelFormat.Yuv422P))
+        // H.264: the SPS, in band (an AVI has no 'avcC'), from the first packet; the first frame's size, pts and field
+        // order as an MP4's. MJPEG: the first frame's size and format: a JPEG's chroma subsampling is its own, frame by frame.
+        SpsInfo? sps = null;
+        int width, height;
+        PixelFormat format = PixelFormat.Yuv420P;
+        long firstFramePts = 0;
+        var fieldOrder = FrameReader.FieldOrder.Unknown;
+        if (_h264)
+        {
+            sps = FirstSps(demuxer, info);
+            if (!(sps.BitDepthLuma == sps.BitDepthChroma && (sps.ChromaFormatIdc, sps.BitDepthLuma) is (1, 8) or (2, 8) or (1, 10)))
+            {
+                string chroma = sps.ChromaFormatIdc switch { 0 => "4:0:0 (greyscale)", 1 => "4:2:0", 2 => "4:2:2", _ => "4:4:4" };
+                string depth = sps.BitDepthLuma == sps.BitDepthChroma ? $"{sps.BitDepthLuma} bits" : $"{sps.BitDepthLuma} bits (luma), {sps.BitDepthChroma} (chroma)";
+                throw new UnsupportedVideoException($"The video is {chroma} at {depth}: only 8-bit 4:2:0 and 4:2:2, and 10-bit 4:2:0, are supported so far.");
+            }
+
+            stream.Position = 0;
+            using var first = new AviDemuxer(stream, leaveOpen: true);
+            (width, height, firstFramePts, fieldOrder) = Mp4Input.FirstFrame(first);
+        }
+        else
+        {
+            (width, height, format) = FirstFrame(demuxer, info);
+        }
+
+        if (!_h264 && format is not (PixelFormat.Yuv420P or PixelFormat.Yuv422P))
         {
             string chroma = format switch
             {
@@ -66,6 +96,13 @@ public sealed class AviInput : VideoInput
 
         Packets = packets.Build();
 
+        // FFmpeg gives an AVI's H.264 frames no pts, and ShotDetector's file path labels each by its packet's dts (as OpenCV,
+        // decision 2026-11-13-h264-avi.md): the packets' times, as the core gives them, only where every frame is shown in
+        // decoding order. A first frame shown after the first packet's time is a reorder delay: B-frames.
+        if (_h264 && firstFramePts != Math.Max(firstPts, 0))
+            throw new UnsupportedVideoException(
+                "The video is H.264 with B-frames (frames shown out of decoding order) in AVI: not supported yet (an AVI's frames have no pts, and ShotDetector can't take FFmpeg's times for them yet). H.264 in AVI without B-frames is.");
+
         // FFmpeg counts an empty video chunk as a frame (a dropped one: the next pts is one more), ManagedCodecs doesn't
         // (ManagedCodecs#226), and ShotDetector's frame source takes no gaps: such a file is refused, as is an OpenDML file
         // whose later parts ('AVIX') ManagedCodecs doesn't read. Either way its header counts more frames than its chunks.
@@ -77,23 +114,32 @@ public sealed class AviInput : VideoInput
             Audio = new AudioStream(audio.Codec, audio.SampleRate, audio.Channels);
 
         // FFmpeg's MJPEG decoder: a JPEG is full range (yuvj420p, yuvj422p), its matrix BT.601 (bt470bg), its chroma
-        // sited at the centre. The rate is the time base's inverse (avi_read_header's avg_frame_rate), the frame count
-        // the header's dwLength.
+        // sited at the centre. FFmpeg's h264 decoder: the SPS's (an AVI carries no colour tags), as an MP4's without
+        // 'colr'. The rate is the time base's inverse (avi_read_header's avg_frame_rate), the frame count the header's
+        // dwLength.
         Video = new YuvVideo
         {
             Width = width,
             Height = height,
             FrameRate = new Fps(timeBase.Denominator, timeBase.Numerator),
-            PixelFormat = format == PixelFormat.Yuv422P ? "yuvj422p" : "yuvj420p",
-            ColorSpace = "bt470bg",
-            FullRange = true,
-            ChromaLocation = "center",
+            PixelFormat = sps is null
+                ? format == PixelFormat.Yuv422P ? "yuvj422p" : "yuvj420p"
+                : (sps.ChromaFormatIdc, sps.BitDepthLuma) switch
+                {
+                    (1, 10) => "yuv420p10le",
+                    (2, _) => sps.FullRange ? "yuvj422p" : "yuv422p",
+                    _ => sps.FullRange ? "yuvj420p" : "yuv420p",
+                },
+            ColorSpace = sps is null ? "bt470bg" : sps.MatrixCoefficients is int m ? MatrixName(m) ?? "" : "",
+            FullRange = sps is null || sps.FullRange,
+            ChromaLocation = sps is null ? "center" : ChromaLocationName(sps.ChromaLocation),
+            FieldOrder = sps is null ? default : fieldOrder,
             TimeBase = new FrameReader.Rational(checked((int)timeBase.Numerator), checked((int)timeBase.Denominator)),
             StartPts = Math.Max(firstPts, 0),
             FrameCount = strh.Length,
             Duration = DurationOf(header.DurationUs),
             FrameTimestamps = FrameTimestampsOf(Packets),
-            Codec = "mjpeg",
+            Codec = _h264 ? "h264" : "mjpeg",
             Container = "avi",
         };
     }
@@ -109,6 +155,36 @@ public sealed class AviInput : VideoInput
 
     /// <summary>Opens an AVI file read through <paramref name="open"/>, a new readable, seekable stream on every call.</summary>
     public static new AviInput Open(Func<Stream> open) => new(open);
+
+    readonly bool _h264;
+
+    /// <summary>The first SPS of the H.264 stream: in band, in its first packet's Annex B NAL units.</summary>
+    static SpsInfo FirstSps(AviDemuxer demuxer, VideoStreamInfo info)
+    {
+        foreach (var packet in demuxer.ReadPackets())
+        {
+            if (packet.StreamIndex != info.StreamIndex)
+                continue;
+            var data = packet.Data.Span;
+            for (int i = 0; i + 3 < data.Length; i++)
+            {
+                if (data[i] != 0 || data[i + 1] != 0 || data[i + 2] != 1)
+                    continue;
+                int start = i + 3, end = start;
+                while (end + 2 < data.Length && !(data[end] == 0 && data[end + 1] == 0 && data[end + 2] <= 1))
+                    end++;
+                if (end + 2 >= data.Length)
+                    end = data.Length;
+                if ((data[start] & 0x1F) == 7)
+                    return SpsInfo.Parse(data[start..end]);
+                i = end - 1;
+            }
+
+            break;
+        }
+
+        throw new UnsupportedVideoException("The H.264 stream's first packet has no sequence parameter set.");
+    }
 
     static (int Width, int Height, PixelFormat Format) FirstFrame(AviDemuxer demuxer, VideoStreamInfo info)
     {
@@ -128,13 +204,22 @@ public sealed class AviInput : VideoInput
     }
 
     /// <summary>
-    /// The frames from video packet <paramref name="fromPacket"/> on: every MJPEG frame stands alone, so the demuxer
-    /// walks the chunks before it with their data skipped and the decoder starts there.
+    /// The frames from video packet <paramref name="fromPacket"/> on (an H.264 keyframe, for a decoder that starts clean
+    /// there; every MJPEG frame stands alone): the demuxer walks the chunks before it with their data skipped and the
+    /// decoder starts there.
     /// </summary>
     private protected override IEnumerable<VideoFrame> DecodedFrames(int fromPacket)
     {
         using var stream = new TimingOnlyStream(OpenStream()) { ReadsThrough = ChunkHeader };
         using var demuxer = new AviDemuxer(stream);
+        if (_h264)
+        {
+            stream.SkipReads = fromPacket > 0;
+            foreach (var frame in Mp4Input.DecodedFrames(demuxer, fromPacket, stream, DecoderThreads))
+                yield return frame;
+            yield break;
+        }
+
         var info = demuxer.Video ?? throw new UnsupportedVideoException("The AVI file has no video stream.");
         var decoder = new MjpegDecoder(info);
         stream.SkipReads = fromPacket > 0;

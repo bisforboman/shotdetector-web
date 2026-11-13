@@ -146,15 +146,16 @@ fi
 if [[ $page == true ]]; then
   # A short sample with audio and keyframes enough for two ranges, the demo clip as pages.yml makes it, and an AVI (its
   # picture the file's own JPEGs); then what those don't have, each picked on threads and on two workers: a rotated
-  # video, a variable frame rate, a 10-bit one (its picture in 10-bit values); and an interlaced video with Deinterlace
-  # auto.
+  # video, a variable frame rate, a 10-bit one (its picture in 10-bit values), H.264 in AVI (no picture, its contact
+  # sheet saying so: decision 2026-11-13-h264-avi.md); and an interlaced video with Deinterlace auto.
   sample=${PAGE_SAMPLE:-samples/with-audio-320x240-25.mp4}
   demo=samples/sintel_trailer-480p.mp4
   avi=samples/mjpeg-320x240-25.avi
   # And an AVI whose JPEGs have no Huffman tables, which the browser's JPEG decoder supplies (decision
   # 2026-11-04-jpegs-without-huffman-tables.md): its picture and stills as the first AVI's.
   nodht=samples/mjpeg-nodht-320x240-25.avi
-  more=(samples/rotated-90-320x240-25.mp4 samples/vfr-320x240.mp4 samples/yuv420p10-full-topleft-bt709-320x240-25.mp4)
+  more=(samples/rotated-90-320x240-25.mp4 samples/vfr-320x240.mp4 samples/yuv420p10-full-topleft-bt709-320x240-25.mp4
+    samples/h264-320x240-25.avi)
   interlaced=samples/interlaced-tff-320x240-25.mp4
   # Reference tone around four shots, left out on the page (decision 2026-11-04-reference-tone.md).
   toned=samples/tone-cuts-320x240-25.mp4

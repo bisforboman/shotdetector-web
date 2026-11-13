@@ -232,7 +232,7 @@ public sealed class Mp4Input : VideoInput
     /// <see cref="H264Decoder.FieldOrder"/>: FFmpeg's parser's for the first picture decoded), which ShotDetector's
     /// <see cref="DeinterlaceMode.Auto"/> goes by. A first frame coded as field pictures is refused.
     /// </summary>
-    static (int Width, int Height, long Pts, FrameReader.FieldOrder FieldOrder) FirstFrame(Mp4Demuxer demuxer)
+    internal static (int Width, int Height, long Pts, FrameReader.FieldOrder FieldOrder) FirstFrame(IDemuxer demuxer)
     {
         H264Decoder? decoder = null;
         foreach (var frame in DecodedFrames(demuxer, created: d => decoder = d))
@@ -374,7 +374,7 @@ public sealed class Mp4Input : VideoInput
     }
 
     /// <summary>FFmpeg's field order (ManagedCodecs' has AVFieldOrder's values) as FrameReader's, which ShotDetector takes.</summary>
-    static FrameReader.FieldOrder FieldOrderOf(ManagedCodecs.FieldOrder order) => order switch
+    internal static FrameReader.FieldOrder FieldOrderOf(ManagedCodecs.FieldOrder order) => order switch
     {
         ManagedCodecs.FieldOrder.Progressive => FrameReader.FieldOrder.Progressive,
         ManagedCodecs.FieldOrder.TT => FrameReader.FieldOrder.TopFirst,
@@ -384,10 +384,10 @@ public sealed class Mp4Input : VideoInput
         _ => FrameReader.FieldOrder.Unknown,
     };
 
-    static IEnumerable<VideoFrame> DecodedFrames(Mp4Demuxer demuxer, int fromPacket = 0, TimingOnlyStream? skipping = null,
+    internal static IEnumerable<VideoFrame> DecodedFrames(IDemuxer demuxer, int fromPacket = 0, TimingOnlyStream? skipping = null,
         int threads = 1, Action<H264Decoder>? created = null)
     {
-        var info = demuxer.Video ?? throw new UnsupportedVideoException("The MP4 file has no video track.");
+        var info = demuxer.Video ?? throw new UnsupportedVideoException("The file has no video track.");
         var decoder = new H264Decoder(info) { Threads = threads };
         created?.Invoke(decoder);
         bool flushed = false;

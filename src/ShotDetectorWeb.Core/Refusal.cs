@@ -8,7 +8,7 @@ namespace ShotDetectorWeb;
 public static class Refusal
 {
     /// <summary>What the core reads, the end of every codec and container refusal.</summary>
-    public const string Scope = "this page reads H.264 in MP4, MJPEG in AVI, and VP9 and AV1 in WebM and MP4 so far.";
+    public const string Scope = "this page reads H.264 in MP4, MJPEG and H.264 in AVI, and VP9 and AV1 in WebM and MP4 so far.";
 
     /// <summary>
     /// An MP4 video track's sample entry as a viewer and FFmpeg name its codec: <c>HEVC (H.265, FFmpeg's hevc; 'hvc1')</c>;
