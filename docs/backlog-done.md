@@ -1941,3 +1941,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     NativeCheck's `ToneCheck` against `Detect(path)` whole, split, stopped and resumed: "All agree" on every sample (54);
     AOT wasm 5328 of 5328 files identical; the page check in Chromium passed, the tone sample with the tone left out on
     threads and on two workers (locally on the container's Chromium 1243 under Playwright 1.65.0, Firefox left out)
+
+- A resumed run's card built twice (page-check's "result that doesn't come")
+  - Why: page-check's resumed runs on threads sometimes found none of the run's downloads (2026-11-04, the 10-bit AV1
+    WebM; 2026-11-13, the 8-bit AV1 one and the demo across a reload), read then as the threaded runner not answering.
+    Every call answered within milliseconds (threads.js instrumented, 2026-11-13): after a resumed run, `app.js`
+    applied the stopped run's kept corrections even when there were none (every kept record has `edits`, empty until a
+    cut is corrected), so the run card cleared its downloads and made them again, and the check could look in between.
+    Every resumed run on threads (13 of 13) got that second build; 3 in about 40 were caught half-way.
+  - Status: Done (2026-11-13, the owner's choice through AskUserQuestion): a resumed run applies its kept corrections
+    only when there are some, as a run shown again after a reload already did; found while working "The threaded
+    runtime deadlocks the page's main thread" (Waiting)

@@ -554,9 +554,11 @@ async function go(run, plan, fallback = null, resumed = null, restarted = null) 
   r.statsCsv = await callOn(by, 'StatsCsv');
   if (opened !== video) return; // a new file was chosen meanwhile
   // The corrections kept for this file and these options (a resumed run's, or a run of them again) apply to the new
-  // result's cuts: the stopped part's stay as corrected, the rest's come in as detected.
+  // result's cuts: the stopped part's stay as corrected, the rest's come in as detected. None kept (every stopped run's
+  // record has edits, empty until a cut is corrected): nothing to apply, and the run card isn't built a second time
+  // (its downloads cleared and made again, which page-check's resumed runs once caught half-way).
   const same = keptFor(file) && JSON.stringify(kept.options) === JSON.stringify(run);
-  const carried = same ? kept.edits : null;
+  const carried = same && (kept.edits?.removed.length || kept.edits?.added.length) ? kept.edits : null;
   detected = { result: r, options: run, record: null };
   show(r, seconds, workers, by === threaded ? r.threads : 1, null, same ? kept.titles ?? null : null);
   if (carried) await correct(applied(carried));
