@@ -1968,3 +1968,14 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     `samples/h264-320x240-25.avi`: native "All agree" on every sample; wasm 129 of 129 files identical; the page check
     on threads and on two workers, every download the native run's, the contact sheet saying no still was shown (no
     picture: Maybe, "The picture of an H.264 AVI on the page"; locally on the container's Chromium, Firefox left out)
+
+- ManagedCodecs 0.18.0: the bump
+  - Why: main pinned ManagedCodecs 0.13.0 while 0.18.0 was on nuget.org (2026-11-16); 0.14.0 to 0.18.0 add more of
+    MXF, live cameras over RTSP and sound tracks after the first (`IDemuxer.AudioTracks`, `SelectAudio`, the file's
+    first audio stream still read alone until a choice is made), and change nothing in the MP4 and AVI demuxers or the
+    H.264, MJPEG and AAC decoders the core uses. ShotDetector 3.30.0 and FrameReader 2.26.0 were already the latest.
+  - Where: Directory.Packages.props; README, "Packages".
+  - Done when: every check passes on the new versions (CI's all tier: the CSVs byte for byte, the measures within
+    their tolerance, app-check's pins).
+  - Not: what ManagedCodecs now reads that the core doesn't (MXF, several audio tracks); each would be a row of its own.
+  - Status: In progress (2026-11-17)
