@@ -1978,4 +1978,6 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Done when: every check passes on the new versions (CI's all tier: the CSVs byte for byte, the measures within
     their tolerance, app-check's pins).
   - Not: what ManagedCodecs now reads that the core doesn't (MXF, several audio tracks); each would be a row of its own.
-  - Status: In progress (2026-11-17)
+  - Status: Done (2026-11-18, the owner's choice through AskUserQuestion): native "All agree" on every sample (55);
+    wasm interpreted and AOT 658 of 658 files identical on five samples (H.264 and damaged MJPEG AVIs, fragmented
+    AAC, with audio, Sintel's trailer), the waveforms 0 values apart; the bundle's versions the pinned ones
