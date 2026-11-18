@@ -1377,7 +1377,7 @@ end, `RangeScores.EndFrame`, 3.27.0 the first whose hash detector gives x64's bi
 `YuvVideo.FileStartPts`, which `Mp4Input` gives; the trim is a row of docs/backlog.md),
 FrameReader (2.26.0; its `LoudnessMeter`'s loudest momentary and short-term loudness come only from full windows,
 which the core doesn't use),
-ManagedCodecs (0.13.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.18.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
 under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
@@ -1391,7 +1391,8 @@ the samples' durations, as FFmpeg does, ManagedCodecs#317, and adds a Matroska d
 `MatroskaReader` reads a WebM; 0.8.1 decodes H.264 a little faster, the same frames; 0.9.0 to 0.13.0 add playback,
 MP3, PCM, ADPCM, raw H.264, WAV and MXF, none of which the core uses, decode H.264 and AAC faster (AAC's IMDCT in single
 precision, within FFmpeg's tolerance), give an AVI's audio packets, which the core skips, and decode H.264 in an AVI,
-which the core still refuses)
+which the core reads since #169 (without B-frames); 0.14.0 to 0.18.0 add more of MXF, live cameras over RTSP and sound tracks after the
+first, none of which the core uses, and change nothing it reads in an MP4 or AVI or decodes)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
