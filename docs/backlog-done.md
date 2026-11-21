@@ -1996,4 +1996,9 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
     their tolerance, app-check's pins, the page check on Playwright 1.65.1).
   - Not: what ManagedCodecs now reads that the core doesn't (several audio tracks, MXF, live cameras); each would be a
     row of its own.
-  - Status: In progress (2026-11-21)
+  - Status: Done (2026-11-21, the owner's choice through AskUserQuestion): native "All agree" on every sample (55);
+    wasm interpreted and AOT 529 of 529 files identical on five samples (H.264 and damaged MJPEG AVIs, fragmented
+    AAC, with audio, Sintel's trailer), the waveforms 0 values apart. The page check ran locally on the container's
+    Playwright 1.65.0 (1.65.1's Chromium can't be downloaded there), Firefox left out: 319 steps passed, then the
+    rotated MP4's run on threads didn't end within 15 minutes; picked alone, it and the files after it end in 3 to 5 s
+    on threads and on two workers. CI's all tier ran the whole page check on 1.65.1.
