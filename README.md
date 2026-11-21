@@ -982,7 +982,7 @@ where it says the file has none; for `samples/no-aac/`, the codec in the file's 
   page's path reaching FFmpeg's code), and if any FFmpeg assembly is loaded at all, the audio pass included
   (`LoadedAssemblies()`), interpreted and compiled ahead of time (`aot`, a few minutes more to build) alike. No FFmpeg
   library exists in the browser either way.
-- **page** (`tools/page-check/page-check.mjs`, Playwright 1.65.0 pinned by its lockfile, Chromium, and Firefox for a
+- **page** (`tools/page-check/page-check.mjs`, Playwright 1.65.1 pinned by its lockfile, Chromium, and Firefox for a
   resume across a reload): the page's own
   JavaScript (`app.js`, `worker.js`, `threads.js`, `sw.js`, the panels) in a browser, as a visitor drives it, and the
   only check of the threaded bundle (it doesn't run under Node). The published `wwwroot` is
@@ -1377,7 +1377,7 @@ end, `RangeScores.EndFrame`, 3.27.0 the first whose hash detector gives x64's bi
 `YuvVideo.FileStartPts`, which `Mp4Input` gives; the trim is a row of docs/backlog.md),
 FrameReader (2.26.0; its `LoudnessMeter`'s loudest momentary and short-term loudness come only from full windows,
 which the core doesn't use),
-ManagedCodecs (0.18.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
+ManagedCodecs (0.19.0: the `ManagedCodecs.Containers`, `ManagedCodecs.H264`, `ManagedCodecs.Mjpeg` and `ManagedCodecs.Aac` packages, each
 pinning `ManagedCodecs.Core` at its own version, and `ManagedCodecs.Core` itself, whose `PictureType` the core uses; on
 nuget.org since 0.1.0, 2026-10-28, until then a git submodule referenced by project. 0.2.0 to 0.2.2 decode H.264 wrong
 under the wasm interpreter, ManagedCodecs#206, fixed in 0.2.3; 0.3.0 says each frame's type, ManagedCodecs#221;
@@ -1392,7 +1392,9 @@ the samples' durations, as FFmpeg does, ManagedCodecs#317, and adds a Matroska d
 MP3, PCM, ADPCM, raw H.264, WAV and MXF, none of which the core uses, decode H.264 and AAC faster (AAC's IMDCT in single
 precision, within FFmpeg's tolerance), give an AVI's audio packets, which the core skips, and decode H.264 in an AVI,
 which the core reads since #169 (without B-frames); 0.14.0 to 0.18.0 add more of MXF, live cameras over RTSP and sound tracks after the
-first, none of which the core uses, and change nothing it reads in an MP4 or AVI or decodes)
+first, none of which the core uses, and change nothing it reads in an MP4 or AVI or decodes; 0.19.0 adds more live
+cameras and G.726, downmixes more than two channels in its players, and gives a file with several audio streams the
+one FFmpeg plays rather than the first, none of which changes a sample's results)
 and what they depend on come from nuget.org.
 Versions are central, in Directory.Packages.props, and a central version pins only the packages a project references
 (a transitive one resolves to the lowest its dependant allows: FrameReader's line pinned nothing until the core
