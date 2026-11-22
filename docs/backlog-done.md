@@ -1981,3 +1981,24 @@ Rows finished, moved from [backlog.md](backlog.md), newest last.
   - Status: Done (2026-11-18, the owner's choice through AskUserQuestion): native "All agree" on every sample (55);
     wasm interpreted and AOT 658 of 658 files identical on five samples (H.264 and damaged MJPEG AVIs, fragmented
     AAC, with audio, Sintel's trailer), the waveforms 0 values apart; the bundle's versions the pinned ones
+
+- ManagedCodecs 0.19.0, Playwright 1.65.1, setup-dotnet 6.1.0: the bump
+  - Why: main pinned ManagedCodecs 0.18.0 while 0.19.0 was on nuget.org (2026-11-17), Playwright 1.65.0 while 1.65.1
+    was on npm, and setup-dotnet at the commit `v6` named before it moved to 6.1.0 (the owner's choice through
+    AskUserQuestion, 2026-11-21: all three). ManagedCodecs 0.19.0 adds more live cameras and G.726, downmixes more than
+    two channels in its players, fixes MP4 priming in its players and MXF in its demuxer, and gives a file with several
+    audio streams the one FFmpeg plays rather than the first (`AudioTracks`, `SelectAudio`): the one change in what the
+    MP4 and AVI demuxers give the core, and none of the samples has more than one audio stream. ShotDetector 3.30.0,
+    FrameReader 2.26.0 and the other actions were already the latest.
+  - Where: Directory.Packages.props; tools/page-check's package.json and lockfile; the workflows' setup-dotnet; README,
+    "Packages" and "Checks".
+  - Done when: every check passes on the new versions (CI's all tier: the CSVs byte for byte, the measures within
+    their tolerance, app-check's pins, the page check on Playwright 1.65.1).
+  - Not: what ManagedCodecs now reads that the core doesn't (several audio tracks, MXF, live cameras); each would be a
+    row of its own.
+  - Status: Done (2026-11-21, the owner's choice through AskUserQuestion): native "All agree" on every sample (55);
+    wasm interpreted and AOT 529 of 529 files identical on five samples (H.264 and damaged MJPEG AVIs, fragmented
+    AAC, with audio, Sintel's trailer), the waveforms 0 values apart. The page check ran locally on the container's
+    Playwright 1.65.0 (1.65.1's Chromium can't be downloaded there), Firefox left out: 319 steps passed, then the
+    rotated MP4's run on threads didn't end within 15 minutes; picked alone, it and the files after it end in 3 to 5 s
+    on threads and on two workers. CI's all tier ran the whole page check on 1.65.1.
