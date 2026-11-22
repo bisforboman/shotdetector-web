@@ -73,6 +73,40 @@ publish").
 The bump is done (backlog-done, #167), and H.264 in AVI without B-frames (backlog-done, #169); B-frames wait on
 ShotDetector (Waiting).
 
+### The checks
+
+Two gaps found while bumping ManagedCodecs to 0.19.0 (#172), the owner's choice through AskUserQuestion, 2026-11-22.
+
+- A run on threads in the page check that never ends
+  - Why: the page check stalled in two of four full runs (all four Chromium only, Firefox skipped), both on
+    ManagedCodecs 0.19.0, each in a run on threads (the runtime on the page's main thread), each at a different place.
+    Locally the rotated MP4 picked on threads (after 319 steps): `finished()`'s 15-minute `waitForFunction` timed out.
+    In #172's first CI run, the demo resumed after a reload (`resumedAfterReload`): after "shown again" nothing was
+    printed for 73 minutes and no Playwright timeout fired, until the job's 120-minute limit cancelled it. #172's CI
+    re-run, a second local run on 0.19.0 (13 minutes) and one on `main` at 0.18.0 passed. The stalled steps
+    never stalled when run alone: 50 runs on threads in one browser (fresh contexts, with-audio and the rotated
+    MP4), and 10 rounds of the demo's pause, stop, reload and resume. A CI run that stalls costs two hours and blocks
+    auto-merge.
+  - Where: tools/page-check/page-check.mjs (a stall that says where it is: the page's state, its status, the
+    workers', a screenshot, with a timeout on every wait, `page.evaluate` included); then whatever the cause is: the
+    page, the threaded runtime (CLAUDE.md, Gotchas), ManagedCodecs (report it there), or Chromium.
+  - Done when: a stall, should it come again, names its step and the page's state within minutes, not at the job's
+    limit; and its cause is found and fixed here or reported upstream.
+  - Not: skipping, retrying or loosening the steps that stalled.
+  - Status: Open
+
+- The daily CI run over its 120 minutes
+  - Why: `ci.yml`'s daily run on `main` (every sample, every tier) has hit the job's `timeout-minutes: 120` and been
+    cancelled on most days since 2026-11-02; the one that passed since, 2026-11-07, took 1 h 57 min. On 2026-11-21 it
+    was cancelled in "WebAssembly check, interpreted" (every sample under Node, `SAMPLES` empty on a schedule), which
+    printed nothing for 1 h 43 min: by the passing run's time it looks like a run grown past its budget rather than a
+    hang, but nothing it prints shows which. So `main` hasn't been checked in full since 2026-11-07.
+  - Where: .github/workflows/ci.yml (the daily run's budget, or its tiers split across jobs); tools/check.sh's wasm
+    check (a line per sample, so a slow one or a hang shows where it is).
+  - Done when: the daily run passes on `main` within its limit, and the wasm check prints its progress.
+  - Not: fewer samples in the daily run.
+  - Status: Open
+
 ## Waiting
 
 - H.264 with B-frames in AVI (upstream)
